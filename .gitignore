@@ -1,0 +1,7 @@
+# ignorar los datos
+*.json
+*.xlsx
+*.csv
+*.xml
+# ignorar configuración de jetbrains
+/.idea
