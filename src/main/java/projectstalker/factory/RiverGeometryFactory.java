@@ -2,7 +2,7 @@ package projectstalker.factory;
 
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.RiverGeometry;
-import com.github.auburns.fastnoiselite.FastNoiseLite;
+import projectstalker.utils.FastNoiseLite;
 
 /**
  * Fábrica responsable de la creación procedural de instancias de {@link RiverGeometry}.

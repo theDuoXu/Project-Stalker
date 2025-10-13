@@ -29,7 +29,7 @@ public final class RiverGeometry {
     private final double[] phProfile;
 
     /**
-     * Constructor con visibilidad de paquete, diseñado para ser invocado
+     * Constructor diseñado para ser invocado
      * exclusivamente por {@code RiverGeometryFactory}.
      * <p>
      * Realiza una validación exhaustiva de los parámetros de entrada para asegurar
@@ -43,7 +43,7 @@ public final class RiverGeometry {
      * @param manningCoefficient Array con el coeficiente de rugosidad de Manning (valores > 0).
      * @param phProfile          Array con el perfil PH del río
      */
-    RiverGeometry(int cellCount, double dx, double[] elevationProfile, double[] bottomWidth, double[] sideSlope,
+    public RiverGeometry(int cellCount, double dx, double[] elevationProfile, double[] bottomWidth, double[] sideSlope,
                   double[] manningCoefficient, double[] baseDecayCoefficientAt20C, double[] phProfile) {
         // --- Validación de Parámetros ---
         if (cellCount <= 1) {
