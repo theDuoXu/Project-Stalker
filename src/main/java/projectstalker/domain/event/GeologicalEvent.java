@@ -26,4 +26,5 @@ public interface GeologicalEvent {
             double[] manningCoefficient,
             RiverSectionType[] sectionTypes
     );
+    double getPosition();
 }

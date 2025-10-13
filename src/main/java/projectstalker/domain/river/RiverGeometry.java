@@ -298,4 +298,32 @@ public final class RiverGeometry {
         result = 31 * result + Arrays.hashCode(sectionTypes);
         return result;
     }
+
+    public double[] cloneElevationProfile() {
+        return elevationProfile.clone();
+    }
+
+    public double[] cloneBottomWidth() {
+        return bottomWidth.clone();
+    }
+
+    public double[] cloneSideSlope() {
+        return sideSlope.clone();
+    }
+
+    public double[] cloneManningCoefficient() {
+        return manningCoefficient.clone();
+    }
+
+    public double[] cloneBaseDecayCoefficientAt20C() {
+        return baseDecayCoefficientAt20C.clone();
+    }
+
+    public double[] clonePhProfile() {
+        return phProfile.clone();
+    }
+
+    public RiverSectionType[] cloneSectionTypes() {
+        return sectionTypes.clone();
+    }
 }

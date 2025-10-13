@@ -1,11 +1,15 @@
 package projectstalker.factory;
 
 import projectstalker.config.RiverConfig;
+import projectstalker.domain.event.GeologicalEvent;
 import projectstalker.domain.river.RiverSectionType;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.utils.FastNoiseLite;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * Fábrica responsable de la creación procedural de instancias de {@link RiverGeometry}.
@@ -40,6 +44,12 @@ import java.util.Arrays;
  * @since 2025-10-13
  */
 public class RiverGeometryFactory {
+
+    /**
+     * Define la separación mínima requerida entre los puntos centrales
+     * de dos eventos geológicos consecutivos.
+     */
+    private static final int MINIMUM_CELL_SEPARATION = 5;
 
     /**
      * Crea una instancia de RiverGeometry con características realistas
@@ -145,5 +155,99 @@ public class RiverGeometryFactory {
                 phProfile,
                 sectionTypes
         );
+    }
+
+    /**
+     * Aplica una lista de eventos geológicos en serie a una geometría de río base.
+     * <p>
+     * El método es inmutable: no modifica el río original, sino que devuelve una
+     * nueva instancia con los cambios acumulados. Primero, valida que los eventos
+     * estén suficientemente separados para evitar interacciones complejas.
+     *
+     * @param baseRiver El río natural sobre el cual se aplicarán los eventos.
+     * @param events    La lista de eventos geológicos a aplicar.
+     * @return Un nuevo objeto RiverGeometry que refleja las modificaciones.
+     * @throws IllegalArgumentException si dos eventos están más cerca que
+     * la separación mínima definida por {@code MINIMUM_CELL_SEPARATION}.
+     */
+    public RiverGeometry applyGeologicalEvents(RiverGeometry baseRiver, List<GeologicalEvent> events) {
+        // --- 1. Manejar casos triviales ---
+        if (events == null || events.isEmpty()) {
+            return baseRiver; // No hay nada que hacer, devolver el río original.
+        }
+
+        // --- 2. Validar la separación entre eventos ---
+        validateEventSeparation(baseRiver.getDx(), events);
+
+        // --- 3. Preparar datos mutables (clonación para inmutabilidad) ---
+        // Obtenemos los arrays del río base. La clase RiverGeometry ya los devuelve clonados,
+        // pero para ser explícitos y seguros, los clonamos de nuevo aquí.
+        double[] newElevationProfile = baseRiver.cloneElevationProfile();
+        double[] newBottomWidth = baseRiver.cloneBottomWidth();
+        double[] newSideSlope = baseRiver.cloneSideSlope();
+        double[] newManningCoefficient = baseRiver.cloneManningCoefficient();
+        double[] newBaseDecay = baseRiver.cloneBaseDecayCoefficientAt20C();
+        double[] newPhProfile = baseRiver.clonePhProfile();
+        RiverSectionType[] newSectionTypes = baseRiver.cloneSectionTypes();
+
+        // --- 4. Aplicar cada evento en serie sobre los datos clonados ---
+        // El polimorfismo se encarga de ejecutar la lógica correcta para cada tipo de evento.
+        for (GeologicalEvent event : events) {
+            event.apply(
+                    baseRiver.getDx(),
+                    newElevationProfile,
+                    newBottomWidth,
+                    newManningCoefficient,
+                    newSectionTypes
+            );
+        }
+
+        // --- 5. Construir y devolver el nuevo objeto RiverGeometry final ---
+        // El constructor validará la consistencia física del resultado final.
+        return new RiverGeometry(
+                baseRiver.getCellCount(),
+                baseRiver.getDx(),
+                newElevationProfile,
+                newBottomWidth,
+                newSideSlope,
+                newManningCoefficient,
+                newBaseDecay,
+                newPhProfile,
+                newSectionTypes
+        );
+    }
+
+    /**
+     * Method de utilidad para verificar que los eventos en una lista mantienen una
+     * distancia mínima entre ellos.
+     */
+    private void validateEventSeparation(double spatialResolution, List<GeologicalEvent> events) {
+        if (events.size() <= 1) {
+            return; // No hay nada que comparar.
+        }
+
+        // Ordenar los eventos por su posición para facilitar la comparación sin modificar el original
+        List<GeologicalEvent> sortedEvents = new ArrayList<>(events);
+        sortedEvents.sort(Comparator.comparingDouble(GeologicalEvent::getPosition));
+
+        // Convertir la primera posición a índice de celda.
+        int lastEventCell = (int) Math.round(events.get(0).getPosition() / spatialResolution);
+
+        // Comparar cada evento con el anterior.
+        for (int i = 1; i < events.size(); i++) {
+            int currentEventCell = (int) Math.round(events.get(i).getPosition() / spatialResolution);
+            if (Math.abs(currentEventCell - lastEventCell) < MINIMUM_CELL_SEPARATION) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "Los eventos geológicos están demasiado juntos. El evento en la posición %.2fm (celda %d) " +
+                                        "está a menos de %d celdas del evento en %.2fm (celda %d).",
+                                events.get(i).getPosition(), currentEventCell,
+                                MINIMUM_CELL_SEPARATION,
+                                events.get(i - 1).getPosition(), lastEventCell
+                        )
+                );
+            }
+            lastEventCell = currentEventCell;
+        }
     }
 }

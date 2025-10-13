@@ -120,4 +120,13 @@ public final class GeoEvManMadeDam implements GeologicalEvent {
             sectionTypes[i] = RiverSectionType.RESERVOIR;
         }
     }
+
+    /**
+     *
+     * @return La posición del accidente geológico. Sirve para comparar con otros accidentes y obligar separación
+     */
+    @Override
+    public double getPosition() {
+        return this.position;
+    }
 }
