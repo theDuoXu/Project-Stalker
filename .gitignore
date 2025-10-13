@@ -5,3 +5,4 @@
 *.xml
 # ignorar configuración de jetbrains
 /.idea
+/.gradle
