@@ -1,0 +1,18 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+group = 'com.projectstalker'
+version = '0.1 - BETA'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.github.auburns:fastnoise-lite:0.9'
+}
+
+application {
+    mainClass = 'com.projectstalker.Main'
+}
