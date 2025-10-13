@@ -9,9 +9,16 @@ package projectstalker.config;
  * hidrología y las propiedades físico-químicas básicas del río a simular.
  *
  * @param seed Semilla para la generación de ruido, para resultados reproducibles.
+ * @param noiseFrequency Controla el nivel de detalle y la escala de las características del ruido
+ *                       - Una baja frecuencia equivale a colinas grandes, suaves y muy espaciadas.
+ *                       Las transiciones de un valor a otro son lentas y graduales
+ *                       - Una alta frecuencia equivale a muchas colinas pequeñas, juntas y con pendientes pronunciadas.
+ *                       Las transiciones son abruptas
+ *
  * @param totalLength Longitud total del río en metros.
  * @param spatialResolution Resolución espacial (dx) en metros.
  * @param initialElevation Altitud inicial del río en metros.
+ * @param concavityFactor Controla la variación de la pendiente del río en función de la posición
  * @param averageSlope Pendiente media del río (adimensional, ej: 0.001 para 1m de caída cada km).
  * @param slopeVariability Factor de variabilidad para la pendiente (adimensional).
  * @param baseWidth Ancho base del fondo del río en metros.
@@ -33,9 +40,13 @@ package projectstalker.config;
  */
 public record RiverConfig(
         long seed,
+        float noiseFrequency,
+        float detailNoiseFrequency,
+        float zoneNoiseFrequency,
         double totalLength,
         double spatialResolution,
         double initialElevation,
+        double concavityFactor,
         double averageSlope,
         double slopeVariability,
         double baseWidth,
