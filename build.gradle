@@ -1,14 +1,13 @@
-package projectstalker
-
 plugins {
     id 'java'
     id 'application'
 }
-group = 'com.projectstalker'
-version = '0.1 - BETA'
+group = 'projectstalker'
+version = '0.1 - ALPHA'
 
 repositories {
     mavenCentral()
+    maven { url 'https://jitpack.io' }
 }
 
 dependencies {
@@ -16,5 +15,5 @@ dependencies {
 }
 
 application {
-    mainClass = 'com.projectstalker.Main'
+    mainClass = 'projectstalker.Main'
 }

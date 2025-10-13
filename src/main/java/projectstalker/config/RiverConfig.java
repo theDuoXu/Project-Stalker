@@ -29,6 +29,7 @@ package projectstalker.config;
  * @param basePh pH base del agua (ej: 7.5).
  * @param phVariability Variación máxima del pH a lo largo del río.
  * @param seasonalTempVariation Amplitud máxima, temperatura anual
+ * @param averageAnnualTemperature Media de temperatura anual
  */
 public record RiverConfig(
         long seed,
@@ -52,101 +53,9 @@ public record RiverConfig(
         double baseTemperature,
         double dailyTempVariation,
         double seasonalTempVariation,
+        double averageAnnualTemperature,
         double basePh,
         double phVariability
 ) {
-    @java.lang.Override
-    public long seed() {
-        return seed;
-    }
-
-    @java.lang.Override
-    public double totalLength() {
-        return totalLength;
-    }
-
-    @java.lang.Override
-    public double spatialResolution() {
-        return spatialResolution;
-    }
-
-    @java.lang.Override
-    public double initialElevation() {
-        return initialElevation;
-    }
-
-    @java.lang.Override
-    public double averageSlope() {
-        return averageSlope;
-    }
-
-    @java.lang.Override
-    public double slopeVariability() {
-        return slopeVariability;
-    }
-
-    @java.lang.Override
-    public double baseWidth() {
-        return baseWidth;
-    }
-
-    @java.lang.Override
-    public double widthVariability() {
-        return widthVariability;
-    }
-
-    @java.lang.Override
-    public double baseSideSlope() {
-        return baseSideSlope;
-    }
-
-    @java.lang.Override
-    public double sideSlopeVariability() {
-        return sideSlopeVariability;
-    }
-
-    @java.lang.Override
-    public double baseManning() {
-        return baseManning;
-    }
-
-    @java.lang.Override
-    public double manningVariability() {
-        return manningVariability;
-    }
-
-    @java.lang.Override
-    public double baseDecayRateAt20C() {
-        return baseDecayRateAt20C;
-    }
-
-    @java.lang.Override
-    public double decayRateVariability() {
-        return decayRateVariability;
-    }
-
-    @java.lang.Override
-    public double baseTemperature() {
-        return baseTemperature;
-    }
-
-    @java.lang.Override
-    public double dailyTempVariation() {
-        return dailyTempVariation;
-    }
-
-    @java.lang.Override
-    public double seasonalTempVariation() {
-        return seasonalTempVariation;
-    }
-
-    @java.lang.Override
-    public double basePh() {
-        return basePh;
-    }
-
-    @java.lang.Override
-    public double phVariability() {
-        return phVariability;
-    }
+    // Atención, el record ya escribe los getters, el constructor y hace todas las variables private final
 }

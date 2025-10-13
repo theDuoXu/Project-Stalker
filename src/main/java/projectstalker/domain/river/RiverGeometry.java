@@ -13,7 +13,7 @@ import java.util.Arrays;
  * el cual siempre es proporcionado como un argumento externo.
  *
  * @author Duo Xu
- * @version 1.0
+ * @version 0.1
  * @since 2025-10-12
  */
 
@@ -26,6 +26,7 @@ public final class RiverGeometry {
     private final double[] sideSlope;
     private final double[] manningCoefficient;
     private final double[] baseDecayCoefficientAt20C;
+    private final double[] phProfile;
 
     /**
      * Constructor con visibilidad de paquete, diseñado para ser invocado
@@ -40,9 +41,10 @@ public final class RiverGeometry {
      * @param bottomWidth        Array con el ancho del fondo del cauce para cada celda (valores >= 0).
      * @param sideSlope          Array con la pendiente de los taludes laterales (valores >= 0).
      * @param manningCoefficient Array con el coeficiente de rugosidad de Manning (valores > 0).
+     * @param phProfile          Array con el perfil PH del río
      */
     RiverGeometry(int cellCount, double dx, double[] elevationProfile, double[] bottomWidth, double[] sideSlope,
-                  double[] manningCoefficient, double[] baseDecayCoefficientAt20C) {
+                  double[] manningCoefficient, double[] baseDecayCoefficientAt20C, double[] phProfile) {
         // --- Validación de Parámetros ---
         if (cellCount <= 1) {
             throw new IllegalArgumentException("El número de celdas debe ser mayor que 1.");
@@ -57,10 +59,12 @@ public final class RiverGeometry {
         Objects.requireNonNull(sideSlope, "El array de pendiente de taludes no puede ser nulo.");
         Objects.requireNonNull(manningCoefficient, "El array del coeficiente de Manning no puede ser nulo.");
         Objects.requireNonNull(baseDecayCoefficientAt20C, "El array del coeficiente de decaída no puede ser nulo.");
+        Objects.requireNonNull(phProfile, "El array del perfil de ph no puede ser nulo.");
 
         // Validar que todos los arrays tengan la longitud correcta
         if (elevationProfile.length != cellCount || bottomWidth.length != cellCount ||
-                sideSlope.length != cellCount || manningCoefficient.length != cellCount || baseDecayCoefficientAt20C.length != cellCount) {
+                sideSlope.length != cellCount || manningCoefficient.length != cellCount ||
+                baseDecayCoefficientAt20C.length != cellCount || phProfile.length != cellCount) {
             throw new IllegalArgumentException("Todos los arrays de propiedades deben tener una longitud igual a cellCount.");
         }
 
@@ -86,6 +90,7 @@ public final class RiverGeometry {
         this.sideSlope = sideSlope.clone();
         this.manningCoefficient = manningCoefficient.clone();
         this.baseDecayCoefficientAt20C = baseDecayCoefficientAt20C.clone();
+        this.phProfile = phProfile.clone();
     }
 
     // --- MÉTODOS DE CONSULTA ESTÁTICA ---
@@ -122,6 +127,17 @@ public final class RiverGeometry {
     public double getBaseDecayAt(int cellIndex) {
         validateCellIndex(cellIndex);
         return manningCoefficient[cellIndex];
+    }
+
+    /**
+     * Devuelve el pH base del agua para una celda específica.
+     *
+     * @param cellIndex El índice de la celda.
+     * @return El valor del pH para esa sección del río.
+     */
+    public double getPhAt(int cellIndex) {
+        validateCellIndex(cellIndex);
+        return phProfile[cellIndex];
     }
 
 
@@ -256,8 +272,8 @@ public final class RiverGeometry {
                         "  bottomWidth=[%.2f m ... %.2f m],\n" +
                         "  sideSlope=[%.2f ... %.2f],\n" +
                         "  manningCoefficient=[%.3f ... %.3f]\n" +
-                        "  decayCoefficient=[%.3f ... %.3f]\n"+
-                "}",
+                        "  decayCoefficient=[%.3f ... %.3f]\n" +
+                        "}",
                 cellCount,
                 dx,
                 totalLengthKm,
@@ -281,7 +297,8 @@ public final class RiverGeometry {
                 Arrays.equals(bottomWidth, that.bottomWidth) &&
                 Arrays.equals(sideSlope, that.sideSlope) &&
                 Arrays.equals(manningCoefficient, that.manningCoefficient) &&
-                Arrays.equals(baseDecayCoefficientAt20C, that.baseDecayCoefficientAt20C);
+                Arrays.equals(baseDecayCoefficientAt20C, that.baseDecayCoefficientAt20C) &&
+                Arrays.equals(phProfile, that.phProfile);
     }
 
     @Override
@@ -295,6 +312,7 @@ public final class RiverGeometry {
         result = 31 * result + Arrays.hashCode(sideSlope);
         result = 31 * result + Arrays.hashCode(manningCoefficient);
         result = 31 * result + Arrays.hashCode(baseDecayCoefficientAt20C);
+        result = 31 * result + Arrays.hashCode(phProfile);
         return result;
     }
 }
