@@ -6,3 +6,6 @@
 # ignorar configuración de jetbrains
 /.idea
 /.gradle
+
+# ignorar archivos generados
+problems-report.html
