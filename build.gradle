@@ -7,11 +7,16 @@ version = '0.1 - ALPHA'
 
 repositories {
     mavenCentral()
-    maven { url 'https://jitpack.io' }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 dependencies {
-    implementation 'com.github.auburns:fastnoise-lite:0.9'
+
 }
 
 application {
