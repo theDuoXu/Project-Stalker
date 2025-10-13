@@ -1,4 +1,4 @@
-package com.projectstalker.domain.river;
+package projectstalker.domain.river;
 
 import java.util.Objects;
 import java.util.Arrays;
@@ -256,7 +256,7 @@ public final class RiverGeometry {
                         "  bottomWidth=[%.2f m ... %.2f m],\n" +
                         "  sideSlope=[%.2f ... %.2f],\n" +
                         "  manningCoefficient=[%.3f ... %.3f]\n" +
-                        "  decayCoefficient=[%.3f ... %.3f]\n"
+                        "  decayCoefficient=[%.3f ... %.3f]\n"+
                 "}",
                 cellCount,
                 dx,
@@ -297,3 +297,4 @@ public final class RiverGeometry {
         result = 31 * result + Arrays.hashCode(baseDecayCoefficientAt20C);
         return result;
     }
+}

@@ -1,4 +1,5 @@
-package com.projectstalker.config;
+package projectstalker.config;
+
 
 /**
  * Un objeto de valor inmutable para contener todos los parámetros de configuración

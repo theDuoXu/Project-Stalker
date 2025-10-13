@@ -1,3 +1,5 @@
+package projectstalker
+
 plugins {
     id 'java'
     id 'application'
