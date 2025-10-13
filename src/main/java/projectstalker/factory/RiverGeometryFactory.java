@@ -1,8 +1,11 @@
 package projectstalker.factory;
 
 import projectstalker.config.RiverConfig;
+import projectstalker.domain.river.RiverSectionType;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.utils.FastNoiseLite;
+
+import java.util.Arrays;
 
 /**
  * Fábrica responsable de la creación procedural de instancias de {@link RiverGeometry}.
@@ -66,6 +69,8 @@ public class RiverGeometryFactory {
         double[] manningCoefficient = new double[cellCount];
         double[] baseDecayCoefficientAt20C = new double[cellCount];
         double[] phProfile = new double[cellCount];
+        RiverSectionType[] sectionTypes = new RiverSectionType[cellCount];
+        Arrays.fill(sectionTypes, RiverSectionType.NATURAL);
 
         // 3. Generación procedural de los perfiles celda por celda
         elevationProfile[0] = config.initialElevation();
@@ -137,7 +142,8 @@ public class RiverGeometryFactory {
                 sideSlope,
                 manningCoefficient,
                 baseDecayCoefficientAt20C,
-                phProfile
+                phProfile,
+                sectionTypes
         );
     }
 }
