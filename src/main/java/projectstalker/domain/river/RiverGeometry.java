@@ -135,6 +135,11 @@ public final class RiverGeometry {
         return manningCoefficient[cellIndex];
     }
 
+    public double getWidthAt(int cellIndex) {
+        validateCellIndex(cellIndex);
+        return bottomWidth[cellIndex];
+    }
+
     /**
      * Devuelve el pH base del agua para una celda específica.
      *
