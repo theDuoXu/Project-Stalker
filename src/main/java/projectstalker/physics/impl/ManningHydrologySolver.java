@@ -4,6 +4,7 @@ import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.physics.solver.IHydrologySolver;
+import projectstalker.utils.FastNoiseLite;
 
 /**
  * Implementación del motor de hidrología que utiliza la Ecuación de Manning
@@ -73,23 +74,43 @@ public class ManningHydrologySolver implements IHydrologySolver {
         double[] newPh = new double[cellCount];
 
 
-        // --- PASO A: Calcular Temperatura y pH ---
-        // Estos valores dependen del tiempo, pero son uniformes a lo largo del río en este modelo.
+        // --- PASO A: Calcular Temperatura y pH con Variación Espacial ---
+
+        // 1. Calcular la Temperatura Base (dependiente del tiempo)
         final double dayOfYear = (currentTimeInSeconds / SECONDS_IN_A_DAY) % DAYS_IN_A_YEAR;
         final double secondOfDay = currentTimeInSeconds % SECONDS_IN_A_DAY;
-
-        // 1. Ciclo Estacional (sinusoide con período de 1 año)
         final double seasonalCycle = Math.sin((dayOfYear / DAYS_IN_A_YEAR) * 2.0 * Math.PI);
         final double baseSeasonalTemp = config.averageAnnualTemperature() + config.seasonalTempVariation() * seasonalCycle;
-
-        // 2. Ciclo Diario (sinusoide con período de 24 horas)
         final double dailyCycle = Math.sin((secondOfDay / SECONDS_IN_A_DAY) * 2.0 * Math.PI);
-        final double finalTemp = baseSeasonalTemp + config.dailyTempVariation() * dailyCycle;
+        final double baseTempForCurrentTime = baseSeasonalTemp + config.dailyTempVariation() * dailyCycle;
 
-        // Asignamos los valores de temperatura y pH a todas las celdas
+        // 2. Preparar el generador de ruido para la variabilidad local
+        final FastNoiseLite tempNoise = new FastNoiseLite((int) config.seed() + 2);
+        tempNoise.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
+        tempNoise.SetFrequency(0.2f);
+
+        // 3. Calcular la temperatura final para cada celda
         for (int i = 0; i < cellCount; i++) {
-            newTemperature[i] = finalTemp;
-            newPh[i] = geometry.getPhAt(i); // Leyendo el ph base desde la geometría del río
+            // Componente de Gradiente Longitudinal (más frío en la cabecera)
+            double position = i * geometry.getDx();
+            double gradientFactor = Math.max(0, 1.0 - (position / config.headwaterCoolingDistance()));
+            double headwaterCooling = -config.maxHeadwaterCoolingEffect() * gradientFactor;
+
+            // Componente de Efecto Geomorfológico (ancho y pendiente)
+            double relativeWidth = geometry.getWidthAt(i) / config.baseWidth();
+            double widthEffect = config.widthHeatingFactor() * Math.max(0, relativeWidth - 1.0);
+
+            double relativeSlope = geometry.getBedSlopeAt(i) / config.averageSlope();
+            double slopeEffect = -config.slopeCoolingFactor() * Math.max(0, relativeSlope - 1.0);
+
+            double geomorphologyEffect = widthEffect + slopeEffect;
+
+            // Componente de Ruido Local
+            double noiseEffect = tempNoise.GetNoise(i, 0) * config.temperatureNoiseAmplitude();
+
+            // Asignar la temperatura y pH finales
+            newTemperature[i] = baseTempForCurrentTime + headwaterCooling + geomorphologyEffect + noiseEffect;
+            newPh[i] = geometry.getPhAt(i);
         }
 
 
@@ -147,10 +168,10 @@ public class ManningHydrologySolver implements IHydrologySolver {
          * Encuentra la profundidad del agua (H) que corresponde a un caudal dado.
          * Esta clase es Thread safe
          *
-         * @param targetDischarge El caudal objetivo que la celda debe evacuar (m³/s).
+         * @param targetDischarge   El caudal objetivo que la celda debe evacuar (m³/s).
          * @param initialDepthGuess Una estimación inicial para la profundidad (m).
-         * @param cellIndex El índice de la celda del río.
-         * @param geometry La geometría del río.
+         * @param cellIndex         El índice de la celda del río.
+         * @param geometry          La geometría del río.
          * @return La profundidad calculada (m).
          */
         public static double findDepth(double targetDischarge, double initialDepthGuess, int cellIndex, RiverGeometry geometry) {
