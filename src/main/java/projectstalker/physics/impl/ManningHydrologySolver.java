@@ -12,6 +12,27 @@ import projectstalker.physics.solver.IHydrologySolver;
  * Este motor es responsable de calcular el estado completo del agua
  * (profundidad, velocidad, temperatura y pH) para el siguiente paso de tiempo.
  */
+
+/*
+    TODO Implementar celdas RESERVOIR como un único cuerpo de agua interconectado.
+    La nueva cota del agua se calcula con un simple balance de volúmenes, como si fuera una bañera:
+
+    Volumen Actual: Calcula el volumen total de agua en el embalse en el instante t (sumando el volumen de cada celda RESERVOIR).
+
+    Caudal de Entrada (Q_in): Es el caudal que le llega de la última celda de río "normal" aguas arriba.
+
+    Caudal de Salida (Q_out): Este es el valor crucial que será calculado por la celda DAM_STRUCTURE.
+
+    Nuevo Volumen: El nuevo volumen en el instante t+1 será: volumen anterior + (diferencia de caudales) * periodo de evaluación
+
+    De volumen a cota: Traducirlo de nuevo a una cota de agua con la información de GeoEvManMadeDam
+
+    Calcular Profundidades Individuales: Finalmente, la nueva profundidad para cada celda RESERVOIR i es simplemente:
+                    Profundidad = nueva cota de agua menos cota de fondo de la celda
+
+
+ */
+
 public class ManningHydrologySolver implements IHydrologySolver {
 
     private static final double SECONDS_IN_A_DAY = 24.0 * 3600.0;
