@@ -80,16 +80,25 @@ public class ManningHydrologySolver implements IHydrologySolver {
                 currentDischarge = inputDischarge;
             } else {
                 // El caudal que entra es el que salió de la celda anterior en el estado previo
-                double previousArea = geometry.getCrossSectionalArea(i - 1, currentState.waterDepth()[i - 1]);
-                currentDischarge = previousArea * currentState.velocity()[i - 1];
+                double previousArea = geometry.getCrossSectionalArea(i - 1, currentState.getWaterDepthAt(i - 1));
+                currentDischarge = previousArea * currentState.getVelocityAt(i - 1);
             }
 
-            // 2. Encontrar la Profundidad (H) que satisface la Ecuación de Manning para el caudal actual
-            // ESTA ES LA PARTE COMPLEJA QUE IMPLEMENTAREMOS MÁS ADELANTE
-            // TODO: Implementar un solver numérico (ej. Newton-Raphson) para encontrar 'H'
-            //       tal que Q_calculado(H) == currentDischarge.
-            // Por ahora, usamos un placeholder simple: asumimos que la profundidad no cambia.
-            newWaterDepth[i] = currentState.waterDepth()[i];
+            // Si el caudal de entrada es prácticamente cero, el río está seco en este punto.
+            if (currentDischarge < 1e-6) {
+                newWaterDepth[i] = 0.0;
+                newVelocity[i] = 0.0;
+                continue; // Saltar al siguiente ciclo del bucle
+            }
+
+            // 2. Encontrar la Profundidad (H) que satisface la Ecuación de Manning
+            double initialGuess = currentState.getWaterDepthAt(i);
+            newWaterDepth[i] = ManningEquationSolver.findDepth(
+                    currentDischarge,
+                    initialGuess,
+                    i,
+                    geometry
+            );
 
             // 3. Calcular la Velocidad (v) a partir de la nueva profundidad y el caudal
             double newArea = geometry.getCrossSectionalArea(i, newWaterDepth[i]);
@@ -99,8 +108,106 @@ public class ManningHydrologySolver implements IHydrologySolver {
                 newVelocity[i] = 0.0;
             }
         }
-
         // --- Devolver el nuevo estado inmutable ---
         return new RiverState(newWaterDepth, newVelocity, newTemperature, newPh);
+    }
+
+    /**
+     * Clase anidada estática que encapsula la lógica para resolver la ecuación de Manning.
+     * Utiliza el method de Newton-Raphson para encontrar la profundidad (H)
+     * a partir de un caudal (Q) dado.
+     */
+    private static final class ManningEquationSolver {
+
+        private static final int MAX_ITERATIONS = 20;
+        private static final double TOLERANCE = 1e-6; // Tolerancia para convergencia en metros
+
+        /**
+         * Encuentra la profundidad del agua (H) que corresponde a un caudal dado.
+         * Esta clase es Thread safe
+         *
+         * @param targetDischarge El caudal objetivo que la celda debe evacuar (m³/s).
+         * @param initialDepthGuess Una estimación inicial para la profundidad (m).
+         * @param cellIndex El índice de la celda del río.
+         * @param geometry La geometría del río.
+         * @return La profundidad calculada (m).
+         */
+        public static double findDepth(double targetDischarge, double initialDepthGuess, int cellIndex, RiverGeometry geometry) {
+
+            // Extraer parámetros geométricos una sola vez
+            final double b = geometry.cloneBottomWidth()[cellIndex];
+            final double m = geometry.cloneSideSlope()[cellIndex];
+            final double n = geometry.getManningAt(cellIndex);
+            double S = geometry.getBedSlopeAt(cellIndex);
+
+            // Evitar pendiente cero o negativa que impide el cálculo.
+            if (S <= 1e-7) {
+                S = 1e-7;
+            }
+
+            double H = (initialDepthGuess <= 0) ? 0.1 : initialDepthGuess; // Empezar con un valor pequeño si la estimación es cero
+
+            for (int i = 0; i < MAX_ITERATIONS; i++) {
+                // Función f(H) = Q_calculado(H) - Q_objetivo
+                double calculatedDischarge = calculateQ(H, b, m, n, S);
+                double f_H = calculatedDischarge - targetDischarge;
+
+                // Si el error es suficientemente pequeño, hemos convergido.
+                if (Math.abs(f_H) < TOLERANCE) {
+                    return H;
+                }
+
+                // Derivada f'(H) = dQ/dH
+                double dQ_dH = calculate_dQ_dH(H, b, m, n, S, calculatedDischarge);
+
+                // Evitar división por cero o un gradiente que no permita avanzar.
+                if (Math.abs(dQ_dH) < 1e-6) {
+                    break; // Salir si la derivada es plana, el method no convergerá
+                }
+
+                // Fórmula de Newton-Raphson
+                double h_next = H - f_H / dQ_dH;
+
+                // Comprobar convergencia por cambio en H
+                if (Math.abs(h_next - H) < TOLERANCE) {
+                    return Math.max(0, h_next);
+                }
+
+                // Actualizar H para la siguiente iteración, asegurando que no sea negativo.
+                H = Math.max(0.001, h_next); // Evitar que H sea exactamente cero para prevenir singularidades
+            }
+
+            // Si no converge, devuelve la última mejor estimación.
+            return H;
+        }
+
+        /**
+         * Calcula el caudal (Q) usando la ecuación de Manning para un canal trapezoidal.
+         */
+        private static double calculateQ(double H, double b, double m, double n, double S) {
+            double A = (b + m * H) * H;
+            if (A <= 0) return 0.0;
+
+            double P = b + 2.0 * H * Math.sqrt(1.0 + m * m);
+            if (P <= 1e-9) return 0.0;
+
+            double R = A / P;
+            return (1.0 / n) * A * Math.pow(R, 2.0 / 3.0) * Math.sqrt(S);
+        }
+
+        /**
+         * Calcula la derivada del caudal respecto a la profundidad (dQ/dH) analíticamente.
+         */
+        private static double calculate_dQ_dH(double H, double b, double m, double n, double S, double currentQ) {
+            if (H <= 1e-9) {
+                return Double.POSITIVE_INFINITY;
+            }
+
+            // Términos de la derivada del área y perímetro (Ver en los apuntes)
+            double term_A_derivative = (5.0 * (b + 2.0 * m * H)) / ((b + m * H) * H);
+            double term_P_derivative = (4.0 * Math.sqrt(1.0 + m * m)) / (b + 2.0 * H * Math.sqrt(1.0 + m * m));
+
+            return (currentQ / 3.0) * (term_A_derivative - term_P_derivative);
+        }
     }
 }
