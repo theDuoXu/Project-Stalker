@@ -4,8 +4,14 @@
 *.csv
 *.xml
 # ignorar configuración de jetbrains
-/.idea
-/.gradle
+.idea/
+.gradle/
+*.iml
+*.iws
 
 # ignorar archivos generados
 problems-report.html
+build/
+*.jar
+*.log
+*.bin
