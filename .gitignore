@@ -12,6 +12,7 @@
 # ignorar archivos generados
 problems-report.html
 build/
+lib/
 *.jar
 *.log
 *.bin
