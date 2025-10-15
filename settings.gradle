@@ -1,0 +1,3 @@
+rootProject.name = 'projectstalker'
+
+include 'app', 'native-lib'

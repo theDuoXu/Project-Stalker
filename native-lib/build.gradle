@@ -1,0 +1,39 @@
+// native-lib/build.gradle (Final Correct Version)
+
+import projectstalker.build.CompileCudaTask
+
+plugins {
+    id 'cpp-library'
+}
+
+library {
+    publicHeaders.from('src/main/cpp/include')
+    baseName = 'projectstalker'
+}
+
+// Librerías para JNI
+tasks.withType(CppCompile) {
+    def javaHome = System.getenv("JAVA_HOME")
+    if (javaHome) {
+        compilerArgs.add "-I${javaHome}/include"
+        compilerArgs.add "-I${javaHome}/include/linux"
+    } else {
+        logger.warn("JAVA_HOME is not set. C++ compilation might fail to find JNI headers.")
+    }
+}
+
+// 1. REGISTRAR NUESTRA TAREA DE CUDA
+def compileCuda = tasks.register('compileCuda', CompileCudaTask) {
+    description = 'Compila los archivos .cu en archivos objeto .o'
+    group = 'build'
+    sourceDir.set(project.file('src/main/cpp/src'))
+    outputDir.set(project.layout.buildDirectory.dir('obj/cuda'))
+}
+
+// 2. CONECTAR 🔗
+tasks.withType(LinkSharedLibrary) {
+    source.from(compileCuda.map { it.outputDir.files() })
+    def cudaHome = '/usr/local/cuda'
+    linkerArgs.add("-L${cudaHome}/lib64")
+    linkerArgs.add('-lcudart')
+}

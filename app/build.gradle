@@ -1,8 +1,8 @@
 plugins {
     id 'java'
     id 'application'
-    id 'cpp-application'
 }
+
 group = 'projectstalker'
 version = '0.1 - ALPHA'
 
@@ -15,15 +15,25 @@ java {
         languageVersion = JavaLanguageVersion.of(21)
     }
 }
-test {
-    useJUnitPlatform()
-}
 
-dependencies {
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.2'
+configurations {
+    nativeLibs
 }
 
 application {
     mainClass = 'projectstalker.Main'
+}
+
+dependencies {
+    nativeLibs project(path: ':native-lib', configuration: 'debugRuntimeElements')
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.2'
+}
+tasks.named('run', JavaExec) {
+    jvmArgs "-Djava.library.path=${configurations.nativeLibs.asPath}"
+}
+
+test {
+    useJUnitPlatform()
 }
