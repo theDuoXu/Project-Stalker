@@ -45,8 +45,12 @@ class ManningSimulatorTest {
 
     @BeforeEach
     void setUp() {
-        // Cualquier llamada a la función será respondida por Mockito
-        doReturn(createFakeGpuResult()).when(simulator).solveManningGpu(
+        // Espía el method JNI y lo reemplaza por un lambda
+        doAnswer(invocation -> {
+            // Podemos capturar argumentos si queremos
+            // Se ejecuta este lambda en vez del method nativo
+            return createFakeGpuResult();
+        }).when(simulator).solveManningGpu(
                 any(float[].class), any(float[].class), any(float[].class),
                 any(float[].class), any(float[].class), any(float[].class)
         );
