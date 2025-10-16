@@ -56,7 +56,7 @@ class RiverFactoryTest {
         log.info("Iniciando test 'createStableRiver' con un caudal de entrada de {} m³/s", initialDischarge);
 
         // --- 2. Act ---
-        // Llamamos al método que queremos probar
+        // Llamamos al method que queremos probar
         InitialRiver initialRiver = riverFactory.createStableRiver(config, initialDischarge);
         log.debug("InitialRiver ha sido creado por la fábrica.");
 
