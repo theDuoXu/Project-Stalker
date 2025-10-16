@@ -4,7 +4,7 @@ import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.InitialRiver;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.physics.solver.IHydrologySolver; // Importar el solver
+import projectstalker.physics.solver.IHydrologySolver;
 
 public class RiverFactory {
 

@@ -160,7 +160,7 @@ public class RiverGeometryFactory {
     /**
      * Aplica una lista de eventos geológicos en serie a una geometría de río base.
      * <p>
-     * El método es inmutable: no modifica el río original, sino que devuelve una
+     * El method es inmutable: no modifica el río original, sino que devuelve una
      * nueva instancia con los cambios acumulados. Primero, valida que los eventos
      * estén suficientemente separados para evitar interacciones complejas.
      *
