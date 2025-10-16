@@ -31,14 +31,6 @@ application {
 }
 
 dependencies {
-
-    // --- Serialización (JSON) ---
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
-
-    // --- Logging Profesional ---
-    implementation 'org.slf4j:slf4j-api:2.0.13'
-    runtimeOnly 'ch.qos.logback:logback-classic:1.5.13'
-
     // =======================================================
     // --- STACK DE BASE DE DATOS (POSTGRESQL) ---
     // =======================================================
@@ -53,10 +45,35 @@ dependencies {
     implementation 'org.jdbi:jdbi3-core:3.45.2'
     implementation 'org.jdbi:jdbi3-postgres:3.45.2'
 
+    // =======================================================
+    // --- STACK DE PRUEBAS ---
+    // =======================================================
 
     // --- Pruebas Unitarias ---
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testImplementation 'org.assertj:assertj-core:3.25.3'
+    // --- Framework para Mocks en Pruebas ---
+    testImplementation 'org.mockito:mockito-core:5.12.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.12.0' // Integración con JUnit 5
+
+    // =======================================================
+    // --- OTROS ---
+    // =======================================================
+    // --- Carga de configuración desde archivos .env ---
+    implementation 'io.github.cdimascio:dotenv-java:3.0.0'
+
+    // --- Utilidades para reducir código repetitivo ---
+    compileOnly 'org.projectlombok:lombok:1.18.32'
+    annotationProcessor 'org.projectlombok:lombok:1.18.32'
+    testCompileOnly 'org.projectlombok:lombok:1.18.32'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.32'
+
+    // --- Serialización (JSON) ---
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
+
+    // --- Logging Profesional ---
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+    runtimeOnly 'ch.qos.logback:logback-classic:1.5.13'
 }
 
 tasks.named('run', JavaExec) {
