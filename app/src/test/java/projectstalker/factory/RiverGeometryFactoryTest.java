@@ -2,6 +2,8 @@ package projectstalker.factory;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.RiverGeometry;
 
@@ -15,49 +17,29 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class RiverGeometryFactoryTest {
 
+    // Instancia del logger para esta clase de prueba.
+    private static final Logger log = LoggerFactory.getLogger(RiverGeometryFactoryTest.class);
+
     @Test
     @DisplayName("Debería crear una geometría de río consistente y mostrar su resumen estadístico")
     void createRealisticRiver_shouldReturnConsistentGeometry() {
         // --- 1. Arrange (Preparar) ---
         // Configuración para un río grande y maduro, tipo Tajo, con los nuevos parámetros de temperatura.
         RiverConfig config = new RiverConfig(
-                12345L,      // seed
-                0.0f,        // noiseFrequency
-                0.05f,       // detailNoiseFrequency
-                0.001f,      // zoneNoiseFrequency
-                100000.0,    // totalLength
-                50.0,        // spatialResolution
-                200.0,       // initialElevation
-                0.4,         // concavityFactor
-                0.0002,      // averageSlope (corregido a un valor más suave para un río de llanura)
-                0.0001,      // slopeVariability
-                150.0,       // baseWidth
-                40.0,        // widthVariability
-                4.0,         // baseSideSlope
-                1.5,         // sideSlopeVariability
-                0.030,       // baseManning
-                0.005,       // manningVariability
-                0.1,         // baseDecayRateAt20C
-                0.05,        // decayRateVariability
-                // --- Parámetros de Calidad de Agua (Temporales) ---
-                15.0,        // baseTemperature
-                2.0,         // dailyTempVariation
-                8.0,         // seasonalTempVariation
-                14.0,        // averageAnnualTemperature
-                7.5,         // basePh
-                0.5,         // phVariability
-                // --- Parámetros de Modelo de Temperatura Espacial (AÑADIDOS) ---
-                4.0,         // maxHeadwaterCoolingEffect: 4°C más frío en el nacimiento.
-                20000.0,     // headwaterCoolingDistance: El efecto se disipa en 20km.
-                1.5,         // widthHeatingFactor: Tramos anchos se calientan hasta 1.5°C extra.
-                1.0,         // slopeCoolingFactor: Tramos rápidos se enfrían hasta 1.0°C extra.
-                0.25         // temperatureNoiseAmplitude: +/- 0.25°C de variación aleatoria.
+                12345L, 0.0f, 0.05f, 0.001f, 100000.0, 50.0, 200.0, 0.4, 0.0002,
+                0.0001, 150.0, 40.0, 4.0, 1.5, 0.030, 0.005, 0.1, 0.05,
+                15.0, 2.0, 8.0, 14.0, 7.5, 0.5,
+                4.0, 20000.0, 1.5, 1.0, 0.25
         );
         RiverGeometryFactory factory = new RiverGeometryFactory();
         int expectedCellCount = (int) (config.totalLength() / config.spatialResolution());
+        log.debug("Configuración de río creada para el test. Se esperan {} celdas.", expectedCellCount);
+
 
         // --- 2. Act (Actuar) ---
         RiverGeometry river = factory.createRealisticRiver(config);
+        log.debug("RiverGeometry creada satisfactoriamente por la fábrica.");
+
 
         // --- 3. Assert (Verificar) ---
         assertNotNull(river, "El objeto RiverGeometry no debería ser nulo.");
@@ -65,13 +47,15 @@ class RiverGeometryFactoryTest {
         assertEquals(config.spatialResolution(), river.getDx(), "La resolución espacial (dx) no coincide.");
         assertEquals(config.initialElevation(), river.cloneElevationProfile()[0], 1e-6, "La elevación inicial no coincide.");
 
-        System.out.println("Test de aserciones superado con éxito. El objeto RiverGeometry es válido.");
-        System.out.println(river); // Imprime el resumen general del objeto
+        log.info("Test de aserciones superado. El objeto RiverGeometry es estructuralmente válido.");
+        // El método toString() de RiverGeometry está bien diseñado, por lo que podemos registrarlo directamente.
+        log.info("Resumen del objeto RiverGeometry:\n{}", river);
+
 
         // --- 4. Describe (Análisis Estadístico) ---
-        System.out.println("\n--- Resumen Estadístico de la Geometría del Río (estilo pandas.describe) ---");
+        log.info("--- Resumen Estadístico de la Geometría del Río ---");
 
-        // Obtenemos los arrays una sola vez para optimizar, como sugeriste.
+        // Obtenemos los arrays una sola vez para optimizar.
         double[] elevationProfile = river.cloneElevationProfile();
         double[] bottomWidth = river.cloneBottomWidth();
         double[] sideSlope = river.cloneSideSlope();
@@ -88,31 +72,33 @@ class RiverGeometryFactoryTest {
     }
 
     /**
-     * Calcula e imprime un resumen estadístico para un array de doubles.
+     * Calcula y registra un resumen estadístico para un array de doubles.
      */
     private void describeArray(String name, double[] data) {
         if (data == null || data.length == 0) {
-            System.out.printf("\n--- %s ---\nDatos no disponibles o array vacío.\n", name);
+            log.warn("--- {} ---: Datos no disponibles o array vacío.", name);
             return;
         }
 
-        System.out.printf("\n--- %s ---\n", name);
+        log.info("--- {} ---", name);
         DoubleSummaryStatistics stats = Arrays.stream(data).summaryStatistics();
         double mean = stats.getAverage();
+        // El cálculo de la varianza se hace una vez para ser eficiente.
         double variance = Arrays.stream(data)
                 .map(x -> (x - mean) * (x - mean))
                 .average()
                 .orElse(0.0);
         double stdDev = Math.sqrt(variance);
 
-        System.out.printf("Count:    %,d\n", stats.getCount());
-        System.out.printf("Mean:     %.4f\n", mean);
-        System.out.printf("Std Dev:  %.4f\n", stdDev);
-        System.out.printf("Variance: %.4f\n", variance);
-        System.out.printf("Min:      %.4f\n", stats.getMin());
-        System.out.printf("Max:      %.4f\n", stats.getMax());
+        // Usamos String.format para mantener la precisión de los decimales en los logs.
+        log.info("  Count:    {}", stats.getCount());
+        log.info("  Mean:     {}", String.format("%.4f", mean));
+        log.info("  Std Dev:  {}", String.format("%.4f", stdDev));
+        log.info("  Variance: {}", String.format("%.4f", variance));
+        log.info("  Min:      {}", String.format("%.4f", stats.getMin()));
+        log.info("  Max:      {}", String.format("%.4f", stats.getMax()));
         int headCount = Math.min(5, data.length);
         double[] head = Arrays.copyOfRange(data, 0, headCount);
-        System.out.printf("Primeros %d valores: %s\n", headCount, Arrays.toString(head));
+        log.info("  Primeros {} valores: {}", headCount, Arrays.toString(head));
     }
 }

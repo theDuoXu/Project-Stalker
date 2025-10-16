@@ -3,6 +3,8 @@ package projectstalker.factory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.InitialRiver;
 import projectstalker.domain.river.RiverGeometry;
@@ -21,6 +23,9 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class RiverFactoryTest {
 
+    // 1. Instancia del logger para esta clase.
+    private static final Logger log = LoggerFactory.getLogger(RiverFactoryTest.class);
+
     private RiverConfig config;
     private RiverFactory riverFactory;
 
@@ -32,6 +37,7 @@ class RiverFactoryTest {
 
         // 2. Instanciar la fábrica que vamos a probar, inyectando sus dependencias
         this.riverFactory = new RiverFactory(geometryFactory, hydrologySolver);
+        log.debug("RiverFactory y sus dependencias han sido inicializadas para el test.");
 
         // 3. Crear una configuración estándar para usar en el test
         this.config = new RiverConfig(
@@ -47,10 +53,12 @@ class RiverFactoryTest {
     void createStableRiver_shouldReturnPopulatedRiver() {
         // --- 1. Arrange ---
         final double initialDischarge = 150.0; // Caudal para estabilizar el río.
+        log.info("Iniciando test 'createStableRiver' con un caudal de entrada de {} m³/s", initialDischarge);
 
         // --- 2. Act ---
         // Llamamos al método que queremos probar
         InitialRiver initialRiver = riverFactory.createStableRiver(config, initialDischarge);
+        log.debug("InitialRiver ha sido creado por la fábrica.");
 
         // --- 3. Assert ---
         // Verificamos que el resultado es válido y coherente.
@@ -77,10 +85,10 @@ class RiverFactoryTest {
         assertEquals(initialDischarge, outputDischarge, 5.0,
                 "El caudal de salida debería ser aproximadamente igual al de entrada, indicando estabilidad.");
 
-        System.out.println("Test de aserciones para RiverFactory superado con éxito.");
+        log.info("Test de aserciones para RiverFactory superado con éxito. Caudal de salida: {} m³/s.", String.format("%.2f", outputDischarge));
 
         // --- 4. Describe ---
-        System.out.println("\n--- Resumen Estadístico del Río Estable Generado por la Factory ---");
+        log.info("--- Resumen Estadístico del Río Estable Generado por la Factory ---");
         describeArray("Profundidad del Agua (m)", state.waterDepth());
         describeArray("Velocidad del Agua (m/s)", state.velocity());
         describeArray("Temperatura (°C)", state.temperature());
@@ -88,19 +96,18 @@ class RiverFactoryTest {
 
     private void describeArray(String name, double[] data) {
         if (data == null || data.length == 0) {
-            System.out.printf("\n--- %s ---\nDatos no disponibles o array vacío.\n", name);
+            log.warn("--- {} ---: Datos no disponibles o array vacío.", name);
             return;
         }
-        System.out.printf("\n--- %s ---\n", name);
+        log.info("--- {} ---", name);
         DoubleSummaryStatistics stats = Arrays.stream(data).summaryStatistics();
-        double mean = stats.getAverage();
 
-        System.out.printf("Count:    %,d\n", stats.getCount());
-        System.out.printf("Mean:     %.4f\n", mean);
-        System.out.printf("Min:      %.4f\n", stats.getMin());
-        System.out.printf("Max:      %.4f\n", stats.getMax());
+        log.info("  Count:    {}", stats.getCount());
+        log.info("  Mean:     {}", String.format("%.4f", stats.getAverage()));
+        log.info("  Min:      {}", String.format("%.4f", stats.getMin()));
+        log.info("  Max:      {}", String.format("%.4f", stats.getMax()));
         int headCount = Math.min(5, data.length);
         double[] head = Arrays.copyOfRange(data, 0, headCount);
-        System.out.printf("Primeros %d valores: %s\n", headCount, Arrays.toString(head));
+        log.info("  Primeros {} valores: {}", headCount, Arrays.toString(head));
     }
 }

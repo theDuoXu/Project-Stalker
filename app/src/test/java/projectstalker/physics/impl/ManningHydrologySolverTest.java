@@ -3,6 +3,8 @@ package projectstalker.physics.impl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
@@ -18,6 +20,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * Verifica que el solver calcula correctamente el siguiente estado hidrológico del río.
  */
 class ManningHydrologySolverTest {
+
+    // Instancia del logger para esta clase.
+    private static final Logger log = LoggerFactory.getLogger(ManningHydrologySolverTest.class);
 
     private RiverConfig config;
     private RiverGeometry riverGeometry;
@@ -35,6 +40,7 @@ class ManningHydrologySolverTest {
         RiverGeometryFactory factory = new RiverGeometryFactory();
         riverGeometry = factory.createRealisticRiver(config);
         solver = new ManningHydrologySolver();
+        log.debug("Entorno de prueba para ManningHydrologySolver inicializado.");
     }
 
     @Test
@@ -47,6 +53,7 @@ class ManningHydrologySolverTest {
         RiverState initialState = new RiverState(
                 new double[cellCount], new double[cellCount], new double[cellCount], new double[cellCount]
         );
+        log.info("Iniciando test 'calculateNextState_fromDryBed' con caudal de {} m³/s sobre cauce seco.", inputDischarge);
 
         // --- 2. Act ---
         RiverState nextState = solver.calculateNextState(
@@ -62,23 +69,18 @@ class ManningHydrologySolverTest {
         double firstCellDischarge = firstCellArea * nextState.getVelocityAt(0);
         assertEquals(inputDischarge, firstCellDischarge, 0.01, "El caudal en la primera celda debe ser igual al de entrada.");
 
-        // Verificamos que el modelo espacial de temperatura funciona
-        // En t=0, la temperatura base es la media anual.
         double baseTemp = config.averageAnnualTemperature();
         double tempAtHeadwater = nextState.getTemperatureAt(0);
-        // La temperatura en la cabecera (celda 0) debe ser significativamente más fría que la base
-        // debido al 'maxHeadwaterCoolingEffect'.
         assertTrue(tempAtHeadwater < baseTemp, "La temperatura en la cabecera debería ser más fría que la base.");
-        // Comprobamos que es aproximadamente igual a la base menos el efecto de enfriamiento (con una tolerancia para otros efectos).
         assertEquals(baseTemp - config.maxHeadwaterCoolingEffect(), tempAtHeadwater, 1.0, "La temperatura en la cabecera no refleja el efecto de enfriamiento esperado.");
 
         assertEquals(riverGeometry.getPhAt(50), nextState.getPhAt(50), 1e-6);
         assertEquals(0.0, nextState.getWaterDepthAt(cellCount - 1), "La última celda aún debería estar seca.");
 
-        System.out.println("Test 'calculateNextState_fromDryBed' superado. El solver funciona de manera coherente.");
+        log.info("Test 'calculateNextState_fromDryBed' superado. El solver funciona de manera coherente.");
 
         // --- 4. Describe ---
-        System.out.println("\n--- Resumen Estadístico del Primer Estado del Río (t=1) ---");
+        log.info("--- Resumen Estadístico del Primer Estado del Río (t=1) ---");
         describeArray("Profundidad del Agua (m)", nextState.waterDepth());
         describeArray("Velocidad del Agua (m/s)", nextState.velocity());
         describeArray("Temperatura (°C)", nextState.temperature());
@@ -96,7 +98,7 @@ class ManningHydrologySolverTest {
         final int maxIterations = cellCount * 2;
 
         // --- FASE 1: Llenado del río hasta alcanzar el estado estacionario ---
-        System.out.println("--- FASE 1: Llenando el río con 150 m³/s hasta el estado estacionario... ---");
+        log.info("--- FASE 1: Llenando el río con {} m³/s hasta el estado estacionario... ---", steadyDischarge);
         RiverState currentState = new RiverState(new double[cellCount], new double[cellCount], new double[cellCount], new double[cellCount]);
         long timeInSeconds = 0;
         int iterations = 0;
@@ -109,21 +111,16 @@ class ManningHydrologySolverTest {
                 fail("El llenado del río superó el máximo de " + maxIterations + " iteraciones.");
             }
         }
-
-        System.out.printf("Río estabilizado después de %d iteraciones.\n", iterations);
+        log.info("Río estabilizado después de {} iteraciones.", iterations);
         RiverState steadyState = currentState;
 
         // --- Análisis del Estado Estacionario ---
-        System.out.println("\n--- Resumen Estadístico del Estado Estacionario (150 m³/s) ---");
-        DoubleSummaryStatistics steadyStats = Arrays.stream(steadyState.waterDepth()).summaryStatistics();
-        describeArray("Profundidad (Estado Estacionario)", steadyState.waterDepth());
-        describeArray("Velocidad (Estado Estacionario)", steadyState.velocity());
-
         double steadyOutputDischarge = riverGeometry.getCrossSectionalArea(lastCellIndex, steadyState.getWaterDepthAt(lastCellIndex)) * steadyState.getVelocityAt(lastCellIndex);
         assertEquals(steadyDischarge, steadyOutputDischarge, 5.0, "El caudal de salida en estado estacionario debería ser cercano a 150 m³/s.");
+        describeArray("Profundidad (Estado Estacionario)", steadyState.waterDepth());
 
         // --- FASE 2: Propagación de una crecida con 200 m³/s ---
-        System.out.println("\n--- FASE 2: Introduciendo una crecida de 200 m³/s... ---");
+        log.info("--- FASE 2: Introduciendo una crecida de {} m³/s... ---", floodDischarge);
         iterations = 0;
         double currentOutputDischarge = steadyOutputDischarge;
 
@@ -136,43 +133,41 @@ class ManningHydrologySolverTest {
                 fail("La simulación de la crecida superó el máximo de " + maxIterations + " iteraciones.");
             }
         }
-
-        System.out.printf("Crecida estabilizada después de %d iteraciones adicionales.\n", iterations);
+        log.info("Crecida estabilizada después de {} iteraciones adicionales.", iterations);
         RiverState floodState = currentState;
 
         // --- Análisis del Estado de la Crecida y Comparación ---
-        System.out.println("\n--- Resumen Estadístico del Estado de Crecida (200 m³/s) ---");
-        DoubleSummaryStatistics floodStats = Arrays.stream(floodState.waterDepth()).summaryStatistics();
-        describeArray("Profundidad (Estado de Crecida)", floodState.waterDepth());
-        describeArray("Velocidad (Estado de Crecida)", floodState.velocity());
-
         assertEquals(floodDischarge, currentOutputDischarge, 1.0, "El caudal de salida final debería ser cercano a 200 m³/s.");
+        describeArray("Profundidad (Estado de Crecida)", floodState.waterDepth());
 
-        System.out.printf("\nComparación de Profundidad Media:\n");
-        System.out.printf(" - Estado Estacionario (150 m³/s): %.4f m\n", steadyStats.getAverage());
-        System.out.printf(" - Estado de Crecida   (200 m³/s): %.4f m\n", floodStats.getAverage());
+        DoubleSummaryStatistics steadyStats = Arrays.stream(steadyState.waterDepth()).summaryStatistics();
+        DoubleSummaryStatistics floodStats = Arrays.stream(floodState.waterDepth()).summaryStatistics();
+
+        log.info("Comparación de Profundidad Media:");
+        log.info(" - Estado Estacionario ({} m³/s): {} m", steadyDischarge, String.format("%.4f", steadyStats.getAverage()));
+        log.info(" - Estado de Crecida   ({} m³/s): {} m", floodDischarge, String.format("%.4f", floodStats.getAverage()));
 
         assertTrue(floodStats.getAverage() > steadyStats.getAverage(), "La profundidad media durante la crecida debe ser mayor.");
     }
 
     private void describeArray(String name, double[] data) {
         if (data == null || data.length == 0) {
-            System.out.printf("\n--- %s ---\nDatos no disponibles o array vacío.\n", name);
+            log.warn("--- {} ---: Datos no disponibles o array vacío.", name);
             return;
         }
-        System.out.printf("\n--- %s ---\n", name);
+        log.info("--- {} ---", name);
         DoubleSummaryStatistics stats = Arrays.stream(data).summaryStatistics();
         double mean = stats.getAverage();
         double variance = Arrays.stream(data).map(x -> (x - mean) * (x - mean)).average().orElse(0.0);
         double stdDev = Math.sqrt(variance);
 
-        System.out.printf("Count:    %,d\n", stats.getCount());
-        System.out.printf("Mean:     %.4f\n", mean);
-        System.out.printf("Std Dev:  %.4f\n", stdDev);
-        System.out.printf("Min:      %.4f\n", stats.getMin());
-        System.out.printf("Max:      %.4f\n", stats.getMax());
+        log.info("  Count:    {}", stats.getCount());
+        log.info("  Mean:     {}", String.format("%.4f", mean));
+        log.info("  Std Dev:  {}", String.format("%.4f", stdDev));
+        log.info("  Min:      {}", String.format("%.4f", stats.getMin()));
+        log.info("  Max:      {}", String.format("%.4f", stats.getMax()));
         int headCount = Math.min(5, data.length);
         double[] head = Arrays.copyOfRange(data, 0, headCount);
-        System.out.printf("Primeros %d valores: %s\n", headCount, Arrays.toString(head));
+        log.info("  Primeros {} valores: {}", headCount, Arrays.toString(head));
     }
 }
