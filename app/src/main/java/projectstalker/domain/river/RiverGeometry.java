@@ -1,5 +1,7 @@
 package projectstalker.domain.river;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Objects;
 import java.util.Arrays;
 
@@ -45,7 +47,17 @@ public final class RiverGeometry {
      * @param phProfile          Array con el perfil PH del río
      * @param sectionTypes       Tipos de eventos geológicos del río
      */
-    public RiverGeometry(int cellCount, double dx, double[] elevationProfile, double[] bottomWidth, double[] sideSlope, double[] manningCoefficient, double[] baseDecayCoefficientAt20C, double[] phProfile, RiverSectionType[] sectionTypes) {
+    @JsonCreator
+    public RiverGeometry(
+            @JsonProperty("cellCount") int cellCount, // <-- ANOTACIÓN 2: Mapea cada parámetro a un campo del JSON
+            @JsonProperty("dx") double dx,
+            @JsonProperty("elevationProfile") double[] elevationProfile,
+            @JsonProperty("bottomWidth") double[] bottomWidth,
+            @JsonProperty("sideSlope") double[] sideSlope,
+            @JsonProperty("manningCoefficient") double[] manningCoefficient,
+            @JsonProperty("baseDecayCoefficientAt20C") double[] baseDecayCoefficientAt20C,
+            @JsonProperty("phProfile") double[] phProfile,
+            @JsonProperty("sectionTypes") RiverSectionType[] sectionTypes) {
         // --- Validación de Parámetros ---
         if (cellCount <= 1) {
             throw new IllegalArgumentException("El número de celdas debe ser mayor que 1.");
