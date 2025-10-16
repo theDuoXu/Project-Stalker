@@ -19,7 +19,7 @@ java {
 
 javafx {
     version = "25"
-    modules = [ 'javafx.controls', 'javafx.fxml', 'javafx.graphics', 'javafx.swing' ]
+    modules = ['javafx.controls', 'javafx.fxml', 'javafx.graphics', 'javafx.swing']
 }
 
 configurations {
@@ -31,15 +31,13 @@ application {
 }
 
 dependencies {
-    // --- Framework de UI ---
-    // (Tu configuración del plugin de JavaFX ya gestiona esto)
 
     // --- Serialización (JSON) ---
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
 
     // --- Logging Profesional ---
     implementation 'org.slf4j:slf4j-api:2.0.13'
-    runtimeOnly 'ch.qos.logback:logback-classic:1.5.6'
+    runtimeOnly 'ch.qos.logback:logback-classic:1.5.13'
 
     // =======================================================
     // --- STACK DE BASE DE DATOS (POSTGRESQL) ---
