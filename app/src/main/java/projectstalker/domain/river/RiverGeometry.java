@@ -2,6 +2,8 @@ package projectstalker.domain.river;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Getter;
+
 import java.util.Objects;
 import java.util.Arrays;
 
@@ -21,7 +23,9 @@ import java.util.Arrays;
 
 public final class RiverGeometry {
 
+    @Getter
     private final int cellCount;
+    @Getter
     private final double dx;
     private final double[] elevationProfile;
     private final double[] bottomWidth;
@@ -112,14 +116,6 @@ public final class RiverGeometry {
     }
 
     // --- MÉTODOS DE CONSULTA ESTÁTICA ---
-
-    public int getCellCount() {
-        return cellCount;
-    }
-
-    public double getDx() {
-        return dx;
-    }
 
     /**
      * Calcula la pendiente del fondo del cauce en una celda específica.
@@ -304,7 +300,8 @@ public final class RiverGeometry {
     @Override
     /**
      * Implementación para evitar colisiones y respetar orden de los atributos
-     */ public int hashCode() {
+     */
+    public int hashCode() {
         int result = Objects.hash(cellCount, dx);
         result = 31 * result + Arrays.hashCode(elevationProfile);
         result = 31 * result + Arrays.hashCode(bottomWidth);
@@ -342,5 +339,12 @@ public final class RiverGeometry {
 
     public RiverSectionType[] cloneSectionTypes() {
         return sectionTypes.clone();
+    }
+
+    public static record ManningGpuRiverGeometryFP32(
+            float[] bottomWidthsFP32,
+            float[] sideSlopesFP32,
+            float[] manningCoefficientsFP32,
+            float[] bedSlopesFP32) {
     }
 }
