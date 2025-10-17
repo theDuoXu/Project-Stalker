@@ -74,6 +74,9 @@ dependencies {
     // --- Logging Profesional ---
     implementation 'org.slf4j:slf4j-api:2.0.13'
     runtimeOnly 'ch.qos.logback:logback-classic:1.5.13'
+
+    // --- Gráficas
+    implementation 'org.knowm.xchart:xchart:3.8.6'
 }
 
 tasks.named('run', JavaExec) {
