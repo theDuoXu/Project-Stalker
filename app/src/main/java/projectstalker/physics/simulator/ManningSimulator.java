@@ -1,22 +1,26 @@
 package projectstalker.physics.simulator;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import projectstalker.config.RiverConfig;
 import projectstalker.config.SimulationConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
+import projectstalker.domain.simulation.ManningSimulationResult;
 import projectstalker.factory.RiverGeometryFactory;
-import projectstalker.physics.impl.ManningHydrologySolver;
+import projectstalker.physics.impl.ManningProfileCalculatorTask;
+import projectstalker.physics.impl.SequentialManningHydrologySolver;
 import projectstalker.physics.model.FlowProfileModel;
 import projectstalker.physics.model.RiverTemperatureModel;
-import projectstalker.physics.solver.IHydrologySolver;
+import projectstalker.physics.i.IHydrologySolver;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.*;
 
 /**
- * Orquesta la simulación hidrológica del río, utilizando un modelo híbrido.
- * Comienza con un solver secuencial en Java (CPU) para la fase de llenado inicial
- * y transiciona a un solver masivamente paralelo en CUDA (GPU) una vez que el
- * río está completamente conectado hidrológicamente.
+ * Orquesta la simulación hidrológica del río
  */
 @Slf4j
 public class ManningSimulator {
@@ -39,16 +43,17 @@ public class ManningSimulator {
 
     // --- Miembros de la Simulación ---
     /**
-     * Configuración inmutable del río y la simulación.
+     * Configuración inmutable del río
      */
     private final RiverConfig config;
+
     /**
      * Geometría inmutable del cauce del río.
      */
     @Getter
     private final RiverGeometry geometry;
     /**
-     * Implementación del solver hidrológico que se ejecuta en la CPU para la fase de llenado.
+     * Implementación del solver hidrológico que se ejecuta en la CPU
      */
     private final IHydrologySolver cpuSolver;
     /**
@@ -59,33 +64,48 @@ public class ManningSimulator {
      * Modelo dedicado al cálculo del perfil de temperaturas del río.
      */
     private final RiverTemperatureModel temperatureModel;
+    private final ExecutorService threadPool;
+
+    @Getter
+    @Setter
+    private int processorCount;
 
     // --- Estado de la Simulación ---
     /**
      * El estado actual del río (profundidad, velocidad, etc.), que se actualiza en cada paso.
      */
     @Getter
+    @Setter
     private RiverState currentState;
     /**
      * El tiempo transcurrido en la simulación, en segundos.
      */
     @Getter
+    @Setter
     private double currentTimeInSeconds;
     /**
-     * Flag que indica si la simulación ha transicionado al modo acelerado por GPU.
+     * Flag que indica si la simulación es acelerado por GPU.
      */
     @Getter
-    private boolean isGpuAccelerated = false;
+    @Setter
+    private boolean isGpuAccelerated;
 
     // --- Métricas de Rendimiento ---
     /**
      * Tiempo total en nanosegundos consumido por la fase de llenado en CPU.
      */
+    @Getter
     private long cpuFillTimeNanos = 0;
     /**
      * Número total de iteraciones realizadas durante la fase de llenado en CPU.
      */
+    @Getter
     private int cpuFillIterations = 0;
+
+    /**
+     * La geometría utilizada en la GPU debe estar presentada en FP32
+     */
+    private RiverGeometry.ManningGpuRiverGeometryFP32 manningGpuRiverGeometryFP32;
 
     /**
      * Constructor del simulador.
@@ -95,7 +115,7 @@ public class ManningSimulator {
     public ManningSimulator(RiverConfig config, SimulationConfig simulationConfig) {
         this.config = config;
         this.geometry = new RiverGeometryFactory().createRealisticRiver(config);
-        this.cpuSolver = new ManningHydrologySolver();
+        this.cpuSolver = new SequentialManningHydrologySolver();
         this.flowGenerator = new FlowProfileModel((int) config.seed(), simulationConfig.getFlowConfig());
 
         this.temperatureModel = new RiverTemperatureModel(config, this.geometry);
@@ -104,7 +124,18 @@ public class ManningSimulator {
         // El río comienza completamente seco.
         this.currentState = new RiverState(new double[cellCount], new double[cellCount], new double[cellCount], new double[cellCount]);
         this.currentTimeInSeconds = 0.0;
-        log.info("ManningSimulator inicializado. Esperando en modo CPU.");
+        this.isGpuAccelerated = simulationConfig.isUseGpuAccelerationOnManning();
+
+        if (this.isGpuAccelerated) {
+            sanitizeGeometryForGpu();
+        }
+        this.processorCount = simulationConfig.getCpuProcessorCount();
+        this.threadPool = Executors.newFixedThreadPool(Math.max(processorCount, 1));
+        log.info("ManningSimulator inicializado. Esperando");
+    }
+
+    private void sanitizeGeometryForGpu() {
+        this.manningGpuRiverGeometryFP32 = new RiverGeometry.ManningGpuRiverGeometryFP32(toFloatArray(geometry.cloneBottomWidth()), toFloatArray(geometry.cloneSideSlope()), toFloatArray(geometry.cloneManningCoefficient()), calculateAndSanitizeBedSlopes());
     }
 
     /**
@@ -115,19 +146,134 @@ public class ManningSimulator {
      */
     public void advanceTimeStep(double deltaTimeInSeconds) {
         if (!isGpuAccelerated) {
-            runCpuStep(deltaTimeInSeconds);
+            runCpuStep();
         } else {
-            runGpuStep(deltaTimeInSeconds);
+            runGpuStep();
         }
         this.currentTimeInSeconds += deltaTimeInSeconds;
     }
 
+    public ManningSimulationResult advanceBatchTimeStep(double deltaTimeInSeconds, int batchSize) {
+        if (batchSize <= 0) {
+            throw new IllegalArgumentException("El tamaño del batch debe ser mayor que 0.");
+        }
+        int cellCount = geometry.getCellCount();
+
+        // 1. Calcular los 'batchSize' nuevos caudales de entrada y otros datos.
+        double[] newDischarges = new double[batchSize];
+        double[][][] phTmp = new double[batchSize][cellCount][cellCount];
+        for (int i = 0; i < batchSize; i++) {
+            newDischarges[i] = flowGenerator.getDischargeAt(currentTimeInSeconds);
+            phTmp[i] = calculateTemperatureAndPh();
+            currentTimeInSeconds += deltaTimeInSeconds;
+        }
+
+        // 2. Calcular el estado inicial de los caudales a lo largo del río.
+        double[] initialDischarges = new double[cellCount];
+        for (int j = 0; j < cellCount - 1; j++) {
+            double area = geometry.getCrossSectionalArea(j, currentState.getWaterDepthAt(j));
+            double velocity = currentState.getVelocityAt(j);
+            initialDischarges[j + 1] = area * velocity;
+        }
+
+        // 3. Construir la matriz de perfiles de caudal
+        double[][] allDischargeProfiles = createDischargeProfiles(batchSize, cellCount, newDischarges, initialDischarges);
+
+        // 4. Orquestar la ejecución concurrente
+        List<ManningProfileCalculatorTask> tasks = new ArrayList<>(batchSize);
+        List<Future<?>> futures = new ArrayList<>(batchSize); // Lista para guardar los Futures
+
+        // Crear y enviar todas las tareas al pool de hilos
+        for (int i = 0; i < batchSize; i++) {
+            double[] singleProfileDischarges = allDischargeProfiles[i];
+
+            ManningProfileCalculatorTask task = new ManningProfileCalculatorTask(
+                    singleProfileDischarges,
+                    currentState.waterDepth(),
+                    geometry
+            );
+            tasks.add(task);
+            // Enviamos la tarea y guardamos el Future devuelto
+            futures.add(threadPool.submit(task));
+        }
+
+        // 5. Esperar a que todas las tareas de ESTE BATCH terminen (sin apagar el pool)
+        try {
+            for (Future<?> future : futures) {
+                future.get(); // .get() es una operación bloqueante. Esperará hasta que la tarea termine.
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("El hilo de simulación fue interrumpido.", e);
+        } catch (ExecutionException e) {
+            // Una de las tareas lanzó una excepción.
+            // Propagar la causa real del error.
+            throw new RuntimeException("Una de las tareas de cálculo falló.", e.getCause());
+        }
+
+        // 6. Recoger los resultados de todas las tareas completadas
+        double[][] resultingDepths = new double[batchSize][cellCount];
+        double[][] resultingVelocities = new double[batchSize][cellCount];
+        for (int i = 0; i < batchSize; i++) {
+            ManningProfileCalculatorTask completedTask = tasks.get(i);
+            System.arraycopy(completedTask.getCalculatedWaterDepth(), 0, resultingDepths[i], 0, cellCount);
+            System.arraycopy(completedTask.getCalculatedVelocity(), 0, resultingVelocities[i], 0, cellCount);
+        }
+
+        // 7. Devolver los resultados agregados
+        List<RiverState> states = new ArrayList<>(batchSize);
+        for (int i = 0; i < batchSize; i++) {
+            states.add(new RiverState(resultingDepths[i], resultingVelocities[i], phTmp[i][0], phTmp[i][1]));
+        }
+
+        return ManningSimulationResult.builder().geometry(this.geometry).states(states).build();
+    }
+
+    /**
+     * Construye la matriz de perfiles de caudal a lo largo del tiempo.
+     * Simula la propagación de una nueva onda de caudales que entra por el origen
+     * y el desplazamiento simultáneo de la onda de caudal que ya estaba en el río.
+     *
+     * @param batchSize         El número de pasos de tiempo (filas de la matriz).
+     * @param cellCount         El número de celdas del río (columnas de la matriz).
+     * @param newDischarges     Array con los nuevos caudales que entran en la celda 0 en cada paso de tiempo.
+     * @param initialDischarges Array con el estado de los caudales en el río en el tiempo t=0.
+     * @return Una matriz de [batchSize][cellCount] que representa el estado del río en cada paso de tiempo.
+     */
+    private double[][] createDischargeProfiles(int batchSize, int cellCount, double[] newDischarges, double[] initialDischarges) {
+        double[][] dischargeProfiles = new double[batchSize][cellCount];
+
+        for (int j = 0; j < batchSize; j++) { // 'j' es el paso de tiempo actual
+            for (int k = 0; k < cellCount; k++) { // 'k' es la celda del río
+
+                // Si la celda 'k' ya fue alcanzada por la ONDA NUEVA
+                if (k <= j) {
+                    // La celda 'k' toma el valor del nuevo caudal que entró al sistema hace 'k' pasos.
+                    dischargeProfiles[j][k] = newDischarges[j - k];
+                }
+                // Si la celda 'k' todavía está viendo la ONDA VIEJA
+                else {
+                    // Calculamos de qué celda original proviene el caudal que ahora está en 'k'.
+                    // La onda vieja se ha desplazado 'j+1' posiciones.
+                    int sourceIndex = k - (j + 1);
+
+                    if (sourceIndex >= 0) {
+                        dischargeProfiles[j][k] = initialDischarges[sourceIndex];
+                    } else {
+                        // Este caso no debería ocurrir si la lógica es correcta.
+                        // Indica un error en el algoritmo.
+                        throw new IllegalStateException("Se calculó un índice de origen negativo (" + sourceIndex + ") para j=" + j + " y k=" + k + ". " + "Esto indica un error lógico en el algoritmo de propagación.");
+                    }
+                }
+            }
+        }
+        return dischargeProfiles;
+    }
+
     /**
      * Ejecuta un paso de simulación usando el solver secuencial de Java (CPU).
-     * Este modo se utiliza para llenar el río hasta que el agua llega al final,
-     * momento en el que se transiciona al modo GPU.
      */
-    private void runCpuStep(double deltaTimeInSeconds) {
+    private void runCpuStep() {
         long startTime = System.nanoTime();
         double inputDischarge = flowGenerator.getDischargeAt(currentTimeInSeconds);
 
@@ -135,22 +281,13 @@ public class ManningSimulator {
         this.cpuFillIterations++;
         this.cpuFillTimeNanos += (System.nanoTime() - startTime);
 
-        // --- Comprobación de Transición a GPU ---
-        int lastCellIndex = geometry.getCellCount() - 1;
-        if (currentState.getWaterDepthAt(lastCellIndex) > 1e-6) {
-            this.isGpuAccelerated = true;
-            log.info("--- Transición a MODO GPU ---");
-            log.info("El frente de agua ha alcanzado el final del río.");
-            log.info("Tiempo de llenado en CPU: {} ms", cpuFillTimeNanos / 1_000_000);
-            log.info("Iteraciones en CPU: {}", cpuFillIterations);
-        }
     }
 
     /**
      * Orquesta un paso de simulación usando el solver paralelo de CUDA (GPU).
      * Prepara y sanitiza todos los datos antes de enviarlos a la GPU a través de JNI.
      */
-    private void runGpuStep(double deltaTimeInSeconds) {
+    private void runGpuStep() {
         final int cellCount = geometry.getCellCount();
 
         // --- 1. Pre-cómputo de Caudales ---
@@ -158,16 +295,14 @@ public class ManningSimulator {
 
         // --- 2. Sanitización de Datos para la GPU ---
         float[] initialDepthGuesses = sanitizeInitialDepths(cellCount);
-        float[] bottomWidths = toFloatArray(geometry.cloneBottomWidth());
-        float[] sideSlopes = toFloatArray(geometry.cloneSideSlope());
-        float[] manningCoefficients = toFloatArray(geometry.cloneManningCoefficient());
-        float[] bedSlopes = calculateAndSanitizeBedSlopes();
+
 
         // --- 3. Llamada al JNI ---
-        float[] gpuResults = solveManningGpu(targetDischarges, initialDepthGuesses, bottomWidths, sideSlopes, manningCoefficients, bedSlopes);
+        float[] gpuResults = solveManningGpu(targetDischarges, initialDepthGuesses, this.manningGpuRiverGeometryFP32.bottomWidthsFP32(), this.manningGpuRiverGeometryFP32.sideSlopesFP32(), this.manningGpuRiverGeometryFP32.manningCoefficientsFP32(), this.manningGpuRiverGeometryFP32.bedSlopesFP32());
 
         // --- 4. Reconstrucción del Estado ---
         reconstructStateFromGpuResults(gpuResults);
+
     }
 
     /**
