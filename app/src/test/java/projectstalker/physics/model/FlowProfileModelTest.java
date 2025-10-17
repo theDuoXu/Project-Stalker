@@ -4,17 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.knowm.xchart.SwingWrapper;
-import org.knowm.xchart.XYChart;
-import org.knowm.xchart.XYChartBuilder;
-import org.knowm.xchart.style.Styler;
-
-import javax.swing.*;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
-import java.util.Arrays;
-import java.util.concurrent.CountDownLatch;
-import java.util.stream.DoubleStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -22,13 +11,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * Pruebas unitarias y visuales para la clase FlowProfileGenerator.
  */
 @Slf4j
-class FlowProfileGeneratorTest {
+class FlowProfileModelTest {
     @Disabled("Desactivado para permitir tests sin intervención humana, ya que la ventana bloquea hasta que se cierre")
     @Test
     @DisplayName("Visual Test: Debería mostrar una gráfica del perfil de caudales")
     void visualizeProfile() throws InterruptedException {
         // --- 1. Configuración ---
-        final FlowProfileGenerator generator = new FlowProfileGenerator(
+        final FlowProfileModel generator = new FlowProfileModel(
                 12345,      // seed
                 150.0,      // baseDischarge
                 75.0,       // noiseAmplitude
@@ -46,7 +35,7 @@ class FlowProfileGeneratorTest {
     @Test
     @DisplayName("Logic Test: Should generate a profile with the correct number of steps")
     void generatesCorrectNumberOfSteps() {
-        FlowProfileGenerator generator = new FlowProfileGenerator(1, 100, 50, 0.1f);
+        FlowProfileModel generator = new FlowProfileModel(1, 100, 50, 0.1f);
 
         double startTime = 0;
         double endTime = 100;
@@ -66,7 +55,7 @@ class FlowProfileGeneratorTest {
         // lleve el resultado a un valor negativo si no estuviera corregido.
         double baseDischarge = 50.0;
         double largeAmplitude = 100.0;
-        FlowProfileGenerator generator = new FlowProfileGenerator(1, baseDischarge, largeAmplitude, 0.1f);
+        FlowProfileModel generator = new FlowProfileModel(1, baseDischarge, largeAmplitude, 0.1f);
 
         // Comprobamos en muchos puntos de tiempo
         for (double t = 0; t < 1000; t += 10) {
@@ -79,7 +68,7 @@ class FlowProfileGeneratorTest {
     @DisplayName("Logic Test: getTotalVolume should calculate the correct volume for a constant flow")
     void getTotalVolume_shouldCalculateCorrectVolume() {
         // 1. Arrange: Un generador con caudal constante de 10 m³/s
-        FlowProfileGenerator generator = new FlowProfileGenerator(1, 10.0, 0.0, 0.1f);
+        FlowProfileModel generator = new FlowProfileModel(1, 10.0, 0.0, 0.1f);
 
         double startTime = 0;
         double endTime = 100; // 100 segundos
@@ -103,7 +92,7 @@ class FlowProfileGeneratorTest {
     @DisplayName("Logic Test: getPeakDischarge should find the maximum value in the generated profile")
     void getPeakDischarge_shouldFindMaximumValue() {
         // 1. Arrange
-        FlowProfileGenerator generator = new FlowProfileGenerator(42, 200, 50, 0.01f);
+        FlowProfileModel generator = new FlowProfileModel(42, 200, 50, 0.01f);
         double startTime = 0;
         double endTime = 1000;
         double timeStep = 5;

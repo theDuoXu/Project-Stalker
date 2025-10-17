@@ -7,6 +7,7 @@ import org.knowm.xchart.SwingWrapper;
 import org.knowm.xchart.XYChart;
 import org.knowm.xchart.XYChartBuilder;
 import org.knowm.xchart.style.Styler;
+import projectstalker.config.SimulationConfig;
 import projectstalker.utils.FastNoiseLite;
 
 import javax.swing.*;
@@ -23,7 +24,7 @@ import java.util.stream.DoubleStream;
 @Slf4j
 @With
 @RequiredArgsConstructor
-public class FlowProfileGenerator {
+public class FlowProfileModel {
 
     /**
      * El caudal promedio (en m³/s) sobre el cual se aplican las variaciones.
@@ -48,13 +49,29 @@ public class FlowProfileGenerator {
      * @param noiseAmplitude Magnitud de la variación en m³/s.
      * @param noiseFrequency Frecuencia de la variación (valores bajos para cambios lentos).
      */
-    public FlowProfileGenerator(int seed, double baseDischarge, double noiseAmplitude, float noiseFrequency) {
+    public FlowProfileModel(int seed, double baseDischarge, double noiseAmplitude, float noiseFrequency) {
         this.baseDischarge = baseDischarge;
         this.noiseAmplitude = noiseAmplitude;
         this.noise = new FastNoiseLite(seed);
         this.noise.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
         this.noise.SetFrequency(noiseFrequency);
     }
+
+    /**
+     * Constructor para el generador de caudal.
+     *
+     * @param seed       Semilla para la generación de ruido. Determina la secuencia de valores.
+     * @param flowConfig Contenedor de configuraciones
+     */
+    public FlowProfileModel(int seed, SimulationConfig.FlowConfig flowConfig) {
+        this.noise = new FastNoiseLite(seed);
+        this.noise.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
+        this.noise.SetFrequency(flowConfig.getNoiseFrequency());
+
+        this.baseDischarge = flowConfig.getBaseDischarge();
+        this.noiseAmplitude = flowConfig.getNoiseAmplitude();
+    }
+
 
     /**
      * Calcula el valor del caudal en un instante de tiempo específico.

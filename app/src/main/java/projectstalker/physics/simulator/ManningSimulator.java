@@ -1,17 +1,16 @@
 package projectstalker.physics.simulator;
 
-import lombok.Builder;
 import lombok.Getter;
-import lombok.With;
 import lombok.extern.slf4j.Slf4j;
 import projectstalker.config.RiverConfig;
+import projectstalker.config.SimulationConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.impl.ManningHydrologySolver;
+import projectstalker.physics.model.FlowProfileModel;
 import projectstalker.physics.model.RiverTemperatureModel;
 import projectstalker.physics.solver.IHydrologySolver;
-import projectstalker.utils.FastNoiseLite;
 
 /**
  * Orquesta la simulación hidrológica del río, utilizando un modelo híbrido.
@@ -30,8 +29,7 @@ public class ManningSimulator {
                 System.loadLibrary("manning_solver");
                 log.info("Native library 'manning_solver' loaded successfully.");
             } catch (UnsatisfiedLinkError e) {
-                log.error("FATAL: Native library 'manning_solver' failed to load. " +
-                        "Ensure the library is in the java.library.path.", e);
+                log.error("FATAL: Native library 'manning_solver' failed to load. " + "Ensure the library is in the java.library.path.", e);
                 System.exit(1);
             }
         } else {
@@ -56,7 +54,7 @@ public class ManningSimulator {
     /**
      * Generador de caudal de entrada variable para la simulación.
      */
-    private final FlowProfileGenerator flowGenerator;
+    private final FlowProfileModel flowGenerator;
     /**
      * Modelo dedicado al cálculo del perfil de temperaturas del río.
      */
@@ -94,11 +92,11 @@ public class ManningSimulator {
      *
      * @param config La configuración global para el río y la simulación.
      */
-    public ManningSimulator(RiverConfig config) {
+    public ManningSimulator(RiverConfig config, SimulationConfig simulationConfig) {
         this.config = config;
         this.geometry = new RiverGeometryFactory().createRealisticRiver(config);
         this.cpuSolver = new ManningHydrologySolver();
-        this.flowGenerator = new FlowProfileGenerator((int) config.seed(), 150.0, 50.0, 0.0001f);
+        this.flowGenerator = new FlowProfileModel((int) config.seed(), simulationConfig.getFlowConfig());
 
         this.temperatureModel = new RiverTemperatureModel(config, this.geometry);
 
@@ -166,14 +164,7 @@ public class ManningSimulator {
         float[] bedSlopes = calculateAndSanitizeBedSlopes();
 
         // --- 3. Llamada al JNI ---
-        float[] gpuResults = solveManningGpu(
-                targetDischarges,
-                initialDepthGuesses,
-                bottomWidths,
-                sideSlopes,
-                manningCoefficients,
-                bedSlopes
-        );
+        float[] gpuResults = solveManningGpu(targetDischarges, initialDepthGuesses, bottomWidths, sideSlopes, manningCoefficients, bedSlopes);
 
         // --- 4. Reconstrucción del Estado ---
         reconstructStateFromGpuResults(gpuResults);
@@ -310,14 +301,7 @@ public class ManningSimulator {
      * @param bedSlopes           Pendientes del lecho del río.
      * @return Array de floats intercalado con los resultados [profundidad0, velocidad0, ...].
      */
-    protected native float[] solveManningGpu(
-            float[] targetDischarges,
-            float[] initialDepthGuesses,
-            float[] bottomWidths,
-            float[] sideSlopes,
-            float[] manningCoefficients,
-            float[] bedSlopes
-    );
+    protected native float[] solveManningGpu(float[] targetDischarges, float[] initialDepthGuesses, float[] bottomWidths, float[] sideSlopes, float[] manningCoefficients, float[] bedSlopes);
 
     /**
      * Devuelve el caudal de entrada generado para el tiempo actual de la simulación.
@@ -328,57 +312,4 @@ public class ManningSimulator {
         return flowGenerator.getDischargeAt(currentTimeInSeconds);
     }
 
-    /**
-     * Generador de perfil de caudal variable a lo largo del tiempo usando ruido Perlin.
-     * Permite simular hidrogramas realistas con variaciones suaves.
-     */
-    private static class FlowProfileGenerator {
-
-        /**
-         * Instancia del generador de ruido.
-         */
-        private final FastNoiseLite noise;
-        /**
-         * El caudal promedio sobre el cual se aplican las variaciones.
-         */
-        private final double baseDischarge;
-        /**
-         * La magnitud máxima de la variación sobre el caudal base.
-         */
-        private final double noiseAmplitude;
-
-        /**
-         * Constructor para el generador de caudal.
-         *
-         * @param seed           Semilla para la generación de ruido. Determina la secuencia de valores.
-         * @param baseDischarge  El caudal promedio o base.
-         * @param noiseAmplitude Magnitud de la variación.
-         * @param noiseFrequency Frecuencia de la variación (valores bajos para cambios lentos).
-         */
-        public FlowProfileGenerator(int seed, double baseDischarge, double noiseAmplitude, float noiseFrequency) {
-            this.noise = new FastNoiseLite(seed);
-            this.noise.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
-            this.noise.SetFrequency(noiseFrequency);
-
-            this.baseDischarge = baseDischarge;
-            this.noiseAmplitude = noiseAmplitude;
-        }
-
-        /**
-         * Calcula el valor del caudal en un instante de tiempo específico.
-         *
-         * @param timeInSeconds El punto en el tiempo (en segundos) para el cual se calcula el caudal.
-         * @return El valor del caudal, garantizado como no negativo.
-         */
-        public double getDischargeAt(double timeInSeconds) {
-            // Obtenemos un valor de ruido Perlin 1D en el rango [-1, 1].
-            float noiseValue = noise.GetNoise((float) timeInSeconds, 0.0f);
-
-            // Calculamos la variación y la sumamos al caudal base.
-            double discharge = baseDischarge + noiseValue * noiseAmplitude;
-
-            // Nos aseguramos de que el caudal nunca sea negativo.
-            return Math.abs(discharge);
-        }
-    }
 }
