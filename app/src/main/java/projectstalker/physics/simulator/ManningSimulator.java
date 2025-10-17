@@ -17,6 +17,7 @@ import projectstalker.physics.model.RiverTemperatureModel;
 import projectstalker.physics.i.IHydrologySolver;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.*;
 
@@ -172,17 +173,63 @@ public class ManningSimulator {
             }
         }
 
-        // 7. Construir y devolver el objeto de resultado final.
-        List<RiverState> states = new ArrayList<>(batchSize);
-        for (int i = 0; i < batchSize; i++) {
-            states.add(new RiverState(resultingDepths[i], resultingVelocities[i], phTmp[i][0], phTmp[i][1]));
-        }
+        // Construir y devolver el objeto de resultado final.
+        List<RiverState> states = assembleRiverStateResults(batchSize, phTmp, resultingDepths, resultingVelocities);
 
         return ManningSimulationResult.builder().geometry(this.geometry).states(states).build();
     }
 
+    private static List<RiverState> assembleRiverStateResults(int batchSize, double[][][] phTmp, double[][] resultingDepths, double[][] resultingVelocities) {
+        List<RiverState> states = new ArrayList<>(batchSize);
+        for (int i = 0; i < batchSize; i++) {
+            states.add(new RiverState(resultingDepths[i], resultingVelocities[i], phTmp[i][0], phTmp[i][1]));
+        }
+        return states;
+    }
+
     private ManningSimulationResult gpuComputeBatch(int batchSize, int cellCount, double[][] allDischargeProfiles, double[][][] phTmp) {
-        return null;
+
+        // 1. Llamada al solver que devuelve todos los resultados en un solo batch.
+        double[][][] results = ManningGpuSolver.solveBatch(this.currentState.waterDepth(), allDischargeProfiles, this.geometry);
+
+        // 2. Validación CRÍTICA: Asegurarse de que el resultado del batch no es nulo y tiene el tamaño esperado.
+        if (results == null || results.length != batchSize) {
+            log.error("Error crítico en gpuComputeBatch: El resultado del solver es nulo o no coincide con el tamaño del batch esperado. Esperado: {}, Obtenido: {}",
+                    batchSize, results != null ? results.length : "null");
+            // Devolver un resultado vacío o lanzar una excepción es lo apropiado aquí.
+            return ManningSimulationResult.builder().geometry(this.geometry).states(Collections.emptyList()).build();
+        }
+
+        // 3. Preparar los arrays de destino para las profundidades y velocidades.
+        // La primera dimensión [batchSize] corresponde al paso de simulación (tiempo).
+        // La segunda dimensión [cellCount] corresponde a la celda del río.
+        double[][] resultingDepths = new double[batchSize][cellCount];
+        double[][] resultingVelocities = new double[batchSize][cellCount];
+
+        // 4. Bucle para desempaquetar los resultados.
+        // Iteramos sobre cada paso de simulación devuelto en el batch.
+        for (int i = 0; i < batchSize; i++) {
+            // results[i] contiene los datos para el paso de simulación 'i'.
+            // Según la especificación:
+            // - results[i][0] es el array de profundidades para ese tiempo
+            // - results[i][1] es el array de velocidades para ese tiempo
+
+            double[] depthsForStep = results[i][0];
+            double[] velocitiesForStep = results[i][1];
+
+            // Validación tamaño array
+            if (depthsForStep == null || depthsForStep.length != cellCount || velocitiesForStep == null || velocitiesForStep.length != cellCount) {
+                log.error("Error crítico en gpuComputeBatch: Datos corruptos en el paso de simulación {}. El tamaño de profundidades/velocidades no coincide con cellCount.", i);
+                throw new RuntimeException("Error crítico en gpuComputeBatch: Datos corruptos en el paso de simulación {}. El tamaño de profundidades/velocidades no coincide con cellCount.");
+            }
+
+            resultingDepths[i] = depthsForStep;
+            resultingVelocities[i] = velocitiesForStep;
+        }
+
+        // 5. Construir y devolver el objeto de resultado final con los datos ya separados.
+        List<RiverState> states = assembleRiverStateResults(batchSize, phTmp, resultingDepths, resultingVelocities);
+        return ManningSimulationResult.builder().geometry(this.geometry).states(states).build();
     }
 
 
