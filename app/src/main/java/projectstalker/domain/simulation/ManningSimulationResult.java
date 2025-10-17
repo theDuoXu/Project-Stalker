@@ -2,6 +2,7 @@ package projectstalker.domain.simulation; // Un buen paquete para los resultados
 
 import lombok.Builder;
 import lombok.Value;
+import lombok.With;
 import projectstalker.config.SimulationConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
@@ -17,6 +18,7 @@ import java.util.Optional;
  * utilizada en la simulación como la secuencia de estados del río a lo largo del tiempo.
  */
 @Value
+@With
 @Builder
 public class ManningSimulationResult {
 
@@ -68,5 +70,13 @@ public class ManningSimulationResult {
             throw new IllegalArgumentException("Es posible que el nuevo estado no se haya generado con la misma geometría del río");
         }
         states.addAll(newStates);
+    }
+
+    public ManningSimulationResult appendNewManningSimulationResult(ManningSimulationResult newManningSimulationResult) {
+        if (!newManningSimulationResult.getGeometry().equals(geometry)) {
+            throw new IllegalArgumentException("El nuevo estado se ha generado con DIFERENTE geometría del río");
+        }
+        this.appendNewStates(newManningSimulationResult.getStates());
+        return this;
     }
 }
