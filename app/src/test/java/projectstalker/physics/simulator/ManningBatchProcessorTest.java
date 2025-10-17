@@ -86,6 +86,7 @@ class ManningBatchProcessorTest {
         double initialAvgVelocity = calculateAverageVelocity(initialRiverState);
         log.info("======================== ESTADO INICIAL ========================");
         log.info("Caudal de Entrada al Batch (Q_in): {} m³/s", 200.0);
+        log.info("Tamaño de batch: {} m³/s", BATCH_SIZE);
         log.info("Profundidad Media Inicial (H_avg): {} m", initialAvgDepth);
         log.info("Velocidad Media Inicial (V_avg): {} m/s", initialAvgVelocity);
         log.info("==============================================================");
@@ -94,7 +95,8 @@ class ManningBatchProcessorTest {
         double[] newDischarges = new double[BATCH_SIZE];
         Arrays.fill(newDischarges, 200.0);
         double[] initialDischarges = new double[CELL_COUNT];
-        Arrays.fill(initialDischarges, 0.5*0.5); // initialUniformDepth = 0.5; y lo hemos metido en todo, por lo que v=0.5 y profundidad = 0.5
+
+        Arrays.fill(initialDischarges, this.realGeometry.getCrossSectionalArea(0, 0.5) * 0.5); // initialUniformDepth = 0.5; y lo hemos metido en todo, por lo que v=0.5 y profundidad = 0.5
         double[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(BATCH_SIZE, newDischarges, initialDischarges);
 
         // 3. Resultados Fisicoquímicos (Pre-cálculo)
