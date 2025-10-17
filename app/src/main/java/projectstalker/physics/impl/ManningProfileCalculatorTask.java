@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.physics.solver.ManningEquationSolver;
 
+import java.util.concurrent.Callable;
+
 /**
  * Tarea ejecutable (Runnable) que calcula un perfil hidrológico completo
  * (profundidades y velocidades) para un único conjunto de caudales de entrada.
@@ -15,9 +17,8 @@ import projectstalker.physics.solver.ManningEquationSolver;
  */
 @Slf4j
 @Getter
-@With
 @RequiredArgsConstructor
-public class ManningProfileCalculatorTask implements Runnable {
+public class ManningProfileCalculatorTask implements Callable<ManningProfileCalculatorTask> {
 
     // --- Entradas para la tarea ---
     private final double[] targetDischarges; // Caudales para cada celda de ESTA simulación
@@ -25,22 +26,14 @@ public class ManningProfileCalculatorTask implements Runnable {
     private final RiverGeometry geometry; // Geometría del río (compartida)
 
     // --- Resultados de la tarea ---
-    private final double[] calculatedWaterDepth;
-    private final double[] calculatedVelocity;
+    private double[] calculatedWaterDepth;
+    private double[] calculatedVelocity;
 
-    public ManningProfileCalculatorTask(double[] targetDischarges, double[] initialDepthGuess, RiverGeometry geometry) {
-        this.targetDischarges = targetDischarges;
-        this.initialDepthGuess = initialDepthGuess;
-        this.geometry = geometry;
-
+    @Override
+    public ManningProfileCalculatorTask call() throws Exception {
         int cellCount = geometry.getCellCount();
         this.calculatedWaterDepth = new double[cellCount];
         this.calculatedVelocity = new double[cellCount];
-    }
-
-    @Override
-    public void run() {
-        int cellCount = geometry.getCellCount();
 
         for (int i = 0; i < cellCount; i++) {
             final double currentDischarge = targetDischarges[i];
@@ -68,5 +61,6 @@ public class ManningProfileCalculatorTask implements Runnable {
                 calculatedVelocity[i] = 0.0;
             }
         }
+        return this;
     }
 }

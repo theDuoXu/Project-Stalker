@@ -161,7 +161,7 @@ public class ManningSimulator {
 
         // 1. Calcular los 'batchSize' nuevos caudales de entrada y otros datos.
         double[] newDischarges = new double[batchSize];
-        double[][][] phTmp = new double[batchSize][cellCount][cellCount];
+        double[][][] phTmp = new double[batchSize][2][cellCount];
         for (int i = 0; i < batchSize; i++) {
             newDischarges[i] = flowGenerator.getDischargeAt(currentTimeInSeconds);
             phTmp[i] = calculateTemperatureAndPh();
@@ -181,43 +181,43 @@ public class ManningSimulator {
 
         // 4. Orquestar la ejecución concurrente
         List<ManningProfileCalculatorTask> tasks = new ArrayList<>(batchSize);
-        List<Future<?>> futures = new ArrayList<>(batchSize); // Lista para guardar los Futures
-
-        // Crear y enviar todas las tareas al pool de hilos
         for (int i = 0; i < batchSize; i++) {
-            double[] singleProfileDischarges = allDischargeProfiles[i];
-
-            ManningProfileCalculatorTask task = new ManningProfileCalculatorTask(
-                    singleProfileDischarges,
+            tasks.add(new ManningProfileCalculatorTask(
+                    allDischargeProfiles[i],
                     currentState.waterDepth(),
                     geometry
-            );
-            tasks.add(task);
-            // Enviamos la tarea y guardamos el Future devuelto
-            futures.add(threadPool.submit(task));
+            ));
         }
 
-        // 5. Esperar a que todas las tareas de ESTE BATCH terminen (sin apagar el pool)
+        // 5. Enviar todas las tareas y esperar a que terminen (¡en una sola línea!)
+        List<Future<ManningProfileCalculatorTask>> futures;
         try {
-            for (Future<?> future : futures) {
-                future.get(); // .get() es una operación bloqueante. Esperará hasta que la tarea termine.
-            }
+            // invokeAll bloquea aquí hasta que TODAS las tareas de la lista 'tasks' han finalizado.
+            futures = threadPool.invokeAll(tasks);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("El hilo de simulación fue interrumpido.", e);
-        } catch (ExecutionException e) {
-            // Una de las tareas lanzó una excepción.
-            // Propagar la causa real del error.
-            throw new RuntimeException("Una de las tareas de cálculo falló.", e.getCause());
+            throw new RuntimeException("El hilo de simulación fue interrumpido mientras esperaba las tareas.", e);
         }
 
-        // 6. Recoger los resultados de todas las tareas completadas
+        // 6. Recoger los resultados
+        // En este punto, estamos 100% seguros de que todas las tareas han terminado.
         double[][] resultingDepths = new double[batchSize][cellCount];
         double[][] resultingVelocities = new double[batchSize][cellCount];
         for (int i = 0; i < batchSize; i++) {
-            ManningProfileCalculatorTask completedTask = tasks.get(i);
-            System.arraycopy(completedTask.getCalculatedWaterDepth(), 0, resultingDepths[i], 0, cellCount);
-            System.arraycopy(completedTask.getCalculatedVelocity(), 0, resultingVelocities[i], 0, cellCount);
+            try {
+                // .get() aquí no bloqueará, porque la tarea ya está completa.
+                // Simplemente recupera el resultado.
+                ManningProfileCalculatorTask completedTask = futures.get(i).get();
+                System.arraycopy(completedTask.getCalculatedWaterDepth(), 0, resultingDepths[i], 0, cellCount);
+                System.arraycopy(completedTask.getCalculatedVelocity(), 0, resultingVelocities[i], 0, cellCount);
+            } catch (InterruptedException e) {
+                // La espera fue interrumpida. Restablece el estado de interrupción y falla.
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("La recolección de resultados fue interrumpida.", e);
+            } catch (ExecutionException e) {
+                // La tarea en sí misma lanzó una excepción.
+                throw new RuntimeException("La tarea de cálculo #" + i + " falló.", e.getCause());
+            }
         }
 
         // 7. Devolver los resultados agregados
