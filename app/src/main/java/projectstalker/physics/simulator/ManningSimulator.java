@@ -32,7 +32,6 @@ public class ManningSimulator {
     @Getter
     private final RiverGeometry geometry;
     private final IHydrologySolver cpuSolver;
-    private final ManningGpuSolver gpuSolver; // Encapsula toda la lógica nativa
     private final FlowProfileModel flowGenerator;
     private final RiverTemperatureModel temperatureModel;
     private final ExecutorService threadPool;
@@ -75,10 +74,6 @@ public class ManningSimulator {
         this.currentState = new RiverState(new double[cellCount], new double[cellCount], new double[cellCount], new double[cellCount]);
         this.currentTimeInSeconds = 0.0;
         this.isGpuAccelerated = simulationConfig.isUseGpuAccelerationOnManning();
-
-        // Se crea una instancia del solver de GPU solo si la aceleración está activada.
-        // Esto es un ejemplo de inyección de dependencias controlada.
-        this.gpuSolver = this.isGpuAccelerated ? new ManningGpuSolver() : null;
 
         this.processorCount = simulationConfig.getCpuProcessorCount();
         this.threadPool = Executors.newFixedThreadPool(Math.max(processorCount, 1));
@@ -133,6 +128,16 @@ public class ManningSimulator {
         double[][] allDischargeProfiles = createDischargeProfiles(batchSize, cellCount, newDischarges, initialDischarges);
 
         // 4. Crear las tareas de cálculo para cada perfil de caudal.
+        if (isGpuAccelerated) {
+            return gpuComputeBatch(batchSize, cellCount, allDischargeProfiles, phTmp);
+        } else {
+            return cpuComputeBatch(batchSize, cellCount, allDischargeProfiles, phTmp);
+        }
+
+    }
+
+
+    private ManningSimulationResult cpuComputeBatch(int batchSize, int cellCount, double[][] allDischargeProfiles, double[][][] phTmp) {
         List<ManningProfileCalculatorTask> tasks = new ArrayList<>(batchSize);
         for (int i = 0; i < batchSize; i++) {
             tasks.add(new ManningProfileCalculatorTask(
@@ -142,7 +147,7 @@ public class ManningSimulator {
             ));
         }
 
-        // 5. Enviar todas las tareas y esperar de forma bloqueante a que terminen.
+        // Enviar todas las tareas y esperar de forma bloqueante a que terminen.
         List<Future<ManningProfileCalculatorTask>> futures;
         try {
             futures = threadPool.invokeAll(tasks);
@@ -151,7 +156,7 @@ public class ManningSimulator {
             throw new RuntimeException("El hilo de simulación fue interrumpido mientras esperaba las tareas.", e);
         }
 
-        // 6. Recoger y ensamblar los resultados de todas las tareas completadas.
+        // Recoger y ensamblar los resultados de todas las tareas completadas.
         double[][] resultingDepths = new double[batchSize][cellCount];
         double[][] resultingVelocities = new double[batchSize][cellCount];
         for (int i = 0; i < batchSize; i++) {
@@ -175,6 +180,11 @@ public class ManningSimulator {
 
         return ManningSimulationResult.builder().geometry(this.geometry).states(states).build();
     }
+
+    private ManningSimulationResult gpuComputeBatch(int batchSize, int cellCount, double[][] allDischargeProfiles, double[][][] phTmp) {
+        return null;
+    }
+
 
     /**
      * Construye la matriz de perfiles de caudal simulando la propagación de las ondas.
@@ -214,7 +224,7 @@ public class ManningSimulator {
      */
     private void runGpuStep() {
         // 1. Delegar el cálculo hidrológico completo al solver de GPU.
-        double[][] gpuResults = gpuSolver.solve(currentState, geometry, flowGenerator, currentTimeInSeconds);
+        double[][] gpuResults = ManningGpuSolver.solve(currentState, geometry, flowGenerator, currentTimeInSeconds);
         double[] newWaterDepth = gpuResults[0];
         double[] newVelocity = gpuResults[1];
 

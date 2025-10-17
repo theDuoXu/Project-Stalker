@@ -12,8 +12,10 @@ import projectstalker.physics.model.FlowProfileModel;
  * preparación de datos y llamada al código nativo.
  */
 @Slf4j
-public class ManningGpuSolver {
+public final class ManningGpuSolver {
 
+    private ManningGpuSolver() {
+    }
 
     /**
      * Resuelve un paso de tiempo completo en la GPU.
@@ -24,7 +26,7 @@ public class ManningGpuSolver {
      * @param currentTimeInSeconds El tiempo actual de la simulación.
      * @return Un array de arrays de doubles donde [0] son las nuevas profundidades y [1] son las nuevas velocidades.
      */
-    public double[][] solve(RiverState currentState, RiverGeometry geometry, FlowProfileModel flowGenerator, double currentTimeInSeconds) {
+    public static double[][] solve(RiverState currentState, RiverGeometry geometry, FlowProfileModel flowGenerator, double currentTimeInSeconds) {
         final int cellCount = geometry.getCellCount();
 
         // 1. Preparar y sanitizar todos los datos para la GPU.
@@ -49,7 +51,7 @@ public class ManningGpuSolver {
 
     // --- Métodos de Ayuda para la Preparación de Datos ---
 
-    private float[] precomputeTargetDischarges(int cellCount, RiverState currentState, RiverGeometry geometry, FlowProfileModel flowGenerator, double currentTime) {
+    private static float[] precomputeTargetDischarges(int cellCount, RiverState currentState, RiverGeometry geometry, FlowProfileModel flowGenerator, double currentTime) {
         float[] discharges = new float[cellCount];
         discharges[0] = (float) flowGenerator.getDischargeAt(currentTime);
         for (int i = 1; i < cellCount; i++) {
@@ -59,7 +61,7 @@ public class ManningGpuSolver {
         return discharges;
     }
 
-    private float[] sanitizeInitialDepths(int cellCount, RiverState currentState) {
+    private static float[] sanitizeInitialDepths(int cellCount, RiverState currentState) {
         float[] depths = new float[cellCount];
         for (int i = 0; i < cellCount; i++) {
             double d = currentState.getWaterDepthAt(i);
@@ -68,7 +70,7 @@ public class ManningGpuSolver {
         return depths;
     }
 
-    private RiverGeometry.ManningGpuRiverGeometryFP32 createGpuGeometry(RiverGeometry geometry) {
+    private static RiverGeometry.ManningGpuRiverGeometryFP32 createGpuGeometry(RiverGeometry geometry) {
         return new RiverGeometry.ManningGpuRiverGeometryFP32(
                 toFloatArray(geometry.cloneBottomWidth()),
                 toFloatArray(geometry.cloneSideSlope()),
@@ -77,7 +79,7 @@ public class ManningGpuSolver {
         );
     }
 
-    private float[] calculateAndSanitizeBedSlopes(RiverGeometry geometry) {
+    private static float[] calculateAndSanitizeBedSlopes(RiverGeometry geometry) {
         double[] elevations = geometry.cloneElevationProfile();
         double dx = geometry.getDx();
         int cellCount = geometry.getCellCount();
@@ -96,7 +98,7 @@ public class ManningGpuSolver {
         return sanitizedSlopes;
     }
 
-    private double[][] unpackGpuResults(float[] gpuResults, int cellCount) {
+    private static double[][] unpackGpuResults(float[] gpuResults, int cellCount) {
         double[] newWaterDepth = new double[cellCount];
         double[] newVelocity = new double[cellCount];
 
@@ -107,7 +109,7 @@ public class ManningGpuSolver {
         return new double[][]{newWaterDepth, newVelocity};
     }
 
-    private float[] toFloatArray(double[] doubleArray) {
+    private static float[] toFloatArray(double[] doubleArray) {
         float[] floatArray = new float[doubleArray.length];
         for (int i = 0; i < doubleArray.length; i++) {
             floatArray[i] = (float) doubleArray[i];
