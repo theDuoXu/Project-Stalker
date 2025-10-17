@@ -7,8 +7,6 @@ import projectstalker.domain.river.RiverState;
 import projectstalker.domain.simulation.ManningSimulationResult;
 import projectstalker.physics.impl.ManningProfileCalculatorTask;
 import projectstalker.physics.jni.ManningGpuSolver;
-import projectstalker.physics.model.RiverPhModel;
-import projectstalker.physics.model.RiverTemperatureModel;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,8 +21,6 @@ import java.util.concurrent.*;
 public class ManningBatchProcessor {
 
     private final RiverGeometry geometry;
-    private final RiverTemperatureModel temperatureModel;
-    private final RiverPhModel phModel;
     private final ExecutorService threadPool;
     private final int cellCount;
 
@@ -32,15 +28,10 @@ public class ManningBatchProcessor {
      * Constructor.
      *
      * @param geometry         La geometría estática del río.
-     * @param temperatureModel El modelo para pre-calcular las temperaturas del batch.
-     * @param phModel          El modelo para pre-calcular los pH del batch.
      * @param simulationConfig La configuración que define el número de CPUs.
      */
-    public ManningBatchProcessor(RiverGeometry geometry, RiverTemperatureModel temperatureModel,
-                                 RiverPhModel phModel, SimulationConfig simulationConfig) {
+    public ManningBatchProcessor(RiverGeometry geometry, SimulationConfig simulationConfig) {
         this.geometry = geometry;
-        this.temperatureModel = temperatureModel;
-        this.phModel = phModel;
         this.cellCount = geometry.getCellCount();
 
         int processorCount = simulationConfig.getCpuProcessorCount();

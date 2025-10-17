@@ -74,7 +74,7 @@ public class ManningSimulator {
         this.isGpuAccelerated = simulationConfig.isUseGpuAccelerationOnManning();
 
         // Inicialización del BatchProcessor
-        this.batchProcessor = new ManningBatchProcessor(this.geometry, this.temperatureModel, this.phModel, simulationConfig);
+        this.batchProcessor = new ManningBatchProcessor(this.geometry, simulationConfig);
 
         log.info("ManningSimulator inicializado correctamente.");
     }
