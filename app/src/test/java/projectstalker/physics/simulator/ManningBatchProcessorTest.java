@@ -96,7 +96,7 @@ class ManningBatchProcessorTest {
         Arrays.fill(newDischarges, 200.0);
         double[] initialDischarges = new double[CELL_COUNT];
 
-        Arrays.fill(initialDischarges, this.realGeometry.getCrossSectionalArea(0, 0.5) * 0.5); // initialUniformDepth = 0.5; y lo hemos metido en todo, por lo que v=0.5 y profundidad = 0.5
+        Arrays.fill(initialDischarges, 50);
         double[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(BATCH_SIZE, newDischarges, initialDischarges);
 
         // 3. Resultados Fisicoquímicos (Pre-cálculo)
