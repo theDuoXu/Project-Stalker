@@ -1,6 +1,7 @@
 package projectstalker.physics.model;
 
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.knowm.xchart.SwingWrapper;
@@ -22,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @Slf4j
 class FlowProfileGeneratorTest {
-
+    @Disabled("Desactivado para permitir tests sin intervención humana, ya que la ventana bloquea hasta que se cierre")
     @Test
     @DisplayName("Visual Test: Debería mostrar una gráfica del perfil de caudales")
     void visualizeProfile() throws InterruptedException {
