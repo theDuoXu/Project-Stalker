@@ -9,8 +9,8 @@ import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.InitialRiver;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.physics.impl.ManningHydrologySolver;
-import projectstalker.physics.solver.IHydrologySolver;
+import projectstalker.physics.impl.SequentialManningHydrologySolver;
+import projectstalker.physics.i.IHydrologySolver;
 
 import java.util.Arrays;
 import java.util.DoubleSummaryStatistics;
@@ -33,7 +33,7 @@ class RiverFactoryTest {
     void setUp() {
         // 1. Crear las dependencias necesarias para la RiverFactory
         RiverGeometryFactory geometryFactory = new RiverGeometryFactory();
-        IHydrologySolver hydrologySolver = new ManningHydrologySolver();
+        IHydrologySolver hydrologySolver = new SequentialManningHydrologySolver();
 
         // 2. Instanciar la fábrica que vamos a probar, inyectando sus dependencias
         this.riverFactory = new RiverFactory(geometryFactory, hydrologySolver);
