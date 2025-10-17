@@ -14,28 +14,13 @@ import projectstalker.physics.model.FlowProfileModel;
 @Slf4j
 public class ManningGpuSolver {
 
-    // --- Carga de la librería nativa (JNI) ---
-    static {
-        if ("true".equalsIgnoreCase(System.getProperty("projectstalker.native.enabled"))) {
-            try {
-                log.info("Native library loading ENABLED. Attempting to load 'manning_solver'...");
-                System.loadLibrary("manning_solver");
-                log.info("Native library 'manning_solver' loaded successfully.");
-            } catch (UnsatisfiedLinkError e) {
-                log.error("FATAL: Native library 'manning_solver' failed to load. Ensure the library is in the java.library.path.", e);
-                System.exit(1);
-            }
-        } else {
-            log.warn("Native library loading is DISABLED. Running in pure Java/mock mode.");
-        }
-    }
 
     /**
      * Resuelve un paso de tiempo completo en la GPU.
      *
-     * @param currentState     El estado actual del río.
-     * @param geometry         La geometría del río.
-     * @param flowGenerator    El generador de caudales para obtener el caudal de entrada.
+     * @param currentState         El estado actual del río.
+     * @param geometry             La geometría del río.
+     * @param flowGenerator        El generador de caudales para obtener el caudal de entrada.
      * @param currentTimeInSeconds El tiempo actual de la simulación.
      * @return Un array de arrays de doubles donde [0] son las nuevas profundidades y [1] son las nuevas velocidades.
      */
@@ -48,7 +33,7 @@ public class ManningGpuSolver {
         RiverGeometry.ManningGpuRiverGeometryFP32 gpuGeometry = createGpuGeometry(geometry);
 
         // 2. Llamada al método nativo.
-        float[] gpuResults = solveManningGpu(
+        float[] gpuResults = NativeManningGpuSingleton.getInstance().solveManningGpu(
                 targetDischarges,
                 initialDepthGuesses,
                 gpuGeometry.bottomWidthsFP32(),
@@ -61,10 +46,6 @@ public class ManningGpuSolver {
         return unpackGpuResults(gpuResults, cellCount);
     }
 
-    /**
-     * Declaración del JNI nativo que se comunica con la librería C++/CUDA.
-     */
-    private native float[] solveManningGpu(float[] targetDischarges, float[] initialDepthGuesses, float[] bottomWidths, float[] sideSlopes, float[] manningCoefficients, float[] bedSlopes);
 
     // --- Métodos de Ayuda para la Preparación de Datos ---
 
