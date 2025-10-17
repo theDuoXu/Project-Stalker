@@ -9,6 +9,7 @@ import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.impl.ManningHydrologySolver;
+import projectstalker.physics.model.RiverTemperatureModel;
 import projectstalker.physics.solver.IHydrologySolver;
 import projectstalker.utils.FastNoiseLite;
 
@@ -31,7 +32,7 @@ public class ManningSimulator {
             } catch (UnsatisfiedLinkError e) {
                 log.error("FATAL: Native library 'manning_solver' failed to load. " +
                         "Ensure the library is in the java.library.path.", e);
-//                System.exit(1);
+                System.exit(1);
             }
         } else {
             log.warn("Native library loading is DISABLED. Running in pure Java/mock mode.");
@@ -57,9 +58,9 @@ public class ManningSimulator {
      */
     private final FlowProfileGenerator flowGenerator;
     /**
-     * Generador de ruido para la variabilidad espacial de la temperatura.
+     * Modelo dedicado al cálculo del perfil de temperaturas del río.
      */
-    private final FastNoiseLite tempNoise;
+    private final RiverTemperatureModel temperatureModel;
 
     // --- Estado de la Simulación ---
     /**
@@ -99,10 +100,7 @@ public class ManningSimulator {
         this.cpuSolver = new ManningHydrologySolver();
         this.flowGenerator = new FlowProfileGenerator((int) config.seed(), 150.0, 50.0, 0.0001f);
 
-        // Inicializa el generador de ruido para la temperatura con una semilla diferente.
-        this.tempNoise = new FastNoiseLite((int) config.seed() + 2);
-        this.tempNoise.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
-        this.tempNoise.SetFrequency(0.2f);
+        this.temperatureModel = new RiverTemperatureModel(config, this.geometry);
 
         int cellCount = geometry.getCellCount();
         // El río comienza completamente seco.
@@ -268,57 +266,21 @@ public class ManningSimulator {
 
     /**
      * Calcula la temperatura y el pH para cada celda del río.
-     * Esta lógica se mantiene en la CPU ya que no es computacionalmente intensiva.
+     * La lógica de temperatura se delega a RiverTemperatureModel.
+     * La lógica de pH se mantiene aquí por su simplicidad.
      *
      * @return Un array 2D donde [0] es el array de temperaturas y [1] es el de pH.
      */
     private double[][] calculateTemperatureAndPh() {
-        final int cellCount = geometry.getCellCount();
-        final double[] elevations = geometry.cloneElevationProfile();
-        final double dx = geometry.getDx();
+        // 1. Delegar el cálculo complejo de la temperatura al modelo especializado.
+        //    El modelo ya tiene la configuración, geometría y su propio generador de ruido.
+        double[] newTemperature = temperatureModel.calculate(currentTimeInSeconds);
 
-        double[] newTemperature = new double[cellCount];
-        double[] newPh = new double[cellCount];
-        double[] bottomWidths = geometry.cloneBottomWidth();
-        double[] phProfile = geometry.clonePhProfile();
+        // 2. El cálculo del pH sigue siendo simple y se puede mantener aquí.
+        //    Clonamos directamente el perfil de pH de la geometría.
+        double[] newPh = geometry.clonePhProfile(); // TODO: relacionar ph con otras variables
 
-        // 1. Calcular la Temperatura Base (dependiente del tiempo)
-        final double SECONDS_IN_A_DAY = 24.0 * 3600.0;
-        final double DAYS_IN_A_YEAR = 365.25;
-        final double dayOfYear = (currentTimeInSeconds / SECONDS_IN_A_DAY) % DAYS_IN_A_YEAR;
-        final double secondOfDay = currentTimeInSeconds % SECONDS_IN_A_DAY;
-        final double seasonalCycle = Math.sin((dayOfYear / DAYS_IN_A_YEAR) * 2.0 * Math.PI);
-        final double baseSeasonalTemp = config.averageAnnualTemperature() + config.seasonalTempVariation() * seasonalCycle;
-        final double dailyCycle = Math.sin((secondOfDay / SECONDS_IN_A_DAY) * 2.0 * Math.PI);
-        final double baseTempForCurrentTime = baseSeasonalTemp + config.dailyTempVariation() * dailyCycle;
-
-        // 2. Calcular la temperatura final para cada celda
-        for (int i = 0; i < cellCount; i++) {
-            // Componente de Gradiente Longitudinal
-            double position = i * dx;
-            double gradientFactor = Math.max(0, 1.0 - (position / config.headwaterCoolingDistance()));
-            double headwaterCooling = -config.maxHeadwaterCoolingEffect() * gradientFactor;
-
-            // Componente de Efecto Geomorfológico
-            double relativeWidth = bottomWidths[i] / config.baseWidth();
-            double widthEffect = config.widthHeatingFactor() * Math.max(0, relativeWidth - 1.0);
-
-            double slope = (i < cellCount - 1)
-                    ? (elevations[i] - elevations[i + 1]) / dx
-                    : (elevations[i - 1] - elevations[i]) / dx;
-            double relativeSlope = Math.max(0, slope) / config.averageSlope();
-            double slopeEffect = -config.slopeCoolingFactor() * Math.max(0, relativeSlope - 1.0);
-
-            double geomorphologyEffect = widthEffect + slopeEffect;
-
-            // Componente de Ruido Local
-            double noiseEffect = tempNoise.GetNoise(i, 0) * config.temperatureNoiseAmplitude();
-
-            // Asignar la temperatura y pH finales
-            newTemperature[i] = baseTempForCurrentTime + headwaterCooling + geomorphologyEffect + noiseEffect;
-            newPh[i] = phProfile[i]; // TODO relacionar ph con otras variables
-        }
-
+        // 3. Devolver ambos perfiles en el formato esperado.
         return new double[][]{newTemperature, newPh};
     }
 
