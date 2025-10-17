@@ -16,17 +16,17 @@ import java.util.DoubleSummaryStatistics;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Pruebas unitarias para la clase {@link ManningHydrologySolver}.
+ * Pruebas unitarias para la clase {@link SequentialManningHydrologySolver}.
  * Verifica que el solver calcula correctamente el siguiente estado hidrológico del río.
  */
-class ManningHydrologySolverTest {
+class SequentialManningHydrologySolverTest {
 
     // Instancia del logger para esta clase.
-    private static final Logger log = LoggerFactory.getLogger(ManningHydrologySolverTest.class);
+    private static final Logger log = LoggerFactory.getLogger(SequentialManningHydrologySolverTest.class);
 
     private RiverConfig config;
     private RiverGeometry riverGeometry;
-    private ManningHydrologySolver solver;
+    private SequentialManningHydrologySolver solver;
 
     @BeforeEach
     void setUp() {
@@ -39,7 +39,7 @@ class ManningHydrologySolverTest {
         );
         RiverGeometryFactory factory = new RiverGeometryFactory();
         riverGeometry = factory.createRealisticRiver(config);
-        solver = new ManningHydrologySolver();
+        solver = new SequentialManningHydrologySolver();
         log.debug("Entorno de prueba para ManningHydrologySolver inicializado.");
     }
 
