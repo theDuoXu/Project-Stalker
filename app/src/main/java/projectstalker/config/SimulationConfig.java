@@ -27,6 +27,39 @@ public class SimulationConfig {
     FlowConfig flowConfig;
 
     /**
+     * Configuración temporal del simulador
+     */
+    float totalTime;
+    /**
+     * Paso de tiempo
+     */
+    float deltaTime;
+    /**
+     * Utiliza aceleración CUDA para estimar la velocidad y la profundidad del agua
+     */
+    boolean useGpuAccelerationOnManning;
+    /**
+     * Utiliza aceleración CUDA para estimar las soluciones EDP advección difusión reacción
+     */
+    boolean useGpuAccelerationOnTransport;
+
+    /**
+     * El número de pasos de tiempo (Δt) que se agrupan y se pasan a la GPU para cómputo en un solo lote.
+     * Este valor gestiona el compromiso entre el overhead de la transferencia de datos CPU-GPU
+     * y la latencia (responsiveness) del sistema.
+     */
+    int cpuTimeBatchSize;
+
+    /**
+     * Número de núcleos CPU a utilizar en simulaciones CPU
+     */
+    int cpuProcessorCount;
+
+    public long getTotalTimeSteps() {
+        return Math.round(totalTime / deltaTime);
+    }
+
+    /**
      * Define los parámetros para el generador de caudal de entrada.
      */
     @Value
