@@ -9,6 +9,9 @@
 *.iml
 *.iws
 
+# Configuración privada
+.env
+
 # ignorar archivos generados
 problems-report.html
 build/
@@ -16,4 +19,4 @@ lib/
 *.jar
 *.log
 *.bin
-.env
+*.gz
