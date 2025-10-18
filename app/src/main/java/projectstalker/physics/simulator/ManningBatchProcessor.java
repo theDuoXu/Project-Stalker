@@ -145,7 +145,7 @@ public class ManningBatchProcessor {
                                                     double[][] allDischargeProfiles, double[][][] phTmp) {
 
         // 1. Llamada al solver de GPU
-        double[][][] results = ManningGpuSolver.solveBatch(initialRiverState.waterDepth(), allDischargeProfiles, this.geometry);
+        double[][][] results = new ManningGpuSolver().solveBatch(initialRiverState.waterDepth(), allDischargeProfiles, this.geometry);
 
         // 2. Validación y manejo de errores
         if (results == null || results.length != batchSize) {

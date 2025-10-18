@@ -12,6 +12,7 @@ import projectstalker.domain.simulation.ManningSimulationResult;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.impl.SequentialManningHydrologySolver;
 import projectstalker.physics.jni.ManningGpuSolver;
+import projectstalker.physics.model.FlowProfileModel;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
@@ -34,6 +35,7 @@ class ManningSimulatorTest {
     private SimulationConfig mockSimConfig;
     private RiverGeometry mockGeometry;
     private ManningBatchProcessor mockBatchProcessor; // Mock para delegación
+    private ManningGpuSolver mockGpuSolver;
 
     private final int CELL_COUNT = 5;
     private final double DELTA_TIME = 10.0;
@@ -98,6 +100,11 @@ class ManningSimulatorTest {
 
         // Llama al constructor REAL. Ahora no fallará porque mockConfig tiene los valores geométricos.
         simulator = new ManningSimulator(mockConfig, mockSimConfig);
+
+        mockGpuSolver = mock(ManningGpuSolver.class);
+        Field gpuSolverField = ManningSimulator.class.getDeclaredField("gpuSolver");
+        gpuSolverField.setAccessible(true);
+        gpuSolverField.set(simulator, mockGpuSolver);
 
         // ********** SUSTITUCIÓN DE DEPENDENCIAS CON REFLEXIÓN **********
         // Sustituimos las instancias creadas INTERNAMENTE por mocks para aislar el test.
@@ -173,33 +180,42 @@ class ManningSimulatorTest {
     // --------------------------------------------------------------------------
 
     @Test
-    @DisplayName("advanceTimeStep (GPU) debe delegar al ManningGpuSolver nativo")
+    @DisplayName("advanceTimeStep (GPU) debe delegar al ManningGpuSolver")
     void advanceTimeStep_gpuMode_shouldDelegateToGpuSolver() {
         log.info("Ejecutando test: advanceTimeStep en modo GPU.");
         simulator.setGpuAccelerated(true);
         double initialTime = simulator.getCurrentTimeInSeconds();
 
-        // 1. Mockear la llamada estática nativa de ManningGpuSolver
-        // Nota: Esto requiere la librería Mockito `mock-static` para simular llamadas estáticas (JNI)
-
-        // Simular que el GPU Solver devuelve un resultado con profundidad 5.0 y velocidad 2.0
-        double[] gpuDepthResult = new double[CELL_COUNT]; Arrays.fill(gpuDepthResult, 5.0);
-        double[] gpuVelocityResult = new double[CELL_COUNT]; Arrays.fill(gpuVelocityResult, 2.0);
+        // 1. Simular que el GPU Solver (el mock inyectado) devuelve un resultado
+        double[] gpuDepthResult = new double[CELL_COUNT];
+        Arrays.fill(gpuDepthResult, 5.0);
+        double[] gpuVelocityResult = new double[CELL_COUNT];
+        Arrays.fill(gpuVelocityResult, 2.0);
         double[][] mockGpuResults = new double[][]{gpuDepthResult, gpuVelocityResult};
 
-        try (var mocked = mockStatic(ManningGpuSolver.class)) {
-            mocked.when(() -> ManningGpuSolver.solve(any(), any(), any(), anyDouble())).thenReturn(mockGpuResults);
+        // 2. Configurar el MOCK (el que inyectamos en setUp)
+        // Se configura el mock de instancia 'mockGpuSolver'.
+        when(mockGpuSolver.solve(
+                any(RiverState.class),
+                any(RiverGeometry.class),
+                any(FlowProfileModel.class),
+                anyDouble()
+        )).thenReturn(mockGpuResults);
 
-            // ACT
-            simulator.advanceTimeStep(DELTA_TIME);
+        // ACT
+        simulator.advanceTimeStep(DELTA_TIME);
 
-            // ASSERT 1: Delegación
-            mocked.verify(() -> ManningGpuSolver.solve(any(), any(), any(), eq(initialTime)), times(1));
+        // ASSERT 1: Delegación
+        // Verificar que el mock 'mockGpuSolver' fue llamado 1 vez con el tiempo correcto.
+        verify(mockGpuSolver, times(1)).solve(
+                any(RiverState.class),
+                any(RiverGeometry.class),
+                any(FlowProfileModel.class),
+                eq(initialTime) // Verificar que se llamó con el tiempo inicial correcto
+        );
 
-            // ASSERT 2: Estado Final
-            assertEquals(5.0, simulator.getCurrentState().getWaterDepthAt(0), 0.001, "El estado debe ser actualizado por el mock GPU.");
-        }
-
+        // ASSERT 2: Estado Final
+        assertEquals(5.0, simulator.getCurrentState().getWaterDepthAt(0), 0.001, "El estado debe ser actualizado por el mock GPU.");
         assertEquals(initialTime + DELTA_TIME, simulator.getCurrentTimeInSeconds(), 0.001, "El tiempo debe avanzar.");
         log.info("Paso único GPU verificado. El estado fue actualizado a profundidad 5.0.");
     }

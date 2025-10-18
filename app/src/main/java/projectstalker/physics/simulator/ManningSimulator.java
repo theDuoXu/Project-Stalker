@@ -54,6 +54,8 @@ public class ManningSimulator {
     @Getter
     private int cpuFillIterations = 0;
 
+    private final ManningGpuSolver gpuSolver;
+
     /**
      * Constructor del simulador.
      *
@@ -75,6 +77,12 @@ public class ManningSimulator {
 
         // Inicialización del BatchProcessor
         this.batchProcessor = new ManningBatchProcessor(this.geometry, simulationConfig);
+
+        if (this.isGpuAccelerated) {
+            this.gpuSolver = new ManningGpuSolver();
+        } else {
+            this.gpuSolver = null;
+        }
 
         log.info("ManningSimulator inicializado correctamente.");
     }
@@ -167,8 +175,12 @@ public class ManningSimulator {
      * Orquesta un paso de simulación delegando el cálculo completo al solver de GPU.
      */
     private void runGpuStep() {
+        if (this.gpuSolver == null) {
+            throw new IllegalStateException("Modo GPU activado, pero el GpuSolver no fue inicializado.");
+        }
+
         // 1. Delegar el cálculo hidrológico completo al solver de GPU.
-        double[][] gpuResults = ManningGpuSolver.solve(currentState, geometry, flowGenerator, currentTimeInSeconds);
+        double[][] gpuResults = this.gpuSolver.solve(currentState, geometry, flowGenerator, currentTimeInSeconds);
         double[] newWaterDepth = gpuResults[0];
         double[] newVelocity = gpuResults[1];
 

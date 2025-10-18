@@ -3,7 +3,7 @@ package projectstalker.physics.jni;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class NativeManningGpuSingleton {
+public class NativeManningGpuSingleton implements INativeManningSolver{
     private static volatile NativeManningGpuSingleton INSTANCE = null;
 
     // --- Carga de la librería nativa (JNI) ---
