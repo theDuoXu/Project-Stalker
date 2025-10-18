@@ -19,7 +19,10 @@ find_package(JNI REQUIRED)
 
 # 2. Añadimos solo las cabeceras de nuestro proyecto
 set(CPP_ROOT_DIR ${CMAKE_SOURCE_DIR}/native-lib/src/main/cpp)
-include_directories(${CPP_ROOT_DIR}/include)
+include_directories(
+        ${CPP_ROOT_DIR}/include
+        "/usr/local/cuda/include"
+)
 
 
 # --- DEFINICIÓN DEL TARGET (LA "LIBRERÍA FALSA") ---
