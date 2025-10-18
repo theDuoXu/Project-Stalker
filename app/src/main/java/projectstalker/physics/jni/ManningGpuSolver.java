@@ -1,10 +1,11 @@
-// Fichero: projectstalker/physics/jni/ManningGpuSolver.java
 package projectstalker.physics.jni;
 
 import lombok.extern.slf4j.Slf4j;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.physics.model.FlowProfileModel;
+
+import java.util.Arrays;
 
 /**
  * Actúa como un puente (wrapper) hacia la librería nativa JNI para resolver
@@ -49,38 +50,84 @@ public final class ManningGpuSolver {
     }
 
     /**
-
+     * Resuelve un lote de pasos de tiempo completo en la GPU.
      *
-     * @param initialGuess profundidades iniciales (calculadas secuencialmente hasta llenar el río) para facilitar newton raphson
-     * @param allDischargeProfiles allDischargeProfiles Target para cada paso de simulación
-     * @param geometry geometría básica del río
-     * @return  [batchSize][0][cellCount] son las nuevas profundidades y [batchSize][1][cellCount] son las nuevas velocidades.
+     * @param initialGuess          Profundidades iniciales para el primer paso del batch.
+     * @param allDischargeProfiles  Caules de entrada para cada paso del batch.
+     * @param geometry              Geometría básica del río.
+     * @return [batchSize][0][cellCount] son las nuevas profundidades y [batchSize][1][cellCount] son las nuevas velocidades.
      */
-    public static double[][][] solveBatch(double[] initialGuess,double[][] allDischargeProfiles, RiverGeometry geometry) {
-        RiverGeometry.ManningGpuRiverGeometryFP32 gpuGeometry = createGpuGeometry(geometry);
+    public static double[][][] solveBatch(double[] initialGuess, double[][] allDischargeProfiles, RiverGeometry geometry) {
+
+        // 1. Parámetros de control
         int batchSize = allDischargeProfiles.length;
         int cellCount = allDischargeProfiles[0].length;
-        
-        float[] gpuInitialGuess = sanitizeInitialDepths(initialGuess);
-        float[][] gpuDischargeProfiles = sanitizeDischargeProfiles(allDischargeProfiles);
 
-        float [] gpuResults = NativeManningGpuSingleton.getInstance().solveManningGpuBatch();
-        
+        // 2. Preparar y sanitizar los datos
+        float[] gpuInitialGuess = sanitizeInitialDepths(initialGuess);
+
+        // Aplanar y sanear el array 2D de caudales a 1D - Mayor rendimiento GPU
+        float[] flatDischargeProfiles = flattenDischargeProfiles(allDischargeProfiles);
+
+        // 3. Preparar la geometría
+        RiverGeometry.ManningGpuRiverGeometryFP32 gpuGeometry = createGpuGeometry(geometry);
+
+        // 4. Llamada al método nativo con la firma completa.
+        float [] gpuResults = NativeManningGpuSingleton.getInstance().solveManningGpuBatch(
+                gpuInitialGuess,
+                flatDischargeProfiles,
+                batchSize,
+                cellCount,
+                gpuGeometry.bottomWidthsFP32(),
+                gpuGeometry.sideSlopesFP32(),
+                gpuGeometry.manningCoefficientsFP32(),
+                gpuGeometry.bedSlopesFP32()
+        );
+
+        // 5. Desempaquetar los resultados
         return unpackGpuResults(gpuResults, batchSize, cellCount);
     }
 
     /**
-     * Desempaqueta el array plano de resultados de la GPU a la estructura tridimensional de Java.
-     *
-     * @param gpuResults Array plano (1D) que contiene todos los resultados. Se asume que la estructura
-     * está intercalada: [prof_t0_c0, vel_t0_c0, prof_t0_c1, vel_t0_c1, ..., prof_t1_c0, vel_t1_c0, ...]
-     * @param batchSize  El número de pasos de simulación.
-     * @param cellCount  El número de celdas por paso.
-     * @return Un array tridimensional [batchSize][2][cellCount] donde [][0] son profundidades y [][1] son velocidades.
+     * Implementa el aplanamiento (flattening) de un array 2D de caudales a un array 1D
+     * y realiza la sanitización/conversión a float.
+     * La estructura de aplanamiento es: [Q_t0_c0, Q_t0_c1, ..., Q_t1_c0, Q_t1_c1, ...]
+     * * @param allDischargeProfiles Array 2D [batchSize][cellCount]
+     * @return Array 1D aplanado [batchSize * cellCount]
+     */
+    private static float[] flattenDischargeProfiles(double[][] allDischargeProfiles) {
+        int batchSize = allDischargeProfiles.length;
+        int cellCount = allDischargeProfiles[0].length;
+        int totalSize = batchSize * cellCount;
+
+        float[] flatDischarges = new float[totalSize];
+
+        // Iterar sobre el tiempo (paso de batch)
+        for (int i = 0; i < batchSize; i++) {
+            // Iterar sobre el espacio (celda)
+            for (int j = 0; j < cellCount; j++) {
+                double originalDischarge = allDischargeProfiles[i][j];
+                int flatIndex = i * cellCount + j; // Cálculo del índice 1D
+
+                // Sanitización
+                if (originalDischarge <= 0) {
+                    flatDischarges[flatIndex] = 0.001f;
+                } else {
+                    flatDischarges[flatIndex] = (float) originalDischarge;
+                }
+            }
+        }
+
+        return flatDischarges;
+    }
+
+
+    /**
+     * Desempaqueta el array plano de resultados de la GPU a la estructura tridimensional de Java. (Lógica existente)
      */
     private static double[][][] unpackGpuResults(float[] gpuResults, int batchSize, int cellCount) {
-        // 1. Validación CRÍTICA: Asegurarse de que el tamaño del array de entrada es el esperado.
-        int expectedSize = batchSize * cellCount * 2; // 2 porque tenemos profundidad y velocidad por cada celda.
+        // ... (Lógica de desempaquetado mantenida e intacta) ...
+        int expectedSize = batchSize * cellCount * 2;
         if (gpuResults == null || gpuResults.length != expectedSize) {
             throw new IllegalArgumentException(String.format(
                     "Error al desempaquetar resultados de GPU. Tamaño de array inesperado. Esperado: %d, Recibido: %d",
@@ -88,25 +135,17 @@ public final class ManningGpuSolver {
             ));
         }
 
-        // 2. Crear la estructura de destino.
-        // Dimensiones: [paso de tiempo][tipo de dato (0=profundidad, 1=velocidad)][celda]
         double[][][] results = new double[batchSize][2][cellCount];
 
-        // 3. Iterar y rellenar la estructura de destino.
-        for (int i = 0; i < batchSize; i++) { // Bucle sobre cada paso de simulación (tiempo).
-
-            // Calculamos el punto de inicio en el array plano para este paso de simulación.
+        for (int i = 0; i < batchSize; i++) {
             int timeStepOffset = i * cellCount * 2;
 
-            for (int j = 0; j < cellCount; j++) { // Bucle sobre cada celda del río.
-
-                // Calculamos el índice para la profundidad y velocidad de la celda 'j' en el paso 'i'.
+            for (int j = 0; j < cellCount; j++) {
                 int sourceIndexForDepth = timeStepOffset + j * 2;
                 int sourceIndexForVelocity = sourceIndexForDepth + 1;
 
-                // Asignar los valores, convirtiendo de float a double.
-                results[i][0][j] = gpuResults[sourceIndexForDepth]; // [i]=tiempo, [0]=profundidades, [j]=celda
-                results[i][1][j] = gpuResults[sourceIndexForVelocity]; // [i]=tiempo, [1]=velocidades, [j]=celda
+                results[i][0][j] = gpuResults[sourceIndexForDepth];
+                results[i][1][j] = gpuResults[sourceIndexForVelocity];
             }
         }
 
@@ -114,7 +153,7 @@ public final class ManningGpuSolver {
     }
 
 
-    // --- Métodos de Ayuda para la Preparación de Datos ---
+    // --- Métodos de Ayuda para la Preparación de Datos (Resto de métodos existentes) ---
 
     private static float[] precomputeTargetDischarges(int cellCount, RiverState currentState, RiverGeometry geometry, FlowProfileModel flowGenerator, double targetTimeInSeconds) {
         float[] discharges = new float[cellCount];
@@ -124,32 +163,6 @@ public final class ManningGpuSolver {
             discharges[i] = (float) (prevArea * currentState.getVelocityAt(i - 1));
         }
         return discharges;
-    }
-    private static float[][] sanitizeDischargeProfiles(double[][] allDischargeProfiles) {
-        int batchSize = allDischargeProfiles.length;
-        int cellCount = allDischargeProfiles[0].length;
-
-        // Crear el nuevo array de floats con las mismas dimensiones.
-        float[][] sanitizedDischarges = new float[batchSize][cellCount];
-
-        // Iterar sobre cada paso de simulación (dimensión exterior).
-        for (int i = 0; i < batchSize; i++) {
-            // Iterar sobre cada celda del río en ese paso (dimensión interior).
-            for (int j = 0; j < cellCount; j++) {
-                double originalDischarge = allDischargeProfiles[i][j];
-
-                // Aplicar la lógica de saneamiento:
-                // Si el caudal es 0 o negativo, establecer un valor mínimo.
-                if (originalDischarge <= 0) {
-                    sanitizedDischarges[i][j] = 0.001f;
-                } else {
-                    // Si es positivo, simplemente convertirlo a float.
-                    sanitizedDischarges[i][j] = (float) originalDischarge;
-                }
-            }
-        }
-
-        return sanitizedDischarges;
     }
 
     private static float[] sanitizeInitialDepths(double[] initialGuess) {

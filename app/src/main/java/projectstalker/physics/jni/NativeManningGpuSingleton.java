@@ -30,7 +30,7 @@ public class NativeManningGpuSingleton {
      */
     public native float[] solveManningGpu(float[] targetDischarges, float[] initialDepthGuesses, float[] bottomWidths, float[] sideSlopes, float[] manningCoefficients, float[] bedSlopes);
 
-    public native float[] solveManningGpuBatch();
+    public native float[] solveManningGpuBatch(float[] gpuInitialGuess, float[] flatDischargeProfiles, int batchSize, int cellCount, float[] floats, float[] sideSlopesFP32, float[] manningCoefficientsFP32, float[] bedSlopesFP32);
 
     public static NativeManningGpuSingleton getInstance() {
         if (INSTANCE == null) {
