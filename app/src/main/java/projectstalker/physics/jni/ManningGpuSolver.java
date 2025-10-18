@@ -54,7 +54,7 @@ public final class ManningGpuSolver {
      * @param initialGuess profundidades iniciales (calculadas secuencialmente hasta llenar el río) para facilitar newton raphson
      * @param allDischargeProfiles allDischargeProfiles Target para cada paso de simulación
      * @param geometry geometría básica del río
-     * @return  [][0] son las nuevas profundidades y [][1] son las nuevas velocidades.
+     * @return  [batchSize][0][cellCount] son las nuevas profundidades y [batchSize][1][cellCount] son las nuevas velocidades.
      */
     public static double[][][] solveBatch(double[] initialGuess,double[][] allDischargeProfiles, RiverGeometry geometry) {
         RiverGeometry.ManningGpuRiverGeometryFP32 gpuGeometry = createGpuGeometry(geometry);
