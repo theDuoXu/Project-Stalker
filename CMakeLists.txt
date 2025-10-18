@@ -1,32 +1,40 @@
-# Este CMakeLists.txt es SOLO para que CLion entienda la estructura del proyecto
-# y proporcione análisis de código. LA COMPILACIÓN REAL LA HACE GRADLE.
-cmake_minimum_required(VERSION 3.10)
+# Usamos una versión más moderna para asegurar un buen soporte de JNI y CUDA
+cmake_minimum_required(VERSION 3.18)
 
-# Le decimos a CLion el nombre del proyecto. Los lenguajes son para el análisis.
-project(projectstalker_ide CXX)
+# Le decimos a CMake que "finja" compilar para la arquitectura de GPU nativa (local).
+set(CMAKE_CUDA_ARCHITECTURES "75")
+
+set(CMAKE_CUDA_COMPILER "/usr/local/cuda/bin/nvcc")
+
+# Le decimos a CLion que este proyecto usa C++ y CUDA
+project(projectstalker_ide CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# --- RUTAS ---
-# Le damos a CLion las rutas a los headers para que encuentre las definiciones
+# --- RUTAS Y PAQUETES ---
+
+# 1. Busca JNI de forma robusta (no depende de $ENV{JAVA_HOME})
+find_package(JNI REQUIRED)
+
+# 2. Añadimos solo las cabeceras de nuestro proyecto
 set(CPP_ROOT_DIR ${CMAKE_SOURCE_DIR}/native-lib/src/main/cpp)
-include_directories(
-        ${CPP_ROOT_DIR}/include
-        $ENV{JAVA_HOME}/include
-        $ENV{JAVA_HOME}/include/linux
-)
+include_directories(${CPP_ROOT_DIR}/include)
+
 
 # --- DEFINICIÓN DEL TARGET (LA "LIBRERÍA FALSA") ---
 
-# Agrupamos TODOS los archivos de código fuente (.cpp y .cu)
-# para que CLion los reconozca como parte del mismo "target".
+# Agrupamos todos los archivos fuente
 file(GLOB_RECURSE PROJECT_SOURCES
         "${CPP_ROOT_DIR}/src/*.cpp"
         "${CPP_ROOT_DIR}/src/*.cu"
         "${CPP_ROOT_DIR}/test/*.cpp"
 )
 
-# Creamos una librería falsa llamada 'native_lib_ide'
-# CLion ahora asociará todos los archivos de PROJECT_SOURCES a este target.
-add_library(native_lib_ide SHARED ${PROJECT_SOURCES})
+# Creamos la librería falsa
+add_library(native_lib_ide SHARED ${PROJECT_SOURCES}
+        native-lib/src/main/cpp/include/projectstalker/physics/manning_kernel.h)
+
+# 3. CONECTAMOS JNI
+# Le decimos a nuestro target falso que use las cabeceras de JNI
+target_link_libraries(native_lib_ide PRIVATE JNI::JNI)
