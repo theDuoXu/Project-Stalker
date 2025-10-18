@@ -45,21 +45,24 @@ public class ManningBatchProcessor {
      * Procesa un batch completo de simulación y devuelve el resultado.
      *
      * @param batchSize          El número de pasos a simular.
-     * @param currentTimeInSeconds El tiempo inicial de la simulación.
      * @param initialRiverState  El estado del río al inicio del batch.
      * @param allDischargeProfiles Perfiles de caudal pre-calculados para cada paso del batch.
      * @param phTmp              Arrays pre-calculados de [Temperatura, pH] para cada paso del batch.
      * @param isGpuAccelerated   Indica si se debe usar el solver de GPU o CPU concurrente.
      * @return El resultado de la simulación del batch.
      */
-    public ManningSimulationResult processBatch(int batchSize, double currentTimeInSeconds,
+    public ManningSimulationResult processBatch(int batchSize,
                                                 RiverState initialRiverState, double[][] allDischargeProfiles,
                                                 double[][][] phTmp, boolean isGpuAccelerated) {
+        long startTimeInMilis = System.currentTimeMillis();
+
+        ManningSimulationResult result;
         if (isGpuAccelerated) {
-            return gpuComputeBatch(batchSize, initialRiverState, allDischargeProfiles, phTmp);
+            result = gpuComputeBatch(batchSize, initialRiverState, allDischargeProfiles, phTmp);
         } else {
-            return cpuComputeBatch(batchSize, initialRiverState, allDischargeProfiles, phTmp);
+            result = cpuComputeBatch(batchSize, initialRiverState, allDischargeProfiles, phTmp);
         }
+        return result.withSimulationTime(System.currentTimeMillis() - startTimeInMilis);
     }
 
     /**

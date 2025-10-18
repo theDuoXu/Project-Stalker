@@ -245,14 +245,14 @@ class ManningSimulatorTest {
         // El simulador llama a createDischargeProfiles y luego a processBatch
         double[][] mockDischargeProfiles = new double[batchSize][CELL_COUNT];
         when(mockBatchProcessor.createDischargeProfiles(anyInt(), any(), any())).thenReturn(mockDischargeProfiles);
-        when(mockBatchProcessor.processBatch(anyInt(), anyDouble(), any(), any(), any(), anyBoolean())).thenReturn(mockResult);
+        when(mockBatchProcessor.processBatch(anyInt(), any(), any(), any(), anyBoolean())).thenReturn(mockResult);
 
         // ACT
         ManningSimulationResult result = simulator.advanceBatchTimeStep(DELTA_TIME, batchSize);
 
         // ASSERT 1: Delegación
         verify(mockBatchProcessor, times(1)).createDischargeProfiles(eq(batchSize), any(), any());
-        verify(mockBatchProcessor, times(1)).processBatch(eq(batchSize), eq(initialTime), any(), eq(mockDischargeProfiles), any(), eq(false));
+        verify(mockBatchProcessor, times(1)).processBatch(eq(batchSize), any(), eq(mockDischargeProfiles), any(), eq(false));
 
         // ASSERT 2: Flujo de Control
         assertEquals(mockResult, result, "El resultado devuelto debe ser el del BatchProcessor.");

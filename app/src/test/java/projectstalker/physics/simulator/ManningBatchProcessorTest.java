@@ -113,7 +113,7 @@ class ManningBatchProcessorTest {
 
         // --- ACT: Ejecución Real del Batch Processor ---
         ManningSimulationResult result = batchProcessor.processBatch(
-                BATCH_SIZE, currentTime, initialRiverState,
+                BATCH_SIZE, initialRiverState,
                 allDischargeProfiles, phTmp, false
         );
 

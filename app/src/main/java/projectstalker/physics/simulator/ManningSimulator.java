@@ -142,7 +142,7 @@ public class ManningSimulator {
         double[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(batchSize, newDischarges, initialDischarges);
 
         // 4. Ejecución delegada (CPU concurrente o GPU)
-        ManningSimulationResult result = batchProcessor.processBatch(batchSize, initialBatchTime, initialRiverState,
+        ManningSimulationResult result = batchProcessor.processBatch(batchSize, initialRiverState,
                 allDischargeProfiles, phTmp, isGpuAccelerated);
 
         // 5. Actualizar el estado final del ManningSimulator

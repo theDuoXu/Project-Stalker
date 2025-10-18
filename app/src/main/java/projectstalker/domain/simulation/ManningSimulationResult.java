@@ -32,7 +32,10 @@ public class ManningSimulationResult {
      */
     List<RiverState> states;
 
-
+    /**
+     * El tiempo que ha durado la simulación
+     */
+    long simulationTime;
     /**
      * Devuelve el número total de pasos de tiempo (timesteps) registrados en el resultado.
      *
