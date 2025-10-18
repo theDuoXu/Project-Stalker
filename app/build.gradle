@@ -52,7 +52,9 @@ application {
     // 3. Añade el path de la librería nativa a los argumentos de la JVM.
     //    Esto configura el -Djava.library.path automáticamente al ejecutar con 'gradle run'.
     applicationDefaultJvmArgs = [
-            "-Djava.library.path=${layout.buildDirectory.dir('libs/native').get().asFile.absolutePath}"
+            "-Djava.library.path=${layout.buildDirectory.dir('libs/native').get().asFile.absolutePath}",
+            // Habilita la carga de la librería en el Singleton (para la tarea 'run')
+            "-Dprojectstalker.native.enabled=true"
     ]
 }
 
@@ -61,6 +63,7 @@ application {
 // ===================================================================
 
 dependencies {
+    // ... (todas tus dependencias van aquí, las omito por brevedad) ...
     // =======================================================
     // --- STACK DE BASE DE DATOS (POSTGRESQL) ---
     // =======================================================
@@ -91,6 +94,39 @@ dependencies {
     implementation 'org.knowm.xchart:xchart:3.8.6'
 }
 
+
+// ===================================================================
+// --- CONFIGURACIÓN DE TESTS ---
+// ===================================================================
+
 test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        // Excluye los tests de GPU de la ejecución 'test' estándar
+        excludeTags 'GPU'
+    }
+}
+
+// Tarea personalizada para ejecutar SÓLO los tests de integración de GPU
+tasks.register('gpuTest', Test) {
+    description = 'Ejecuta los tests de integración que requieren hardware de GPU.'
+    group = 'verification'
+
+    // Asegura que la librería nativa esté copiada antes de ejecutar
+    dependsOn copyNativeLib
+
+    // Apunta a la misma carpeta nativa que la tarea 'run'
+    jvmArgs "-Djava.library.path=${layout.buildDirectory.dir('libs/native').get().asFile.absolutePath}"
+
+    // Habilita la carga de la librería nativa en NativeManningGpaSingleton
+    systemProperty 'projectstalker.native.enabled', 'true'
+
+    useJUnitPlatform {
+        // Incluye SÓLO los tests marcados con @Tag("GPU")
+        includeTags 'GPU'
+    }
+
+    // Muestra una salida clara en la consola para esta tarea
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
 }
