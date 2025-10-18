@@ -56,7 +56,9 @@ class ManningGpuSolverTest {
         };
 
         // 2. Datos PROCESADOS que esperamos que se envíen al método nativo
-        float[] expectedSanitizedGuess = {1.5f, 0.001f, 0.001f};
+        // El 'initialGuess' es saneado Y expandido (duplicado) para cada item del batch (batchSize=2)
+        // Esta expansión es para acomodar la forma que accedo en CUDA
+        float[] expectedSanitizedGuess = {1.5f, 0.001f, 0.001f, 1.5f, 0.001f, 0.001f};
         float[] expectedFlatDischarges = {10.0f, 0.001f, 5.0f, 20.0f, 0.001f, 15.0f};
 
         // 3. Datos de VUELTA (simulados) que devuelve el mock nativo
