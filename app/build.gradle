@@ -114,6 +114,11 @@ tasks.register('gpuTest', Test) {
     // Asegura que la librería nativa esté copiada antes de ejecutar
     dependsOn copyNativeLib
 
+    // Indica a la tarea DÓNDE están las clases .class de los tests compilados
+    testClassesDirs = sourceSets.test.output.classesDirs
+    // Indica a la tarea QUÉ LIBRERÍAS (JARs) usar (JUnit, Mockito, etc.)
+    classpath = sourceSets.test.runtimeClasspath
+
     // Apunta a la misma carpeta nativa que la tarea 'run'
     jvmArgs "-Djava.library.path=${layout.buildDirectory.dir('libs/native').get().asFile.absolutePath}"
 
