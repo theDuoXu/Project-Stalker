@@ -5,10 +5,11 @@ import projectstalker.build.CompileCudaTask
 plugins {
     id 'cpp-library'
 }
+def cudaHome = '/usr/local/cuda'
 
 library {
     publicHeaders.from('src/main/cpp/include')
-    baseName = 'projectstalker'
+    baseName = 'manning_solver'
 }
 
 // Librerías para JNI
@@ -20,6 +21,7 @@ tasks.withType(CppCompile) {
     } else {
         logger.warn("JAVA_HOME is not set. C++ compilation might fail to find JNI headers.")
     }
+    compilerArgs.add "-I${cudaHome}/include"
 }
 
 // 1. REGISTRAR NUESTRA TAREA DE CUDA
@@ -33,7 +35,6 @@ def compileCuda = tasks.register('compileCuda', CompileCudaTask) {
 // 2. CONECTAR 🔗
 tasks.withType(LinkSharedLibrary) {
     source.from(compileCuda.map { it.outputDir.files() })
-    def cudaHome = '/usr/local/cuda'
     linkerArgs.add("-L${cudaHome}/lib64")
     linkerArgs.add('-lcudart')
 }
