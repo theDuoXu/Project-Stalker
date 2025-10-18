@@ -11,6 +11,7 @@ import projectstalker.domain.simulation.ManningSimulationResult;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.impl.SequentialManningHydrologySolver;
 import projectstalker.physics.jni.ManningGpuSolver;
+import projectstalker.physics.jni.NativeManningGpuSingleton;
 import projectstalker.physics.model.FlowProfileModel;
 import projectstalker.physics.model.RiverPhModel;
 import projectstalker.physics.model.RiverTemperatureModel;

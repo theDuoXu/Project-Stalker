@@ -10,6 +10,7 @@ import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.domain.simulation.ManningSimulationResult;
 import projectstalker.factory.RiverGeometryFactory;
+import projectstalker.physics.jni.INativeManningSolver;
 import projectstalker.physics.model.RiverPhModel;
 import projectstalker.physics.model.RiverTemperatureModel;
 
@@ -32,6 +33,7 @@ class ManningBatchProcessorTest {
     private RiverTemperatureModel realTempModel; // INSTANCIA REAL
     private RiverPhModel realPhModel;           // INSTANCIA REAL
     private SimulationConfig mockConfig;
+    private INativeManningSolver mockGpuSolver;
 
     // Dimensiones predichas para el río (100000m / 50m = 2000 celdas)
     private final int CELL_COUNT = 2000;

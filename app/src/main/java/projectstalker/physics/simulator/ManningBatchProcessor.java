@@ -6,6 +6,7 @@ import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.domain.simulation.ManningSimulationResult;
 import projectstalker.physics.impl.ManningProfileCalculatorTask;
+import projectstalker.physics.jni.INativeManningSolver;
 import projectstalker.physics.jni.ManningGpuSolver;
 
 import java.util.ArrayList;
@@ -23,7 +24,7 @@ public class ManningBatchProcessor {
     private final RiverGeometry geometry;
     private final ExecutorService threadPool;
     private final int cellCount;
-
+    private final ManningGpuSolver gpuSolver;
     /**
      * Constructor.
      *
@@ -37,6 +38,7 @@ public class ManningBatchProcessor {
         int processorCount = simulationConfig.getCpuProcessorCount();
         this.threadPool = Executors.newFixedThreadPool(Math.max(processorCount, 1));
         log.info("ManningBatchProcessor inicializado con pool de {} hilos.", processorCount);
+        this.gpuSolver = new ManningGpuSolver();
     }
 
     /**
@@ -145,7 +147,7 @@ public class ManningBatchProcessor {
                                                     double[][] allDischargeProfiles, double[][][] phTmp) {
 
         // 1. Llamada al solver de GPU
-        double[][][] results = new ManningGpuSolver().solveBatch(initialRiverState.waterDepth(), allDischargeProfiles, this.geometry);
+        double[][][] results = gpuSolver.solveBatch(initialRiverState.waterDepth(), allDischargeProfiles, this.geometry);
 
         // 2. Validación y manejo de errores
         if (results == null || results.length != batchSize) {

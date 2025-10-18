@@ -65,6 +65,18 @@ public final class ManningGpuSolver {
 
         // 2. Preparar y sanitizar los datos
         float[] gpuInitialGuess = sanitizeInitialDepths(initialGuess);
+        int totalThreads = batchSize * cellCount;
+        float[] gpuInitialGuess_expanded = new float[totalThreads];
+        for (int i = 0; i < batchSize; i++) {
+            System.arraycopy(
+                    gpuInitialGuess,         // Origen (tamaño cellCount)
+                    0,                         // Posición inicial del origen
+                    gpuInitialGuess_expanded,  // Destino (tamaño totalThreads)
+                    i * cellCount,             // Posición inicial del destino
+                    cellCount                  // Longitud a copiar
+            );
+        }
+
 
         // Aplanar y sanear el array 2D de caudales a 1D - Mayor rendimiento GPU
         float[] flatDischargeProfiles = flattenDischargeProfiles(allDischargeProfiles);
@@ -73,8 +85,16 @@ public final class ManningGpuSolver {
         RiverGeometry.ManningGpuRiverGeometryFP32 gpuGeometry = createGpuGeometry(geometry);
 
         // 4. Llamada al método nativo con la firma completa.
-        float[] gpuResults = nativeSolver.solveManningGpuBatch(gpuInitialGuess, flatDischargeProfiles, batchSize, cellCount, gpuGeometry.bottomWidthsFP32(), gpuGeometry.sideSlopesFP32(), gpuGeometry.manningCoefficientsFP32(), gpuGeometry.bedSlopesFP32());
-
+        float[] gpuResults = nativeSolver.solveManningGpuBatch(
+                gpuInitialGuess_expanded,
+                flatDischargeProfiles,
+                batchSize,
+                cellCount,
+                gpuGeometry.bottomWidthsFP32(),
+                gpuGeometry.sideSlopesFP32(),
+                gpuGeometry.manningCoefficientsFP32(),
+                gpuGeometry.bedSlopesFP32()
+        );
         // 5. Desempaquetar los resultados
         return unpackGpuResults(gpuResults, batchSize, cellCount);
     }
