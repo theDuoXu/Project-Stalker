@@ -1,6 +1,12 @@
 // manning_kernel.h
 #pragma once
 
+// Esto le dice a cualquier compilador de C++ (g++ o nvcc)
+// que debe usar enlace C (nombres limpios) para esta función.
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * Lanza el kernel de CUDA para resolver la ecuación de Manning para un lote completo.
  * Cada hilo de la GPU resuelve una única celda en un único paso de tiempo.
@@ -26,3 +32,9 @@ void launchManningKernel(
     int batchSize,
     int cellCount
 );
+
+// --- INICIO DE LA CORRECCIÓN ---
+#ifdef __cplusplus
+}
+#endif
+// --- FIN DE LA CORRECCIÓN ---

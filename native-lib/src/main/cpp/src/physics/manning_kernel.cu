@@ -126,7 +126,7 @@ __global__ void manningSolverKernel(
 // --- Función Lanzadora (Launcher) ---
 
 /**
- * Función C++ (Host) que configura y lanza el kernel de CUDA.
+ * Función C (Host) que configura y lanza el kernel de CUDA.
  */
 void launchManningKernel(
     float* d_results,
@@ -160,4 +160,5 @@ void launchManningKernel(
         totalThreads,
         cellCount
     );
+
 }

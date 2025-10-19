@@ -1,11 +1,7 @@
 // manning_solver.cpp
 
 #include "projectstalker/physics/manning_solver.h"
-// Forzamos al compilador de C++ a buscar los nombres C (sin mutilar)
-// de las funciones declaradas en este cabezal.
-extern "C" {
-    #include "projectstalker/physics/manning_kernel.h"
-}
+#include "projectstalker/physics/manning_kernel.h"
 #include <cuda_runtime.h>
 #include <iostream>
 #include <stdexcept>
