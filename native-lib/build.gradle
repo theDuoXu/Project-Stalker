@@ -1,5 +1,3 @@
-// native-lib/build.gradle (Final Correct Version)
-
 import projectstalker.build.CompileCudaTask
 
 plugins {
@@ -12,7 +10,7 @@ library {
     baseName = 'manning_solver'
 }
 
-// Librerías para JNI
+// Librerías para JNI y CUDA
 tasks.withType(CppCompile) {
     def javaHome = System.getenv("JAVA_HOME")
     if (javaHome) {
@@ -29,12 +27,37 @@ def compileCuda = tasks.register('compileCuda', CompileCudaTask) {
     description = 'Compila los archivos .cu en archivos objeto .o'
     group = 'build'
     sourceDir.set(project.file('src/main/cpp/src'))
+    // IMPORTANTE: Ponemos los .o en un directorio único
     outputDir.set(project.layout.buildDirectory.dir('obj/cuda'))
 }
 
-// 2. CONECTAR 🔗
-tasks.withType(LinkSharedLibrary) {
-    source.from(compileCuda.map { it.outputDir.files() })
-    linkerArgs.add("-L${cudaHome}/lib64")
-    linkerArgs.add('-lcudart')
+// 2. CONECTAR
+// ---
+// Obtenemos un 'Provider' que apuntará al archivo manning_kernel.o
+// Esto asume que tu CompileCudaTask SIEMPRE produce un archivo llamado 'manning_kernel.o'
+// ---
+def manningKernelObjectFile = compileCuda.map { task ->
+    // 'task' es tu CompileCudaTask
+    // 'outputDir' es la DirectoryProperty
+    // Buscamos el archivo .o específico dentro de ese directorio
+    task.outputDir.file("manning_kernel.o").get().asFile
+}
+
+// Configuramos las dependencias de enlace para *ambos* binarios (debug y release)
+library.binaries.configureEach { binary ->
+    // Obtenemos la tarea de enlace específica (ej. 'linkDebug')
+    def linkTask = binary.linkTask.get()
+
+    // --- LA CONEXIÓN CLAVE ---
+    // Añadimos el PATH ABSOLUTO a nuestro .o como un argumento
+    // directo para el enlazador (g++).
+    linkTask.linkerArgs.add(manningKernelObjectFile.map { it.absolutePath })
+    // --- FIN DE LA CONEXIÓN ---
+
+    // Añadimos las librerías de runtime de CUDA (como antes)
+    linkTask.linkerArgs.add("-L${cudaHome}/lib64")
+    linkTask.linkerArgs.add('-lcudart')
+
+    // Mantenemos la dependencia explícita
+    linkTask.dependsOn(compileCuda)
 }
