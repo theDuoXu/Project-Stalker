@@ -1,0 +1,1930 @@
+{
+    "response": {
+        "nombre": "CLOROFILA",
+        "tiposenal": "CL",
+        "unidad": "ppb",
+        "valores": [
+            {
+                "tag": "C325AI__18",
+                "tiempo": "02/10/2025 15:00",
+                "valor": 72.3,
+                "value_formateado": "72.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "02/10/2025 16:00",
+                "valor": 67.4,
+                "value_formateado": "67.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "02/10/2025 17:00",
+                "valor": 64.1,
+                "value_formateado": "64.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "02/10/2025 18:00",
+                "valor": 59.4,
+                "value_formateado": "59.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "02/10/2025 19:00",
+                "valor": 61.3,
+                "value_formateado": "61.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "02/10/2025 20:00",
+                "valor": 56.5,
+                "value_formateado": "56.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "02/10/2025 21:00",
+                "valor": 67.4,
+                "value_formateado": "67.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "02/10/2025 22:00",
+                "valor": 70.9,
+                "value_formateado": "70.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "02/10/2025 23:00",
+                "valor": 68,
+                "value_formateado": "68.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 00:00",
+                "valor": 70.9,
+                "value_formateado": "70.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 01:00",
+                "valor": 67.8,
+                "value_formateado": "67.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 02:00",
+                "valor": 82.4,
+                "value_formateado": "82.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 03:00",
+                "valor": 111.1,
+                "value_formateado": "111.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 04:00",
+                "valor": 77.3,
+                "value_formateado": "77.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 05:00",
+                "valor": 72.7,
+                "value_formateado": "72.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 06:00",
+                "valor": 70.9,
+                "value_formateado": "70.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 07:00",
+                "valor": 72.8,
+                "value_formateado": "72.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 08:00",
+                "valor": 75.3,
+                "value_formateado": "75.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 09:00",
+                "valor": 67,
+                "value_formateado": "67.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 10:00",
+                "valor": 65,
+                "value_formateado": "65.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 11:00",
+                "valor": 69.1,
+                "value_formateado": "69.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 12:00",
+                "valor": 69.1,
+                "value_formateado": "69.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 13:00",
+                "valor": 71.5,
+                "value_formateado": "71.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 14:00",
+                "valor": 82.3,
+                "value_formateado": "82.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 15:00",
+                "valor": 74.5,
+                "value_formateado": "74.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 16:00",
+                "valor": 75.5,
+                "value_formateado": "75.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 17:00",
+                "valor": 76.7,
+                "value_formateado": "76.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 18:00",
+                "valor": 78.3,
+                "value_formateado": "78.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 19:00",
+                "valor": 80.5,
+                "value_formateado": "80.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 20:00",
+                "valor": 83.9,
+                "value_formateado": "83.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 21:00",
+                "valor": 88.4,
+                "value_formateado": "88.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 22:00",
+                "valor": 97.1,
+                "value_formateado": "97.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "03/10/2025 23:00",
+                "valor": 97.7,
+                "value_formateado": "97.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 00:00",
+                "valor": 98.9,
+                "value_formateado": "98.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 01:00",
+                "valor": 103,
+                "value_formateado": "103.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 02:00",
+                "valor": 105.4,
+                "value_formateado": "105.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 03:00",
+                "valor": 111.4,
+                "value_formateado": "111.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 04:00",
+                "valor": 107.9,
+                "value_formateado": "107.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 05:00",
+                "valor": 101.2,
+                "value_formateado": "101.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 06:00",
+                "valor": 103.2,
+                "value_formateado": "103.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 07:00",
+                "valor": 105.2,
+                "value_formateado": "105.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 08:00",
+                "valor": 107.6,
+                "value_formateado": "107.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 09:00",
+                "valor": 106.1,
+                "value_formateado": "106.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 10:00",
+                "valor": 106.3,
+                "value_formateado": "106.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 11:00",
+                "valor": 107.6,
+                "value_formateado": "107.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 12:00",
+                "valor": 95.1,
+                "value_formateado": "95.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 13:00",
+                "valor": 99.5,
+                "value_formateado": "99.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 14:00",
+                "valor": 98.9,
+                "value_formateado": "98.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 15:00",
+                "valor": 88.2,
+                "value_formateado": "88.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 16:00",
+                "valor": 84.7,
+                "value_formateado": "84.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 17:00",
+                "valor": 85.9,
+                "value_formateado": "85.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 18:00",
+                "valor": 86,
+                "value_formateado": "86.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 19:00",
+                "valor": 87.7,
+                "value_formateado": "87.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 20:00",
+                "valor": 88.5,
+                "value_formateado": "88.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 21:00",
+                "valor": 94.3,
+                "value_formateado": "94.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 22:00",
+                "valor": 104.3,
+                "value_formateado": "104.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "04/10/2025 23:00",
+                "valor": 100.7,
+                "value_formateado": "100.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 00:00",
+                "valor": 92.4,
+                "value_formateado": "92.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 01:00",
+                "valor": 93.4,
+                "value_formateado": "93.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 02:00",
+                "valor": 95.4,
+                "value_formateado": "95.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 03:00",
+                "valor": 95,
+                "value_formateado": "95.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 04:00",
+                "valor": 95.2,
+                "value_formateado": "95.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 05:00",
+                "valor": 96.9,
+                "value_formateado": "96.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 06:00",
+                "valor": 98.2,
+                "value_formateado": "98.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 07:00",
+                "valor": 99.5,
+                "value_formateado": "99.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 08:00",
+                "valor": 99.9,
+                "value_formateado": "99.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 09:00",
+                "valor": 101.3,
+                "value_formateado": "101.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 10:00",
+                "valor": 104.8,
+                "value_formateado": "104.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 11:00",
+                "valor": 101.6,
+                "value_formateado": "101.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 12:00",
+                "valor": 104.6,
+                "value_formateado": "104.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 13:00",
+                "valor": 102.5,
+                "value_formateado": "102.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 14:00",
+                "valor": 110.4,
+                "value_formateado": "110.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 15:00",
+                "valor": 104.6,
+                "value_formateado": "104.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 16:00",
+                "valor": 114.5,
+                "value_formateado": "114.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 17:00",
+                "valor": 103.2,
+                "value_formateado": "103.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 18:00",
+                "valor": 106,
+                "value_formateado": "106.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 19:00",
+                "valor": 114.7,
+                "value_formateado": "114.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 20:00",
+                "valor": 121,
+                "value_formateado": "121.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 21:00",
+                "valor": 122.2,
+                "value_formateado": "122.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 22:00",
+                "valor": 113.9,
+                "value_formateado": "113.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "05/10/2025 23:00",
+                "valor": 112.6,
+                "value_formateado": "112.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 00:00",
+                "valor": 120.9,
+                "value_formateado": "120.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 01:00",
+                "valor": 116,
+                "value_formateado": "116.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 02:00",
+                "valor": 125.8,
+                "value_formateado": "125.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 03:00",
+                "valor": 125.7,
+                "value_formateado": "125.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 04:00",
+                "valor": 127.5,
+                "value_formateado": "127.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 05:00",
+                "valor": 116.5,
+                "value_formateado": "116.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 06:00",
+                "valor": 127.7,
+                "value_formateado": "127.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 07:00",
+                "valor": 118.1,
+                "value_formateado": "118.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 08:00",
+                "valor": 125.6,
+                "value_formateado": "125.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 09:00",
+                "valor": 155.5,
+                "value_formateado": "155.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 10:00",
+                "valor": 129.4,
+                "value_formateado": "129.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 11:00",
+                "valor": 129.7,
+                "value_formateado": "129.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 12:00",
+                "valor": 128.9,
+                "value_formateado": "128.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 13:00",
+                "valor": 128.5,
+                "value_formateado": "128.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 14:00",
+                "valor": 129.7,
+                "value_formateado": "129.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 15:00",
+                "valor": 130.5,
+                "value_formateado": "130.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 16:00",
+                "valor": 132.3,
+                "value_formateado": "132.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 17:00",
+                "valor": 152.8,
+                "value_formateado": "152.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 18:00",
+                "valor": 166.2,
+                "value_formateado": "166.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 19:00",
+                "valor": 196.1,
+                "value_formateado": "196.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 20:00",
+                "valor": 140.1,
+                "value_formateado": "140.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 21:00",
+                "valor": 138.9,
+                "value_formateado": "138.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 22:00",
+                "valor": 135.8,
+                "value_formateado": "135.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "06/10/2025 23:00",
+                "valor": 137.7,
+                "value_formateado": "137.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 00:00",
+                "valor": 138.6,
+                "value_formateado": "138.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 01:00",
+                "valor": 141.3,
+                "value_formateado": "141.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 02:00",
+                "valor": 142.8,
+                "value_formateado": "142.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 03:00",
+                "valor": 137.7,
+                "value_formateado": "137.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 04:00",
+                "valor": 139.4,
+                "value_formateado": "139.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 05:00",
+                "valor": 135.8,
+                "value_formateado": "135.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 06:00",
+                "valor": 136.2,
+                "value_formateado": "136.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 07:00",
+                "valor": 139.2,
+                "value_formateado": "139.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 08:00",
+                "valor": 141,
+                "value_formateado": "141.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 09:00",
+                "valor": 128.1,
+                "value_formateado": "128.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 10:00",
+                "valor": 127.2,
+                "value_formateado": "127.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 11:00",
+                "valor": 124,
+                "value_formateado": "124.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 12:00",
+                "valor": 123.3,
+                "value_formateado": "123.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 13:00",
+                "valor": 123.5,
+                "value_formateado": "123.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 14:00",
+                "valor": 132.1,
+                "value_formateado": "132.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 15:00",
+                "valor": 128.9,
+                "value_formateado": "128.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 16:00",
+                "valor": 131.8,
+                "value_formateado": "131.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 17:00",
+                "valor": 133.1,
+                "value_formateado": "133.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 18:00",
+                "valor": 132.5,
+                "value_formateado": "132.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 19:00",
+                "valor": 136.2,
+                "value_formateado": "136.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 20:00",
+                "valor": 130.8,
+                "value_formateado": "130.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 21:00",
+                "valor": 137.5,
+                "value_formateado": "137.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 22:00",
+                "valor": 138,
+                "value_formateado": "138.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "07/10/2025 23:00",
+                "valor": 138.3,
+                "value_formateado": "138.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 00:00",
+                "valor": 137.8,
+                "value_formateado": "137.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 01:00",
+                "valor": 157.5,
+                "value_formateado": "157.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 02:00",
+                "valor": 139.5,
+                "value_formateado": "139.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 03:00",
+                "valor": 142.4,
+                "value_formateado": "142.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 04:00",
+                "valor": 142.1,
+                "value_formateado": "142.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 05:00",
+                "valor": 141.7,
+                "value_formateado": "141.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 06:00",
+                "valor": 142.3,
+                "value_formateado": "142.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 07:00",
+                "valor": 139.6,
+                "value_formateado": "139.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 08:00",
+                "valor": 137,
+                "value_formateado": "137.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 09:00",
+                "valor": 135,
+                "value_formateado": "135.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 10:00",
+                "valor": 136.8,
+                "value_formateado": "136.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 11:00",
+                "valor": 137.6,
+                "value_formateado": "137.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 12:00",
+                "valor": 137.3,
+                "value_formateado": "137.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 13:00",
+                "valor": 136.8,
+                "value_formateado": "136.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 14:00",
+                "valor": 136.8,
+                "value_formateado": "136.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 15:00",
+                "valor": 135.3,
+                "value_formateado": "135.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 16:00",
+                "valor": 135.4,
+                "value_formateado": "135.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 17:00",
+                "valor": 135,
+                "value_formateado": "135.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 18:00",
+                "valor": 136.1,
+                "value_formateado": "136.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 19:00",
+                "valor": 138.2,
+                "value_formateado": "138.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 20:00",
+                "valor": 137,
+                "value_formateado": "137.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 21:00",
+                "valor": 148.4,
+                "value_formateado": "148.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 22:00",
+                "valor": 146.9,
+                "value_formateado": "146.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "08/10/2025 23:00",
+                "valor": 149.1,
+                "value_formateado": "149.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 00:00",
+                "valor": 151.6,
+                "value_formateado": "151.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 01:00",
+                "valor": 156,
+                "value_formateado": "156.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 02:00",
+                "valor": 153.9,
+                "value_formateado": "153.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 03:00",
+                "valor": 150.1,
+                "value_formateado": "150.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 04:00",
+                "valor": 146.9,
+                "value_formateado": "146.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 05:00",
+                "valor": 149.6,
+                "value_formateado": "149.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 06:00",
+                "valor": 158.6,
+                "value_formateado": "158.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 07:00",
+                "valor": 159.6,
+                "value_formateado": "159.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 08:00",
+                "valor": 161.4,
+                "value_formateado": "161.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 09:00",
+                "valor": 147,
+                "value_formateado": "147.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 10:00",
+                "valor": 144.1,
+                "value_formateado": "144.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 11:00",
+                "valor": 144.8,
+                "value_formateado": "144.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 12:00",
+                "valor": 142.7,
+                "value_formateado": "142.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 13:00",
+                "valor": 140.4,
+                "value_formateado": "140.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 14:00",
+                "valor": 139.1,
+                "value_formateado": "139.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 15:00",
+                "valor": 138.4,
+                "value_formateado": "138.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 16:00",
+                "valor": 139.5,
+                "value_formateado": "139.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 17:00",
+                "valor": 139.1,
+                "value_formateado": "139.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 18:00",
+                "valor": 137.4,
+                "value_formateado": "137.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 19:00",
+                "valor": 139.5,
+                "value_formateado": "139.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 20:00",
+                "valor": 136.4,
+                "value_formateado": "136.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 21:00",
+                "valor": 135.8,
+                "value_formateado": "135.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 22:00",
+                "valor": 138.3,
+                "value_formateado": "138.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "09/10/2025 23:00",
+                "valor": 139.8,
+                "value_formateado": "139.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 00:00",
+                "valor": 148.3,
+                "value_formateado": "148.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 01:00",
+                "valor": 144.9,
+                "value_formateado": "144.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 02:00",
+                "valor": 145.5,
+                "value_formateado": "145.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 03:00",
+                "valor": 160.2,
+                "value_formateado": "160.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 04:00",
+                "valor": 153.3,
+                "value_formateado": "153.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 05:00",
+                "valor": 154.2,
+                "value_formateado": "154.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 06:00",
+                "valor": 144.8,
+                "value_formateado": "144.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 07:00",
+                "valor": 139.4,
+                "value_formateado": "139.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 08:00",
+                "valor": 144.7,
+                "value_formateado": "144.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 09:00",
+                "valor": 145.2,
+                "value_formateado": "145.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 10:00",
+                "valor": 142,
+                "value_formateado": "142.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 11:00",
+                "valor": 139.3,
+                "value_formateado": "139.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 12:00",
+                "valor": 139.5,
+                "value_formateado": "139.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 13:00",
+                "valor": 137.8,
+                "value_formateado": "137.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 14:00",
+                "valor": 137.8,
+                "value_formateado": "137.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 15:00",
+                "valor": 136.9,
+                "value_formateado": "136.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 16:00",
+                "valor": 136.9,
+                "value_formateado": "136.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 17:00",
+                "valor": 137.1,
+                "value_formateado": "137.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 18:00",
+                "valor": 136.8,
+                "value_formateado": "136.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 19:00",
+                "valor": 147.7,
+                "value_formateado": "147.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 20:00",
+                "valor": 145.9,
+                "value_formateado": "145.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 21:00",
+                "valor": 148.3,
+                "value_formateado": "148.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 22:00",
+                "valor": 137.3,
+                "value_formateado": "137.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "10/10/2025 23:00",
+                "valor": 137.1,
+                "value_formateado": "137.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 00:00",
+                "valor": 138.7,
+                "value_formateado": "138.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 01:00",
+                "valor": 139.2,
+                "value_formateado": "139.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 02:00",
+                "valor": 141.8,
+                "value_formateado": "141.800",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 03:00",
+                "valor": 146.4,
+                "value_formateado": "146.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 04:00",
+                "valor": 143.4,
+                "value_formateado": "143.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 05:00",
+                "valor": 145.4,
+                "value_formateado": "145.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 06:00",
+                "valor": 144.1,
+                "value_formateado": "144.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 07:00",
+                "valor": 141.4,
+                "value_formateado": "141.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 08:00",
+                "valor": 142.5,
+                "value_formateado": "142.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 09:00",
+                "valor": 141.3,
+                "value_formateado": "141.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 10:00",
+                "valor": 141.9,
+                "value_formateado": "141.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 11:00",
+                "valor": 141.3,
+                "value_formateado": "141.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 12:00",
+                "valor": 142.5,
+                "value_formateado": "142.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 13:00",
+                "valor": 140.2,
+                "value_formateado": "140.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 14:00",
+                "valor": 135.7,
+                "value_formateado": "135.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 15:00",
+                "valor": 136.9,
+                "value_formateado": "136.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 16:00",
+                "valor": 136.4,
+                "value_formateado": "136.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 17:00",
+                "valor": 133.4,
+                "value_formateado": "133.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 18:00",
+                "valor": 131.6,
+                "value_formateado": "131.600",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 19:00",
+                "valor": 132.3,
+                "value_formateado": "132.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 20:00",
+                "valor": 135.3,
+                "value_formateado": "135.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 21:00",
+                "valor": 137.3,
+                "value_formateado": "137.300",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 22:00",
+                "valor": 141.7,
+                "value_formateado": "141.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "11/10/2025 23:00",
+                "valor": 136.1,
+                "value_formateado": "136.100",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 00:00",
+                "valor": 133.5,
+                "value_formateado": "133.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 01:00",
+                "valor": 130.7,
+                "value_formateado": "130.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 02:00",
+                "valor": 134.2,
+                "value_formateado": "134.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 03:00",
+                "valor": 130.7,
+                "value_formateado": "130.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 04:00",
+                "valor": 133.4,
+                "value_formateado": "133.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 05:00",
+                "valor": 132.4,
+                "value_formateado": "132.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 06:00",
+                "valor": 134.4,
+                "value_formateado": "134.400",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 07:00",
+                "valor": 134.2,
+                "value_formateado": "134.200",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 08:00",
+                "valor": 138.7,
+                "value_formateado": "138.700",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 09:00",
+                "valor": 134,
+                "value_formateado": "134.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 10:00",
+                "valor": 137.5,
+                "value_formateado": "137.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 11:00",
+                "valor": 134.5,
+                "value_formateado": "134.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 12:00",
+                "valor": 134.5,
+                "value_formateado": "134.500",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 13:00",
+                "valor": 134.9,
+                "value_formateado": "134.900",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            },
+            {
+                "tag": "C325AI__18",
+                "tiempo": "12/10/2025 14:00",
+                "valor": 134,
+                "value_formateado": "134.000",
+                "remota": "C325",
+                "tipo_consolidacion": "Un registro por hora"
+            }
+        ],
+        "ok": 1
+    }
+}
