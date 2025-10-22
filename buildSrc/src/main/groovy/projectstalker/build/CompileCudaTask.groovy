@@ -42,8 +42,15 @@ abstract class CompileCudaTask extends DefaultTask {
                 executable 'nvcc'
                 args(
                         '-c', // Compilar, no enlazar
-                        '-I' + project.file('src/main/cpp/include').absolutePath, // Añadir directorio de cabeceras
-                        '--compiler-options', '-fPIC', // Esencial para crear librerías compartidas (.so)
+                        '-I' + project.file('src/main/cpp/include').absolutePath,
+                        '--compiler-options', '-fPIC',
+
+                        // Genera código para tu GTX 1050 Ti (Pascal)
+//                        '-gencode=arch=compute_61,code=sm_61',
+
+                        // Genera código para tu objetivo de producción (Blackwell)
+                        '-gencode=arch=compute_100,code=sm_100',
+
                         sourceFile.absolutePath, // Archivo de entrada
                         '-o', objectFile.absolutePath // Archivo de salida
                 )
