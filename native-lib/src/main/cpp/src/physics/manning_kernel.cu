@@ -59,13 +59,13 @@ __device__ inline float device_calculate_dQ_dH(float H, float b, float m, float 
  * __global__: El kernel de CUDA. Cada hilo ejecuta esta función.
  */
 __global__ void manningSolverKernel(
-    float* d_results,
-    const float* d_initialDepths,
-    const float* d_targetDischarges,
-    const float* d_bottomWidths,
-    const float* d_sideSlopes,
-    const float* d_manningCoeffs,
-    const float* d_bedSlopes,
+    float* __restrict__ d_results,
+    const float* __restrict__ d_initialDepths,
+    const float* __restrict__ d_targetDischarges,
+    const float* __restrict__ d_bottomWidths,
+    const float* __restrict__ d_sideSlopes,
+    const float* __restrict__ d_manningCoeffs,
+    const float* __restrict__ d_bedSlopes,
     int totalThreads,
     int cellCount
 ) {
