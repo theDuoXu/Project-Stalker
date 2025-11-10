@@ -1,7 +1,6 @@
 import requests
 import json
 
-# ¡La URL correcta! Capturada directamente desde el navegador.
 # Esta es la llamada para cargar el contenido de la pestaña "Datos en Tiempo Real".
 data_index_url = "https://saihtajo.chtajo.es/index.php?w=get-datos-tiempo-real&x=/ikP2Tzu5snbTbvdgFM6UPHznWfZJNqv//htQaodWed9MOiOUMSrxG3IfBAf8XkShYmEufaflrhH5rVxmTy+5MySySeMsbGEXfsf9VvEDoyiS3wMAWIqrRLZHnPb80FO"
 
@@ -20,7 +19,7 @@ try:
 
     print("✅ ¡Éxito! Índice de datos recibido.")
 
-    # Guardamos este JSON. Este es el mapa del tesoro definitivo.
+    # Guardamos este JSON.
     output_filename = 'station_index_response.json'
     with open(output_filename, 'w', encoding='utf-8') as f:
         json.dump(data_index, f, ensure_ascii=False, indent=4)
@@ -30,8 +29,6 @@ except requests.exceptions.RequestException as e:
     print(f"❌ Error al realizar la petición: {e}")
     exit()
 
-
-# --- Ahora, a explorar el tesoro ---
 
 print(f"\n2. Explora el fichero '{output_filename}'.")
 print("   Dentro de este JSON, encontrarás la jerarquía completa:")
