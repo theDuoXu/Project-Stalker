@@ -1,0 +1,1295 @@
+openapi: 3.1.0
+
+# ---
+# INFORMACIÓN BÁSICA
+# ---
+info:
+  title: "API - DSS Inferencia de Vertidos"
+  description: |-
+    API REST para el Sistema de Soporte a la Decisión (DSS) para la Inferencia de Vertidos en Ríos.
+    Esta API sirve como el backend único (OE6) para ser consumida por la aplicación de escritorio JavaFX (OE5).
+    Expone:
+    1. Predicciones del modelo DeepONet.
+    2. Gestión y ejecución del "Gemelo Digital" (Simulador HPC).
+    3. Consulta de datos de sensores y históricos.
+    4. Administración del sistema (usuarios y gemelos).
+  contact:
+    name: "Duo Xu Ye (Líder de Proyecto)"
+    email: "duo@pemail.es"
+  version: "0.1.0-draft" # Es un borrador inicial
+
+# ---
+# SERVIDORES
+# ---
+servers:
+  - url: "http://localhost:8069/api/v1"
+    description: "Servidor de desarrollo local (FastAPI)"
+  - url: "http://127.0.0.1:4010/api/v1"
+    description: "Servidor MOCK (Prism) para desarrollo de JavaFX"
+  - url: "https://api.protonenergyindustries.com/stalker/api/v1"
+    description: "Servidor de Producción (VPS)"
+
+# ---
+# ETIQUETAS
+# ---
+tags:
+  - name: "Autenticación"
+    description: "Autenticación de usuarios y gestión de tokens (RF-01)"
+  - name: "Configuración"
+    description: "Endpoints para obtener datos estáticos (sensores, mapas) al iniciar la app"
+  - name: "Sensores y Datos"
+    description: "Obtención de datos en tiempo real e históricos de sensores y alertas (RF-OP)"
+  - name: "Inferencia (DeepONet)"
+    description: "Solicitud de 'Mapas de Calor' al modelo DeepONet (RF-OP-06)"
+  - name: "Simulador (Gemelo Digital)"
+    description: "Gestión de ejecuciones de simulación (RF-OP-07, RF-ADMIN-02)"
+  - name: "Administración"
+    description: "Gestión de usuarios y Gemelos Digitales (RF-ADMIN)"
+
+# ---
+# SEGURIDAD
+# ---
+components:
+  securitySchemes:
+    # Usaremos OAuth2 (con JWTs) como estándar. El endpoint https://auth.protonenergyindustries.com/token lo implementará.
+    OAuth2PasswordBearer:
+      type: oauth2
+      description: "Autenticación estándar de OAuth2. El cliente (JavaFX) pide un token en '/token' y lo usa en las cabeceras."
+      flows:
+        password:
+          tokenUrl: "https://auth.protonenergyindustries.com/token" # El endpoint que la app usará para loguearse
+          scopes:
+            # Los roles del RF-02 y RNF-05
+            operador: "Acceso estándar para visualización y ejecución de simulaciones pre-configuradas."
+            administrador: "Acceso completo para crear/modificar Gemelos Digitales y gestionar usuarios."
+
+  # ---
+  # ESQUEMAS (Modelos de datos reutilizables)
+  # ---
+  schemas:
+    # --- Modelos de Autenticación ---
+    Token:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: "El token JWT para usar en las cabeceras."
+        token_type:
+          type: string
+          example: "bearer"
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+          example: "hhector"
+        email:
+          type: string
+          format: email
+          example: "hector.hernandez@pemail.es"
+        rol:
+          type: string
+          enum: [ operador, administrador ]
+          example: "operador"
+
+    # --- Modelos de Configuración y Datos ---
+    Sensor:
+      type: object
+      description: "Represents a single sensor station."
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Aranjuez Station"
+        status:
+          type: string
+          enum: [ online, offline, alert ]
+          example: "online"
+        location:
+          type: object
+          properties:
+            latitude:
+              type: number
+              example: 40.030
+            longitude:
+              type: number
+              example: -3.602
+        metadata:
+          type: object
+          description: "Static metadata about the sensor (e.g., model, installation date)."
+        currentReading:
+          description: "The most recent data snapshot from the sensor."
+          oneOf:
+            - $ref: "#/components/schemas/CurrentReading"
+            - type: "null"
+
+    CurrentReading:
+      type: object
+      description: "A snapshot of the most recent reading from a sensor."
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: "The timestamp of this specific reading."
+        parameters:
+          type: object
+          description: "A dynamic map of measured parameters (magnitudes) to their values. Only includes parameters the sensor actually measures."
+          # 'additionalProperties' es la sintaxis de OpenAPI para definir un "mapa"
+          # de clave-valor (String -> Number)
+          additionalProperties:
+            type: number
+            format: float
+          example:
+            # Un sensor A puede devolver esto:
+            ph: 7.42
+            temperature: 19.5
+            ammonia: 0.03
+            # Mientras un sensor B puede devolver esto:
+            # { "conductivity": 1150.0, "turbidity": 5.2 }
+
+    HistoricSensorReading:
+      type: object
+      description: "A single data point for one parameter from a sensor's time-series history. Used for plotting graphs."
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        value:
+          type: number
+          format: float
+        parameter:
+          type: string
+          description: "The type of parameter measured (e.g., 'ph', 'temperature')."
+          example: "ph"
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        timestamp_start:
+          type: string
+          format: date-time
+        sensor_id:
+          type: string
+          format: uuid
+        message:
+          type: string
+          example: "Anomalía detectada en pH (Valor: 8.5)"
+
+    # --- Modelos de Inferencia y Simulación ---
+    InferenceRequest:
+      type: object
+      description: "Cuerpo de la petición para solicitar una inferencia al DeepONet."
+      properties:
+        timestamp_inicio:
+          type: string
+          format: date-time
+          description: "Inicio de la ventana temporal de datos de sensor a analizar."
+        timestamp_fin:
+          type: string
+          format: date-time
+          description: "Fin de la ventana temporal."
+        sensores_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: "Lista de IDs de sensores a incluir en la inferencia."
+
+    InferenceResult:
+      type: object
+      description: "El resultado completo de la inferencia del DeepONet, incluyendo los hotspots y el mapa de calor GeoJSON."
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "ID único de esta inferencia completada."
+        timestamp_gen:
+          type: string
+          format: date-time
+          description: "Fecha y hora en que se completó el cálculo."
+        # Es útil devolver los parámetros con los que se pidió
+        request_params:
+          $ref: "#/components/schemas/InferenceRequest"
+
+        # 1. EL RESUMEN (Para la UI)
+        summary:
+          type: object
+          properties:
+            main_massage:
+              type: string
+              example: "Vertido de alta probabilidad (92%) detectado cerca de Aranjuez."
+            probable_zones:
+              type: array
+              description: "Una lista corta (ej. Top 3) de los puntos de mayor probabilidad."
+              items:
+                $ref: "#/components/schemas/ProbableZone"
+
+        # 2. EL MAPA COMPLETO (Para renderizar)
+        geojson_heat_map:
+          type: object
+          description: "Colección de puntos (GeoJSON FeatureCollection) que representa el mapa de calor probabilístico sobre el río."
+          # Esto define la estructura de un GeoJSON FeatureCollection
+          properties:
+            type:
+              type: string
+              example: "FeatureCollection"
+            features:
+              type: array
+              items:
+                $ref: "#/components/schemas/HeatMapPoint"
+
+    ProbableZone:
+      type: object
+      description: "Describe un 'hotspot' o zona de alta probabilidad para el resumen."
+      properties:
+        zone_name:
+          type: string
+          example: "Tramo Aranjuez (Km 45.2)"
+        probability:
+          type: number
+          format: float
+          example: 0.92
+          description: "Probabilidad (0.0 a 1.0) de que esta sea la zona de origen."
+        est_intensity:
+          type: number
+          format: float
+          example: 15.5
+          description: "Intensidad estimada del vertido (ej. en kg o L/s, según defina el modelo)."
+        latitud:
+          type: number
+          example: 40.030
+        longitud:
+          type: number
+          example: -3.602
+
+    HeatMapPoint:
+      type: object
+      description: "Un 'Feature' de GeoJSON que representa un punto en el mapa de calor."
+      properties:
+        type:
+          type: string
+          example: "Feature"
+        geometry:
+          type: object
+          properties:
+            type:
+              type: string
+              example: "Point"
+            coordinates:
+              type: array
+              items:
+                type: number
+              example: [ -3.602, 40.030 ] # Formato [longitud, latitud]
+        properties:
+          type: object
+          properties:
+            # Esta es la propiedad clave que la UI usará para colorear el mapa
+            probabilidad:
+              type: number
+              format: float
+              example: 0.75
+
+    DigitalTwin:
+      type: object
+      description: "Define un 'Gemelo Digital' (un río o tramo) (RF-ADMIN-02). Representa el plano maestro inmutable de la morfología de un río."
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "ID único del Gemelo Digital."
+        nombre:
+          type: string
+          example: "Tramo Tajo (Aranjuez - Toledo)"
+          description: "Nombre legible por humanos para este Gemelo Digital."
+        descripcion:
+          type: string
+          description: "Descripción opcional."
+        configuracion:
+          $ref: "#/components/schemas/RiverConfig"
+
+    RiverConfig:
+      type: object
+      description: "Parámetros de configuración para la generación procedural de un río (basado en el record RiverConfig)."
+      properties:
+        # --- Parámetros de Generación Procedural ---
+        seed:
+          type: integer
+          format: int64
+          description: "Semilla para la generación de ruido, para resultados reproducibles."
+        noiseFrequency:
+          type: number
+          format: float
+          description: "Controla el nivel de detalle y la escala de las características del ruido."
+        detailNoiseFrequency:
+          type: number
+          format: float
+          description: "Frecuencia del ruido para variaciones a pequeña escala, celda a celda."
+        zoneNoiseFrequency:
+          type: number
+          format: float
+          description: "Frecuencia del ruido para características a gran escala (zonas de rápidos, remansos)."
+
+        # --- Parámetros Geométricos ---
+        totalLength:
+          type: number
+          format: double
+          description: "Longitud total del río en metros."
+        spatialResolution:
+          type: number
+          format: double
+          description: "Resolución espacial (dx) en metros."
+        initialElevation:
+          type: number
+          format: double
+          description: "Altitud inicial del río en metros."
+        concavityFactor:
+          type: number
+          format: double
+          description: "Controla la variación de la pendiente del río en función de la posición."
+        averageSlope:
+          type: number
+          format: double
+          description: "Pendiente media del río (adimensional, ej: 0.001 para 1m de caída cada km)."
+        slopeVariability:
+          type: number
+          format: double
+          description: "Factor de variabilidad para la pendiente (adimensional)."
+        baseWidth:
+          type: number
+          format: double
+          description: "Ancho base del fondo del río en metros."
+        widthVariability:
+          type: number
+          format: double
+          description: "Variación máxima del ancho en metros (ej: 5.0 para +/- 5m)."
+        baseSideSlope:
+          type: number
+          format: double
+          description: "Pendiente base de los taludes (adimensional)."
+        sideSlopeVariability:
+          type: number
+          format: double
+          description: "Variación máxima de la pendiente de los taludes."
+
+        # --- Parámetros Hidráulicos ---
+        baseManning:
+          type: number
+          format: double
+          description: "Coeficiente de Manning base."
+        manningVariability:
+          type: number
+          format: double
+          description: "Variación máxima del coeficiente de Manning."
+
+        # --- Parámetros de Reacción ---
+        baseDecayRateAt20C:
+          type: number
+          format: double
+          description: "Coeficiente de reacción/descomposición base (k) a 20°C, en unidades de s⁻¹."
+        decayRateVariability:
+          type: number
+          format: double
+          description: "Variación máxima del coeficiente de reacción."
+
+        # --- Parámetros de Calidad de Agua (Temporales) ---
+        baseTemperature:
+          type: number
+          format: double
+          description: "Temperatura media diaria del agua en grados Celsius (°C)."
+        dailyTempVariation:
+          type: number
+          format: double
+          description: "Amplitud de la variación diaria de temperatura en °C (ej: 3.0 para +/- 3°C)."
+        seasonalTempVariation:
+          type: number
+          format: double
+          description: "Amplitud máxima de la variación anual de temperatura."
+        averageAnnualTemperature:
+          type: number
+          format: double
+          description: "Media de temperatura anual."
+        basePh:
+          type: number
+          format: double
+          description: "pH base del agua (ej: 7.5)."
+        phVariability:
+          type: number
+          format: double
+          description: "Variación máxima del pH a lo largo del río."
+
+        # --- Parámetros de Modelo de Temperatura Espacial ---
+        maxHeadwaterCoolingEffect:
+          type: number
+          format: double
+          description: "Enfriamiento máximo en la cabecera del río (nacimiento) en °C."
+        headwaterCoolingDistance:
+          type: number
+          format: double
+          description: "Distancia en metros sobre la cual el efecto de enfriamiento de la cabecera se disipa."
+        widthHeatingFactor:
+          type: number
+          format: double
+          description: "Factor que determina cuánto se calienta el agua en tramos anchos y llanos."
+        slopeCoolingFactor:
+          type: number
+          format: double
+          description: "Factor que determina cuánto se enfría el agua en tramos de alta pendiente (rápidos)."
+        temperatureNoiseAmplitude:
+          type: number
+          format: double
+          description: "Amplitud de la variación aleatoria de la temperatura en °C para simular efectos locales."
+
+    RiverGeometry:
+      type: object
+      description: "Plano maestro inmutable de la morfología de un río, basado en la clase RiverGeometry. Contiene todos los parámetros físicos y estáticos del cauce, celda por celda."
+      properties:
+        cellCount:
+          type: integer
+          description: "El número total de celdas del río."
+          example: 1000
+        dx:
+          type: number
+          format: double
+          description: "La longitud de cada celda en metros."
+          example: 50.0
+        elevationProfile:
+          type: array
+          items:
+            type: number
+            format: double
+          description: "Array con la altitud del fondo del cauce para cada celda."
+        bottomWidth:
+          type: array
+          items:
+            type: number
+            format: double
+          description: "Array con el ancho del fondo del cauce para cada celda."
+        sideSlope:
+          type: array
+          items:
+            type: number
+            format: double
+          description: "Array con la pendiente de los taludes laterales (adimensional)."
+        manningCoefficient:
+          type: array
+          items:
+            type: number
+            format: double
+          description: "Array con el coeficiente de rugosidad de Manning."
+        baseDecayCoefficientAt20C:
+          type: array
+          items:
+            type: number
+            format: double
+          description: "Array con el coeficiente de decaimiento base a 20°C."
+        phProfile:
+          type: array
+          items:
+            type: number
+            format: double
+          description: "Array con el perfil de pH base del río."
+        sectionTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/RiverSectionType"
+          description: "Array con los tipos de sección/evento geológico del río."
+
+    SimulationConfig:
+      type: object
+      description: "Contenedor principal para todas las configuraciones de una simulación."
+      properties:
+        riverConfig:
+          $ref: "#/components/schemas/RiverConfig"
+        seed:
+          type: integer
+          format: int64
+          description: "Semilla principal para todos los generadores de ruido de la simulación."
+        flowConfig:
+          $ref: "#/components/schemas/FlowConfig"
+        totalTime:
+          type: number
+          format: float
+          description: "Configuración temporal del simulador (tiempo total)."
+        deltaTime:
+          type: number
+          format: float
+          description: "Paso de tiempo (Δt) de la simulación."
+        useGpuAccelerationOnManning:
+          type: boolean
+          description: "Utiliza aceleración CUDA para estimar la velocidad y la profundidad del agua."
+        useGpuAccelerationOnTransport:
+          type: boolean
+          description: "Utiliza aceleración CUDA para estimar las soluciones EDP advección difusión reacción."
+        cpuTimeBatchSize:
+          type: integer
+          description: "Número de pasos de tiempo (Δt) que se agrupan y se pasan a la GPU para cómputo en un solo lote."
+        cpuProcessorCount:
+          type: integer
+          description: "Número de núcleos CPU a utilizar en simulaciones CPU."
+
+    FlowConfig:
+      type: object
+      description: "Define los parámetros para el generador de caudal de entrada."
+      properties:
+        baseDischarge:
+          type: number
+          format: double
+          description: "Caudal promedio o base sobre el cual se aplican las variaciones."
+        noiseAmplitude:
+          type: number
+          format: double
+          description: "Magnitud máxima de la variación sobre el caudal base."
+        noiseFrequency:
+          type: number
+          format: float
+          description: "Frecuencia de la variación (valores bajos para cambios lentos)."
+
+    RiverSectionType:
+      type: string
+      description: "Tipos de secciones geológicas o estructurales del río."
+      # He asumido algunos valores basados en el contexto de tu código.
+      enum:
+        - NATURAL
+        - LANDSLIDE
+        - TECTONIC_UPLIFT
+        - SUBSIDENCE
+        - NATURAL_DAM
+        - DAM_STRUCTURE
+        - RESERVOIR
+
+    Simulation:
+      type: object
+      description: "Represents the status and metadata of a single simulation job."
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: "The unique ID for this simulation job."
+        digitalTwinId:
+          type: string
+          format: uuid
+          description: "The ID of the Digital Twin (GemeloDigital) being used."
+        status:
+          type: string
+          enum: [ PENDING, RUNNING, COMPLETED, FAILED ]
+          description: "The current status of the simulation job."
+        createdAt:
+          type: string
+          format: date-time
+          description: "The timestamp when the simulation was requested."
+        finishedAt:
+          type: string
+          format: date-time
+          description: "The timestamp when the simulation finished (null if running)."
+          oneOf:
+            - type: "null"
+            - type: string
+              format: date-time
+
+    RiverState:
+      type: object
+      description: "Una instantánea inmutable del estado físico-químico completo del río en un instante 't'."
+      properties:
+        waterDepth:
+          type: array
+          items:
+            type: number
+            format: double
+          description: "Array con la profundidad del agua (H) en cada celda [m]."
+        velocity:
+          type: array
+          items:
+            type: number
+            format: double
+          description: "Array con la velocidad del agua (v) en cada celda [m/s]."
+        temperature:
+          type: array
+          items:
+            type: number
+            format: double
+          description: "Array con la temperatura del agua (T) en cada celda [°C]."
+        ph:
+          type: array
+          items:
+            type: number
+            format: double
+          description: "Array con el pH del agua en cada celda."
+
+    ManningSimulationResult:
+      type: object
+      description: "Encapsula el resultado completo de una ejecución de la simulación hidrológica (Manning)."
+      properties:
+        geometry:
+          description: "La geometría del río sobre la cual se ejecutó la simulación."
+          $ref: "#/components/schemas/RiverGeometry"
+        states:
+          type: array
+          description: "Una lista cronológica de los estados del río, donde cada estado representa un paso de tiempo."
+          items:
+            $ref: "#/components/schemas/RiverState"
+        simulationTime:
+          type: integer
+          format: int64
+          description: "El tiempo que ha durado la simulación (ej. en milisegundos)."
+
+    HTTPError:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: "Mensaje de error."
+
+    SpillCensusGeoJSON:
+      type: object
+      description: "Un 'FeatureCollection' de GeoJSON que contiene la lista de vertidos autorizados."
+      properties:
+        type:
+          type: string
+          enum: [ FeatureCollection ]
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpillCensusFeature"
+
+    SpillCensusFeature:
+      type: object
+      description: "Un único punto de vertido autorizado, representado como un 'Feature' de GeoJSON."
+      properties:
+        type:
+          type: string
+          enum: [ Feature ]
+        geometry:
+          $ref: "#/components/schemas/GeoJsonPoint"
+        properties:
+          $ref: "#/components/schemas/SpillCensusProperties"
+
+    GeoJsonPoint:
+      type: object
+      description: "Una geometría de tipo 'Point' (Longitud, Latitud) estándar de GeoJSON."
+      properties:
+        type:
+          type: string
+          enum: [ Point ]
+        coordinates:
+          type: array
+          items:
+            type: number
+            format: double
+          minItems: 2
+          maxItems: 2
+          example: [ -3.602, 40.030 ] # [Longitud, Latitud]
+
+    SpillCensusProperties:
+      type: object
+      description: "Las propiedades (datos) de un punto de vertido del censo."
+      properties:
+        # --- Datos del Censo (traducidos a inglés) ---
+        name:
+          type: string
+          description: "NOMBRE DEL VERTIDO"
+        owner:
+          type: string
+          description: "TITULAR"
+        municipality:
+          type: string
+          description: "MUNICIPIO DEL VERTIDO"
+        province:
+          type: string
+          description: "PROVINCIA VERTIDO"
+        medium:
+          type: string
+          description: "MEDIO"
+        receiver:
+          type: string
+          description: "RECEPTOR"
+        spillNature:
+          type: string
+          description: "NATURALEZA DEL VERTIDO"
+        spillCharacteristics:
+          type: string
+          description: "CARACT. DEL VERTIDO"
+        volumePerYear:
+          type: number
+          format: double
+          description: "VOLUMEN (m3/año)"
+        receiverNature:
+          type: string
+          description: "NATURALEZA M.RECEPTOR"
+        reference:
+          type: string
+          description: "REF. EXPED."
+
+        # --- Coordenadas UTM originales (para referencia) ---
+        utmX:
+          type: number
+          format: double
+          description: "UTM X Huso 30"
+        utmY:
+          type: number
+          format: double
+          description: "UTM Y Huso 30"
+        utmZone:
+          type: integer
+          description: "Huso UTM"
+          example: 30
+
+# Define la seguridad global para todos los endpoints
+security:
+  - OAuth2PasswordBearer: [ ] # Todos los endpoints requieren autenticación por defecto
+
+
+# ---
+# PATHS (Los Endpoints de la API)
+# ---
+paths:
+  # --- Tag: Seguridad ---
+  /auth/me:
+    get:
+      tags:
+        - "Autenticación" # (O "Authentication")
+      summary: "Get current authenticated user"
+      description: "Returns the complete User object for the currently authenticated user (identified by the token). This is used by the client to determine the user's role."
+      security:
+        # Requiere cualquier token válido. El scope se determina en el servidor.
+        - OAuth2PasswordBearer: [ ]
+      responses:
+        "200":
+          description: "The current user's data."
+          content:
+            application/json:
+              schema:
+                # Devuelve el objeto User que ya definimos
+                $ref: "#/components/schemas/User"
+        "401":
+          description: "Unauthorized. The token is invalid, expired, or was not provided."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPError"
+
+  # --- Tag: Configuración ---
+
+  /config/sensors:
+    get:
+      tags:
+        - "Configuración"
+      summary: "Obtener lista de todos los sensores (RF-OP-02)"
+      description: "La app JavaFX llamará a esto al inicio para poblar el mapa."
+      security:
+        - OAuth2PasswordBearer: [ operador ] # Requiere al menos rol operador
+      responses:
+        "200":
+          description: "Una lista de todos los sensores configurados."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Sensor"
+
+  /config/authorized_spills:
+    get:
+      tags:
+        - "Configuración"
+      summary: "Obtener Censo de Vertidos Autorizados (OE2)"
+      description: "Devuelve los +1800 puntos de vertido autorizados como un GeoJSON."
+      security:
+        - OAuth2PasswordBearer: [ operador ]
+      responses:
+        "200":
+          description: "Un FeatureCollection de GeoJSON con todos los puntos de vertido."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpillCensusGeoJSON"
+
+  # --- Tag: Sensores y Datos ---
+
+  /sensors/status:
+    get:
+      tags:
+        - "Sensors and data"
+      summary: "Get current sensor status (RF-OP-02)"
+      description: "Returns the list of sensors with their most recent status (Online/Offline/Alert) and the latest reading."
+      security:
+        - OAuth2PasswordBearer: [ operador ]
+      responses:
+        "200":
+          description: "A list of sensors with their updated status and readings."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Sensor"
+
+  /sensors/status/{sensorId}:
+    get:
+      tags:
+        - "Sensors and Data"
+      summary: "Get current status for a single sensor"
+      description: "Returns the complete Sensor object, including its current status and latest reading, for a specific sensor ID."
+      security:
+        - OAuth2PasswordBearer: [ operador ]
+
+      # --- Parámetros de la URL ---
+      parameters:
+        - in: path
+          name: sensorId
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: "The ID of the sensor to retrieve."
+
+      # --- Respuestas Posibles ---
+      responses:
+        "200":
+          description: "Successful retrieval of the sensor's current state."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sensor"
+        "404":
+          description: "Sensor not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPError"
+
+  /sensors/{sensorId}/history:
+    get:
+      tags:
+        - "Sensores y Datos"
+      summary: "Obtener datos históricos de un sensor (RF-OP-03)"
+      description: "Obtiene las series temporales de un sensor para los gráficos de JavaFX."
+      security:
+        - OAuth2PasswordBearer: [ operador ]
+      parameters:
+        - in: path
+          name: sensorId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: parametro
+          schema:
+            type: string
+            description: "Filtrar por 'ph', 'temperatura', etc."
+        - in: query
+          name: start_date
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: end_date
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: "Serie temporal de datos del sensor."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HistoricSensorReading"
+
+
+  /alerts:
+    get:
+      tags:
+        - "Sensores y Datos"
+      summary: "Consultar histórico de alertas (RF-OP-05)"
+      security:
+        - OAuth2PasswordBearer: [ operador ]
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: "Lista de alertas pasadas."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+
+  # --- Tag: Inferencia (DeepONet) ---
+
+  /infer:
+    post:
+      tags:
+        - "Inferencia (DeepONet)"
+      summary: "Solicitar nueva inferencia (Mapa de Calor) (RF-OP-06)"
+      description: "Envía una ventana de datos de sensor al backend para que el DeepONet genere un mapa de calor. Es una operación asíncrona."
+      security:
+        - OAuth2PasswordBearer: [ operador ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InferenceRequest"
+      responses:
+        "202": # 202 Accepted (Aceptado) - La tarea se ha encolado
+          description: "Inferencia encolada. Usa el 'id' para consultar el resultado."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id_inferencia:
+                    type: string
+                    format: uuid
+
+  /infer/{inferenceId}:
+    get:
+      tags:
+        - "Inferencia (DeepONet)"
+      summary: "Obtener resultado de una inferencia (RF-OP-06)"
+      description: "Sondea este endpoint para obtener el mapa de calor una vez que esté listo."
+      security:
+        - OAuth2PasswordBearer: [ operador ]
+      parameters:
+        - in: path
+          name: inferenceId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200": # OK - El resultado está listo
+          description: "Mapa de calor generado."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InferenceResult"
+        "202": # Accepted - Aún no está listo
+          description: "La inferencia sigue procesándose."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  estado:
+                    type: string
+                    example: "PROCESANDO"
+
+  # --- Tag: Simulador (Gemelo Digital) ---
+
+  /simulations/manning:
+    post:
+      tags:
+        - "Simulador (Gemelo Digital)"
+      summary: "Launch new simulation (RF-OP-07)"
+      description: "An Operator launches a simulation on a pre-configured Digital Twin, providing execution and scenario parameters."
+      security:
+        - OAuth2PasswordBearer: [ operador ]
+      requestBody:
+        description: "Lanza una simulación hidrológica (Manning) sobre un Gemelo Digital."
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                gemelo_id:
+                  type: string
+                  format: uuid
+                  description: "ID of the pre-configured GemeloDigital (which contains the RiverConfig)."
+
+                # Los Parámetros de Ejecución (de SimulationConfig.java)
+                seed:
+                  type: integer
+                  format: int64
+                  description: "Main seed for the simulation's noise generators."
+                flowConfig:
+                  $ref: "#/components/schemas/FlowConfig"
+                totalTime:
+                  type: number
+                  format: float
+                deltaTime:
+                  type: number
+                  format: float
+                useGpuAccelerationOnManning:
+                  type: boolean
+                  description: "Use CUDA acceleration for water depth/velocity."
+
+                cpuTimeBatchSize:
+                  type: integer
+                cpuProcessorCount:
+                  type: integer
+      responses:
+        # --- Respuesta Exitosa (202) ---
+        "202":
+          description: "Simulation successfully queued. The response body is the simulation 'ticket' or 'receipt'."
+          content:
+            application/json:
+              schema:
+                # Devuelve el objeto "ticket" que acabamos de definir
+                $ref: "#/components/schemas/Simulation"
+
+        # --- Respuestas de Error Comunes ---
+        "400":
+          description: "Bad Request. The simulation parameters (e.g., FlowConfig) are invalid."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPError"
+        "404":
+          description: "Not Found. The 'gemelo_id' provided does not exist."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPError"
+
+
+  /simulations/manning/{simulationId}:
+    get:
+      tags:
+        - "Simulador (Gemelo Digital)"
+      summary: "Get simulation status or result"
+      description: " Poll this endpoint to get the status of a simulation.
+        - Returns 202 (Accepted) if the job is PENDING or RUNNING.
+        - Returns 200 (OK) with the full ManningSimulationResult if the job is COMPLETED."
+
+      security:
+        - OAuth2PasswordBearer: [ operador ]
+
+      parameters:
+        - in: path
+          name: simulationId
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: "The ID of the simulation job to check."
+
+      responses:
+        # --- Respuesta 200: Simulación COMPLETADA ---
+        "200":
+          description: "Simulation completed successfully. The full hydrological result (Manning) is returned."
+          content:
+            application/json:
+              schema:
+                # Devuelve el objeto con los datos del resultado
+                $ref: "#/components/schemas/ManningSimulationResult"
+
+        # --- Respuesta 202: Simulación EN PROCESO ---
+        "202":
+          description: "Simulation is still PENDING or RUNNING. The client should poll again."
+          content:
+            application/json:
+              schema:
+                # Devuelve el "ticket" con el estado actual
+                $ref: "#/components/schemas/Simulation"
+
+        # --- Respuesta 404: No encontrado ---
+        "404":
+          description: "Not Found. The simulation ID does not exist."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPError"
+
+    delete:
+      tags:
+        - "Simulador (Gemelo Digital)"
+      summary: "Cancel a simulation"
+      description: "Requests to cancel a simulation that is currently in PENDING or RUNNING state."
+      security:
+        - OAuth2PasswordBearer: [ operador ]
+      parameters:
+        - in: path
+          name: simulationId
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: "The ID of the simulation job to cancel."
+      responses:
+        "204":
+          description: "Simulation successfully cancelled (No Content)."
+        "404":
+          description: "Not Found. The simulation ID does not exist."
+        "409":
+          description: "Conflict. The simulation is already COMPLETED or FAILED and cannot be cancelled."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPError"
+
+  # --- Tag: Administración ---
+
+  /admin/twins:
+    get: # Listar todos
+      tags:
+        - "Administración"
+      summary: "CRUD de Gemelos Digitales (RF-ADMIN-02)"
+      description: "Endpoints solo para Administradores para gestionar las definiciones de los ríos."
+      security:
+        - OAuth2PasswordBearer: [ administrador ]
+      responses:
+        "200":
+          description: "Lista de todos los Gemelos Digitales."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DigitalTwin"
+    post: # Crear nuevo
+      security:
+        - OAuth2PasswordBearer: [ administrador ]
+      requestBody:
+        description: "Definición completa del nuevo Gemelo Digital (RF-ADMIN-03)."
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DigitalTwin" # El 'id' se puede omitir
+      responses:
+        "201":
+          description: "Gemelo Digital creado."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DigitalTwin"
+
+  /admin/twins/{gemeloId}:
+    get: # Obtener detalle
+      tags:
+        - "Administración"
+      summary: "Gestión de un Gemelo Digital específico (RF-ADMIN-02)"
+      parameters:
+        - in: path
+          name: gemeloId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      security:
+        - OAuth2PasswordBearer: [ administrador ]
+      responses:
+        "200":
+          description: "Detalles del Gemelo Digital."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DigitalTwin"
+    put: # Actualizar
+      security:
+        - OAuth2PasswordBearer: [ administrador ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DigitalTwin"
+      responses:
+        "200":
+          description: "Gemelo Digital actualizado."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DigitalTwin"
+    delete: # Borrar
+      security:
+        - OAuth2PasswordBearer: [ administrador ]
+      responses:
+        "204":
+          description: "Gemelo Digital eliminado (Sin contenido)."
+
+  /admin/users:
+    get: # Listar usuarios
+      tags:
+        - "Administración"
+      summary: "Gestión de Cuentas de Usuario (RF-ADMIN-04)"
+      security:
+        - OAuth2PasswordBearer: [ administrador ]
+      responses:
+        "200":
+          description: "Lista de todos los usuarios del sistema."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post: # Crear usuario
+      security:
+        - OAuth2PasswordBearer: [ administrador ]
+      requestBody:
+        description: "Datos del nuevo usuario (Operador/Admin)."
+        content:
+          application/json:
+            schema:
+              # Esquema en línea para la creación (sin ID)
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  format: password
+                email:
+                  type: string
+                  format: email
+                rol:
+                  type: string
+                  enum: [ operador, administrador ]
+      responses:
+        "201":
+          description: "Usuario creado."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /admin/users/{usuarioId}:
+    put: # Actualizar (ej. cambiar rol)
+      tags:
+        - "Administración"
+      summary: "Gestión de un usuario específico (RF-ADMIN-04)"
+      parameters:
+        - in: path
+          name: usuarioId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      security:
+        - OAuth2PasswordBearer: [ administrador ]
+      requestBody:
+        description: "Datos del usuario a actualizar."
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+      responses:
+        "200":
+          description: "Usuario actualizado."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete: # Borrar usuario
+      security:
+        - OAuth2PasswordBearer: [ administrador ]
+      responses:
+        "204":
+          description: "Usuario eliminado (Sin contenido)."
