@@ -189,15 +189,15 @@ components:
       type: object
       description: "Cuerpo de la petición para solicitar una inferencia al DeepONet."
       properties:
-        timestamp_inicio:
+        startTime:
           type: string
           format: date-time
           description: "Inicio de la ventana temporal de datos de sensor a analizar."
-        timestamp_fin:
+        endTime:
           type: string
           format: date-time
           description: "Fin de la ventana temporal."
-        sensores_ids:
+        sensors_ids:
           type: array
           items:
             type: string
@@ -212,22 +212,22 @@ components:
           type: string
           format: uuid
           description: "ID único de esta inferencia completada."
-        timestamp_gen:
+        timestamp:
           type: string
           format: date-time
           description: "Fecha y hora en que se completó el cálculo."
         # Es útil devolver los parámetros con los que se pidió
-        request_params:
+        request:
           $ref: "#/components/schemas/InferenceRequest"
 
         # 1. EL RESUMEN (Para la UI)
         summary:
           type: object
           properties:
-            main_massage:
+            message:
               type: string
               example: "Vertido de alta probabilidad (92%) detectado cerca de Aranjuez."
-            probable_zones:
+            heat_points:
               type: array
               description: "Una lista corta (ej. Top 3) de los puntos de mayor probabilidad."
               items:
@@ -293,7 +293,7 @@ components:
           type: object
           properties:
             # Esta es la propiedad clave que la UI usará para colorear el mapa
-            probabilidad:
+            probability:
               type: number
               format: float
               example: 0.75
@@ -306,14 +306,14 @@ components:
           type: string
           format: uuid
           description: "ID único del Gemelo Digital."
-        nombre:
+        name:
           type: string
           example: "Tramo Tajo (Aranjuez - Toledo)"
           description: "Nombre legible por humanos para este Gemelo Digital."
-        descripcion:
+        description:
           type: string
           description: "Descripción opcional."
-        configuracion:
+        configuration:
           $ref: "#/components/schemas/RiverConfig"
 
     RiverConfig:
