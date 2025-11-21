@@ -65,6 +65,10 @@ public record RiverConfig(
         double baseDecayRateAt20C,
         double decayRateVariability,
 
+        // --- Parámetro de dispersión ---
+        double baseDispersionAlpha,
+        double alphaVariability,
+
         // --- Parámetros de Calidad de Agua (Temporales) ---
         double baseTemperature,
         double dailyTempVariation,
