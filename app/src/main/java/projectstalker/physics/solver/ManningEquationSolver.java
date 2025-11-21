@@ -32,8 +32,8 @@ public final class ManningEquationSolver {
     public static double findDepth(double targetDischarge, double initialDepthGuess, int cellIndex, RiverGeometry geometry) {
 
         // Extraer parámetros geométricos una sola vez
-        final double b = geometry.cloneBottomWidth()[cellIndex];
-        final double m = geometry.cloneSideSlope()[cellIndex];
+        final double b = geometry.getWidthAt(cellIndex);
+        final double m = geometry.getSideSlopeAt(cellIndex);
         final double n = geometry.getManningAt(cellIndex);
         double S = geometry.getBedSlopeAt(cellIndex);
 
