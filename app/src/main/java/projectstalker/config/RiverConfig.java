@@ -90,4 +90,39 @@ public record RiverConfig(
         double temperatureNoiseAmplitude
 ) {
     // El 'record' se encarga de los getters, constructor, etc.
+    public RiverConfig getTestingRiver(){
+        return RiverConfig.builder()
+                .seed(12345L)
+                .noiseFrequency(0.0f)
+                .detailNoiseFrequency(0.05f)
+                .zoneNoiseFrequency(0.001f)
+                .totalLength(100000.0)
+                .spatialResolution(50.0)
+                .initialElevation(200)
+                .concavityFactor(0.4)
+                .averageSlope(0.0002)
+                .slopeVariability(0.0001)
+                .baseWidth(150.0)
+                .widthVariability(40.0)
+                .baseSideSlope(4.0)
+                .sideSlopeVariability(1.5)
+                .baseManning(0.030)
+                .manningVariability(0.005)
+                .baseDecayRateAt20C(0.1)
+                .decayRateVariability(0.05)
+                .baseDispersionAlpha(10)
+                .alphaVariability(2)
+                .baseTemperature(15)
+                .dailyTempVariation(2.0)
+                .seasonalTempVariation(8.0)
+                .averageAnnualTemperature(14.0)
+                .basePh(7.5)
+                .phVariability(0.5)
+                .maxHeadwaterCoolingEffect(4.0)
+                .headwaterCoolingDistance(20000.0)
+                .widthHeatingFactor(1.5)
+                .slopeCoolingFactor(1.0)
+                .temperatureNoiseAmplitude(0.25)
+                .build();
+    }
 }
