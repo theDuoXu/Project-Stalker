@@ -46,12 +46,7 @@ class ManningGpuIntegrationTest {
     @BeforeEach
     void setUp() {
         // --- 1. Inicializar INSTANCIA REAL de Geometría y Configuración ---
-        RiverConfig config = new RiverConfig(
-                12345L, 0.0f, 0.05f, 0.001f, 100000.0, 50.0, 200.0, 0.4, 0.0002,
-                0.0001, 150.0, 40.0, 4.0, 1.5, 0.030, 0.005, 0.1, 0.05,
-                15.0, 2.0, 8.0, 14.0, 7.5, 0.5,
-                4.0, 20000.0, 1.5, 1.0, 0.25
-        );
+        RiverConfig config = RiverConfig.getTestingRiver();
         RiverGeometryFactory factory = new RiverGeometryFactory();
         this.realGeometry = factory.createRealisticRiver(config);
 
