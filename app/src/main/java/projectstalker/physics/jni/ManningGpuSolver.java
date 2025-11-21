@@ -5,8 +5,6 @@ import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.physics.model.FlowProfileModel;
 
-import java.util.Arrays;
-
 /**
  * Actúa como un puente (wrapper) hacia la librería nativa JNI para resolver
  * la ecuación de Manning en la GPU. Encapsula toda la lógica de carga,
@@ -198,7 +196,7 @@ public final class ManningGpuSolver {
 
     private float[] calculateAndSanitizeBedSlopes(RiverGeometry geometry) {
         double[] elevations = geometry.cloneElevationProfile();
-        double dx = geometry.getDx();
+        double dx = geometry.getSpatial_resolution();
         int cellCount = geometry.getCellCount();
         float[] sanitizedSlopes = new float[cellCount];
 

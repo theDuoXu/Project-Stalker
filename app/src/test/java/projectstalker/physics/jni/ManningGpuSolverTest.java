@@ -39,7 +39,7 @@ class ManningGpuSolverTest {
         when(mockGeometry.cloneSideSlope()).thenReturn(new double[]{0.0, 0.0, 0.0});
         when(mockGeometry.cloneManningCoefficient()).thenReturn(new double[]{0.03, 0.03, 0.03});
         when(mockGeometry.cloneElevationProfile()).thenReturn(new double[]{10.0, 9.5, 9.0});
-        when(mockGeometry.getDx()).thenReturn(100.0);
+        when(mockGeometry.getSpatial_resolution()).thenReturn(100.0);
     }
 
     @Test
