@@ -79,6 +79,7 @@ public class RiverGeometryFactory {
         double[] manningCoefficient = new double[cellCount];
         double[] baseDecayCoefficientAt20C = new double[cellCount];
         double[] phProfile = new double[cellCount];
+        double[] dispersionAlpha = new double[cellCount];
         RiverSectionType[] sectionTypes = new RiverSectionType[cellCount];
         Arrays.fill(sectionTypes, RiverSectionType.NATURAL);
 
@@ -141,20 +142,37 @@ public class RiverGeometryFactory {
 
             double phValue = config.basePh() + currentDetailNoise * config.phVariability();
             phProfile[i] = Math.max(6.0, Math.min(9.0, phValue));
+
+            // --- Generar Coeficiente de Dispersión (Alpha) ---
+            // La dispersión aumenta en zonas rugosas (Manning alto) y con el "caos" del río.
+            // Usaremos el ruido zonal: zonas 'activas' dispersan más.
+
+            // Entre 5.0 y 20.0 para ríos naturales típicos usando la fórmula de Taylor.
+            double baseAlpha = config.baseDispersionAlpha();
+            double alphaVariability = config.alphaVariability();
+
+            // Correlación: Si el Manning es alto (zona rugosa), alpha tiende a subir.
+            // Usamos manningModulation (que ya calculaste arriba) como factor de influencia.
+            double alphaValue = baseAlpha + (manningModulation * 100.0) + (currentDetailNoise * alphaVariability);
+
+            // Alpha nunca debe ser negativo (físicamente imposible) ni cero (siempre hay algo de mezcla).
+            dispersionAlpha[i] = Math.max(0.1, alphaValue);
         }
 
         // 4. Instanciar y devolver el objeto RiverGeometry final y validado
-        return new RiverGeometry(
-                cellCount,
-                config.spatialResolution(),
-                elevationProfile,
-                bottomWidth,
-                sideSlope,
-                manningCoefficient,
-                baseDecayCoefficientAt20C,
-                phProfile,
-                sectionTypes
-        );
+        return RiverGeometry.builder()
+                .cellCount(cellCount)
+                .spatial_resolution(config.spatialResolution())
+                .elevationProfile(elevationProfile)
+                .bottomWidth(bottomWidth)
+                .sideSlope(sideSlope)
+                .manningCoefficient(manningCoefficient)
+                .baseDecayCoefficientAt20C(baseDecayCoefficientAt20C)
+                .phProfile(phProfile)
+                .sectionTypes(sectionTypes)
+                .dispersionAlpha(dispersionAlpha)
+                .build()
+                ;
     }
 
     /**
@@ -168,7 +186,7 @@ public class RiverGeometryFactory {
      * @param events    La lista de eventos geológicos a aplicar.
      * @return Un nuevo objeto RiverGeometry que refleja las modificaciones.
      * @throws IllegalArgumentException si dos eventos están más cerca que
-     * la separación mínima definida por {@code MINIMUM_CELL_SEPARATION}.
+     *                                  la separación mínima definida por {@code MINIMUM_CELL_SEPARATION}.
      */
     public RiverGeometry applyGeologicalEvents(RiverGeometry baseRiver, List<GeologicalEvent> events) {
         // --- 1. Manejar casos triviales ---
@@ -177,24 +195,21 @@ public class RiverGeometryFactory {
         }
 
         // --- 2. Validar la separación entre eventos ---
-        validateEventSeparation(baseRiver.getDx(), events);
+        validateEventSeparation(baseRiver.getSpatial_resolution(), events);
 
         // --- 3. Preparar datos mutables (clonación para inmutabilidad) ---
         // Obtenemos los arrays del río base. La clase RiverGeometry ya los devuelve clonados,
         // pero para ser explícitos y seguros, los clonamos de nuevo aquí.
         double[] newElevationProfile = baseRiver.cloneElevationProfile();
         double[] newBottomWidth = baseRiver.cloneBottomWidth();
-        double[] newSideSlope = baseRiver.cloneSideSlope();
         double[] newManningCoefficient = baseRiver.cloneManningCoefficient();
-        double[] newBaseDecay = baseRiver.cloneBaseDecayCoefficientAt20C();
-        double[] newPhProfile = baseRiver.clonePhProfile();
         RiverSectionType[] newSectionTypes = baseRiver.cloneSectionTypes();
 
         // --- 4. Aplicar cada evento en serie sobre los datos clonados ---
         // El polimorfismo se encarga de ejecutar la lógica correcta para cada tipo de evento.
         for (GeologicalEvent event : events) {
             event.apply(
-                    baseRiver.getDx(),
+                    baseRiver.getSpatial_resolution(),
                     newElevationProfile,
                     newBottomWidth,
                     newManningCoefficient,
@@ -204,17 +219,7 @@ public class RiverGeometryFactory {
 
         // --- 5. Construir y devolver el nuevo objeto RiverGeometry final ---
         // El constructor validará la consistencia física del resultado final.
-        return new RiverGeometry(
-                baseRiver.getCellCount(),
-                baseRiver.getDx(),
-                newElevationProfile,
-                newBottomWidth,
-                newSideSlope,
-                newManningCoefficient,
-                newBaseDecay,
-                newPhProfile,
-                newSectionTypes
-        );
+        return baseRiver.withSectionTypes(newSectionTypes);
     }
 
     /**
