@@ -2,7 +2,9 @@ package projectstalker.domain.river;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Builder;
 import lombok.Getter;
+import lombok.With;
 
 import java.util.Objects;
 import java.util.Arrays;
@@ -20,19 +22,21 @@ import java.util.Arrays;
  * @version 0.1
  * @since 2025-10-12
  */
-
+@Builder
+@With
 public final class RiverGeometry {
 
     @Getter
     private final int cellCount;
     @Getter
-    private final double dx;
+    private final double spatial_resolution;
     private final double[] elevationProfile;
     private final double[] bottomWidth;
     private final double[] sideSlope;
     private final double[] manningCoefficient;
     private final double[] baseDecayCoefficientAt20C;
     private final double[] phProfile;
+    private final double[] dispersionAlpha;
     private final RiverSectionType[] sectionTypes;
 
     /**
@@ -43,30 +47,31 @@ public final class RiverGeometry {
      * que el objeto RiverGeometry siempre se encuentre en un estado consistente y válido.
      *
      * @param cellCount          El número total de celdas del río (> 1).
-     * @param dx                 La longitud de cada celda en metros (> 0).
+     * @param spatial_resolution                 La longitud de cada celda en metros (> 0).
      * @param elevationProfile   Array con la altitud del fondo del cauce para cada celda.
      * @param bottomWidth        Array con el ancho del fondo del cauce para cada celda (valores >= 0).
      * @param sideSlope          Array con la pendiente de los taludes laterales (valores >= 0).
      * @param manningCoefficient Array con el coeficiente de rugosidad de Manning (valores > 0).
      * @param phProfile          Array con el perfil PH del río
+     * @param dispersionAlpha    Coeficiente alpha para Taylor
      * @param sectionTypes       Tipos de eventos geológicos del río
      */
     @JsonCreator
-    public RiverGeometry(
-            @JsonProperty("cellCount") int cellCount, // <-- ANOTACIÓN 2: Mapea cada parámetro a un campo del JSON
-            @JsonProperty("dx") double dx,
-            @JsonProperty("elevationProfile") double[] elevationProfile,
-            @JsonProperty("bottomWidth") double[] bottomWidth,
-            @JsonProperty("sideSlope") double[] sideSlope,
-            @JsonProperty("manningCoefficient") double[] manningCoefficient,
-            @JsonProperty("baseDecayCoefficientAt20C") double[] baseDecayCoefficientAt20C,
-            @JsonProperty("phProfile") double[] phProfile,
-            @JsonProperty("sectionTypes") RiverSectionType[] sectionTypes) {
+    public RiverGeometry(@JsonProperty("cellCount") int cellCount,
+                         @JsonProperty("dx") double spatial_resolution,
+                         @JsonProperty("elevationProfile") double[] elevationProfile,
+                         @JsonProperty("bottomWidth") double[] bottomWidth,
+                         @JsonProperty("sideSlope") double[] sideSlope,
+                         @JsonProperty("manningCoefficient") double[] manningCoefficient,
+                         @JsonProperty("baseDecayCoefficientAt20C") double[] baseDecayCoefficientAt20C,
+                         @JsonProperty("phProfile") double[] phProfile,
+                         @JsonProperty("dispersionAlpha") double[] dispersionAlpha,
+                         @JsonProperty("sectionTypes") RiverSectionType[] sectionTypes) {
         // --- Validación de Parámetros ---
         if (cellCount <= 1) {
             throw new IllegalArgumentException("El número de celdas debe ser mayor que 1.");
         }
-        if (dx <= 0) {
+        if (spatial_resolution <= 0) {
             throw new IllegalArgumentException("La resolución espacial (dx) debe ser positiva.");
         }
 
@@ -78,10 +83,10 @@ public final class RiverGeometry {
         Objects.requireNonNull(baseDecayCoefficientAt20C, "El array del coeficiente de decaída no puede ser nulo.");
         Objects.requireNonNull(phProfile, "El array del perfil de ph no puede ser nulo.");
         Objects.requireNonNull(sectionTypes, "El array del tipo de celda del río no puede ser nulo.");
-
+        Objects.requireNonNull(dispersionAlpha, "El array de coeficiente de dispersión (alpha) no puede ser nulo.");
 
         // Validar que todos los arrays tengan la longitud correcta
-        if (elevationProfile.length != cellCount || bottomWidth.length != cellCount || sideSlope.length != cellCount || manningCoefficient.length != cellCount || baseDecayCoefficientAt20C.length != cellCount || phProfile.length != cellCount || sectionTypes.length != cellCount) {
+        if (elevationProfile.length != cellCount || bottomWidth.length != cellCount || sideSlope.length != cellCount || manningCoefficient.length != cellCount || baseDecayCoefficientAt20C.length != cellCount || phProfile.length != cellCount || sectionTypes.length != cellCount || dispersionAlpha.length != cellCount) {
             throw new IllegalArgumentException("Todos los arrays de propiedades deben tener una longitud igual a cellCount.");
         }
 
@@ -105,13 +110,14 @@ public final class RiverGeometry {
         // Esto previene que el código externo modifique el estado interno de esta clase
         // si mantiene una referencia a los arrays originales.
         this.cellCount = cellCount;
-        this.dx = dx;
+        this.spatial_resolution = spatial_resolution;
         this.elevationProfile = elevationProfile.clone();
         this.bottomWidth = bottomWidth.clone();
         this.sideSlope = sideSlope.clone();
         this.manningCoefficient = manningCoefficient.clone();
         this.baseDecayCoefficientAt20C = baseDecayCoefficientAt20C.clone();
         this.phProfile = phProfile.clone();
+        this.dispersionAlpha = dispersionAlpha.clone();
         this.sectionTypes = sectionTypes.clone();
     }
 
@@ -130,7 +136,7 @@ public final class RiverGeometry {
     public double getBedSlopeAt(int cellIndex) {
         validateCellIndex(cellIndex);
         int nextIndex = (cellIndex == cellCount - 1) ? cellIndex - 1 : cellIndex;
-        return (elevationProfile[nextIndex] - elevationProfile[nextIndex + 1]) / dx;
+        return (elevationProfile[nextIndex] - elevationProfile[nextIndex + 1]) / spatial_resolution;
     }
 
     public double getManningAt(int cellIndex) {
@@ -215,6 +221,15 @@ public final class RiverGeometry {
     }
 
     /**
+     * Devuelve el coeficiente de proporcionalidad de dispersión (alpha).
+     * Usado para calcular D_L = alpha * H * u
+     */
+    public double getDispersionAlphaAt(int cellIndex) {
+        validateCellIndex(cellIndex);
+        return dispersionAlpha[cellIndex];
+    }
+
+    /**
      * Devuelve el tipo de sección para una celda específica.
      *
      * @param cellIndex El índice de la celda.
@@ -284,8 +299,8 @@ public final class RiverGeometry {
      */
     @Override
     public String toString() {
-        double totalLengthKm = (cellCount * dx) / 1000.0;
-        return String.format("RiverGeometry {\n" + "  cellCount=%d,\n" + "  dx=%.2f m,\n" + "  totalLength=%.2f km,\n" + "  elevationProfile=[%.2f m ... %.2f m],\n" + "  bottomWidth=[%.2f m ... %.2f m],\n" + "  sideSlope=[%.2f ... %.2f],\n" + "  manningCoefficient=[%.3f ... %.3f]\n" + "  decayCoefficient=[%.3f ... %.3f]\n" + "  this river has %d types of cells\n" + "}", cellCount, dx, totalLengthKm, elevationProfile[0], elevationProfile[cellCount - 1], bottomWidth[0], bottomWidth[cellCount - 1], sideSlope[0], sideSlope[cellCount - 1], manningCoefficient[0], manningCoefficient[cellCount - 1], baseDecayCoefficientAt20C[0], baseDecayCoefficientAt20C[cellCount - 1], Arrays.stream(sectionTypes).distinct().count());
+        double totalLengthKm = (cellCount * spatial_resolution) / 1000.0;
+        return String.format("RiverGeometry {\n" + "  cellCount=%d,\n" + "  dx=%.2f m,\n" + "  totalLength=%.2f km,\n" + "  elevationProfile=[%.2f m ... %.2f m],\n" + "  bottomWidth=[%.2f m ... %.2f m],\n" + "  sideSlope=[%.2f ... %.2f],\n" + "  manningCoefficient=[%.3f ... %.3f]\n" + "  decayCoefficient=[%.3f ... %.3f]\n" + "  this river has %d types of cells\n" + "}", cellCount, spatial_resolution, totalLengthKm, elevationProfile[0], elevationProfile[cellCount - 1], bottomWidth[0], bottomWidth[cellCount - 1], sideSlope[0], sideSlope[cellCount - 1], manningCoefficient[0], manningCoefficient[cellCount - 1], baseDecayCoefficientAt20C[0], baseDecayCoefficientAt20C[cellCount - 1], Arrays.stream(sectionTypes).distinct().count());
     }
 
 
@@ -294,15 +309,14 @@ public final class RiverGeometry {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         RiverGeometry that = (RiverGeometry) o;
-        return cellCount == that.cellCount && Double.compare(that.dx, dx) == 0 && Arrays.equals(elevationProfile, that.elevationProfile) && Arrays.equals(bottomWidth, that.bottomWidth) && Arrays.equals(sideSlope, that.sideSlope) && Arrays.equals(manningCoefficient, that.manningCoefficient) && Arrays.equals(baseDecayCoefficientAt20C, that.baseDecayCoefficientAt20C) && Arrays.equals(phProfile, that.phProfile) && Arrays.equals(sectionTypes, that.sectionTypes);
+        return cellCount == that.cellCount && Double.compare(that.spatial_resolution, spatial_resolution) == 0 && Arrays.equals(elevationProfile, that.elevationProfile) && Arrays.equals(bottomWidth, that.bottomWidth) && Arrays.equals(sideSlope, that.sideSlope) && Arrays.equals(manningCoefficient, that.manningCoefficient) && Arrays.equals(baseDecayCoefficientAt20C, that.baseDecayCoefficientAt20C) && Arrays.equals(phProfile, that.phProfile) && Arrays.equals(sectionTypes, that.sectionTypes);
     }
 
     @Override
     /**
      * Implementación para evitar colisiones y respetar orden de los atributos
-     */
-    public int hashCode() {
-        int result = Objects.hash(cellCount, dx);
+     */ public int hashCode() {
+        int result = Objects.hash(cellCount, spatial_resolution);
         result = 31 * result + Arrays.hashCode(elevationProfile);
         result = 31 * result + Arrays.hashCode(bottomWidth);
         result = 31 * result + Arrays.hashCode(sideSlope);
@@ -341,10 +355,7 @@ public final class RiverGeometry {
         return sectionTypes.clone();
     }
 
-    public static record ManningGpuRiverGeometryFP32(
-            float[] bottomWidthsFP32,
-            float[] sideSlopesFP32,
-            float[] manningCoefficientsFP32,
-            float[] bedSlopesFP32) {
+    public static record ManningGpuRiverGeometryFP32(float[] bottomWidthsFP32, float[] sideSlopesFP32,
+                                                     float[] manningCoefficientsFP32, float[] bedSlopesFP32) {
     }
 }
