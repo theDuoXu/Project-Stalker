@@ -1,6 +1,9 @@
 package projectstalker.config;
 
 
+import lombok.Builder;
+import lombok.With;
+
 /**
  * Un objeto de valor inmutable para contener todos los parámetros de configuración
  * necesarios para la generación procedural de un río.
@@ -38,6 +41,8 @@ package projectstalker.config;
  * @param slopeCoolingFactor       Factor que determina cuánto se enfría el agua en tramos de alta pendiente (rápidos).
  * @param temperatureNoiseAmplitude Amplitud de la variación aleatoria de la temperatura en °C para simular efectos locales.
  */
+@Builder
+@With
 public record RiverConfig(
         // --- Parámetros de Generación Procedural ---
         long seed,
