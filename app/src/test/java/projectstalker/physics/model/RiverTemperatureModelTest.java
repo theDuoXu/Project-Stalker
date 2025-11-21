@@ -73,9 +73,7 @@ class RiverTemperatureModelTest {
         // --- 1. Arrange ---
         // Se crea una config SIN EFECTOS ESPACIALES, mapeando cuidadosamente cada parámetro
         // a su posición correcta en el constructor del record.
-        RiverConfig configWithoutEffects = RiverConfig.getTestingRiver();
-
-        RiverTemperatureModel model = new RiverTemperatureModel(configWithoutEffects, defaultGeometry);
+        RiverTemperatureModel model = getNoHeadWaterCoolingPredictableRiverTemperatureModel();
 
         // Se elige un tiempo donde el cálculo es sencillo: 6 AM del primer día.
         // - El ciclo estacional es 0 (sin(0) = 0).
@@ -92,5 +90,18 @@ class RiverTemperatureModelTest {
             assertEquals(expectedBaseTemp, temperatureProfile[i], 0.01,
                     "En la celda " + i + ", la temperatura debería ser igual a la base cuando los efectos están desactivados.");
         }
+    }
+
+    private RiverTemperatureModel getNoHeadWaterCoolingPredictableRiverTemperatureModel() {
+        RiverConfig configWithoutEffects = RiverConfig.getTestingRiver()
+                .withMaxHeadwaterCoolingEffect(0)
+                .withWidthHeatingFactor(0)
+                .withSlopeCoolingFactor(0)
+                .withTemperatureNoiseAmplitude(0)
+                .withDailyTempVariation(5.0)
+                .withSeasonalTempVariation(2.0)
+                .withAverageAnnualTemperature(20.0);
+        RiverTemperatureModel model = new RiverTemperatureModel(configWithoutEffects, defaultGeometry);
+        return model;
     }
 }
