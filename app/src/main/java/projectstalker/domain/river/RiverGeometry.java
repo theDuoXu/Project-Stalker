@@ -140,7 +140,7 @@ public final class RiverGeometry {
 
     public double getBaseDecayAt(int cellIndex) {
         validateCellIndex(cellIndex);
-        return manningCoefficient[cellIndex];
+        return baseDecayCoefficientAt20C[cellIndex];
     }
 
     public double getWidthAt(int cellIndex) {
