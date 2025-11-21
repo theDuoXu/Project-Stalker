@@ -90,7 +90,7 @@ public record RiverConfig(
         double temperatureNoiseAmplitude
 ) {
     // El 'record' se encarga de los getters, constructor, etc.
-    public RiverConfig getTestingRiver(){
+    public static RiverConfig getTestingRiver(){
         return RiverConfig.builder()
                 .seed(12345L)
                 .noiseFrequency(0.0f)
