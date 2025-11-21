@@ -25,12 +25,42 @@ class RiverGeometryFactoryTest {
     void createRealisticRiver_shouldReturnConsistentGeometry() {
         // --- 1. Arrange (Preparar) ---
         // Configuración para un río grande y maduro, tipo Tajo, con los nuevos parámetros de temperatura.
-        RiverConfig config = new RiverConfig(
-                12345L, 0.0f, 0.05f, 0.001f, 100000.0, 50.0, 200.0, 0.4, 0.0002,
-                0.0001, 150.0, 40.0, 4.0, 1.5, 0.030, 0.005, 0.1, 0.05,
-                15.0, 2.0, 8.0, 14.0, 7.5, 0.5,
-                4.0, 20000.0, 1.5, 1.0, 0.25
-        );
+
+        RiverConfig config =
+                RiverConfig.builder()
+                        .seed(12345L)
+                        .noiseFrequency(0.0f)
+                        .detailNoiseFrequency(0.05f)
+                        .zoneNoiseFrequency(0.001f)
+                        .totalLength(100000.0)
+                        .spatialResolution(50.0)
+                        .initialElevation(200)
+                        .concavityFactor(0.4)
+                        .averageSlope(0.0002)
+                        .slopeVariability(0.0001)
+                        .baseWidth(150.0)
+                        .widthVariability(40.0)
+                        .baseSideSlope(4.0)
+                        .sideSlopeVariability(1.5)
+                        .baseManning(0.030)
+                        .manningVariability(0.005)
+                        .baseDecayRateAt20C(0.1)
+                        .decayRateVariability(0.05)
+                        .baseDispersionAlpha(10)
+                        .alphaVariability(2)
+                        .baseTemperature(15)
+                        .dailyTempVariation(2.0)
+                        .seasonalTempVariation(8.0)
+                        .averageAnnualTemperature(14.0)
+                        .basePh(7.5)
+                        .phVariability(0.5)
+                        .maxHeadwaterCoolingEffect(4.0)
+                        .headwaterCoolingDistance(20000.0)
+                        .widthHeatingFactor(1.5)
+                        .slopeCoolingFactor(1.0)
+                        .temperatureNoiseAmplitude(0.25)
+                        .build();
+
         RiverGeometryFactory factory = new RiverGeometryFactory();
         int expectedCellCount = (int) (config.totalLength() / config.spatialResolution());
         log.debug("Configuración de río creada para el test. Se esperan {} celdas.", expectedCellCount);
@@ -44,7 +74,7 @@ class RiverGeometryFactoryTest {
         // --- 3. Assert (Verificar) ---
         assertNotNull(river, "El objeto RiverGeometry no debería ser nulo.");
         assertEquals(expectedCellCount, river.getCellCount(), "El número de celdas no es el esperado.");
-        assertEquals(config.spatialResolution(), river.getDx(), "La resolución espacial (dx) no coincide.");
+        assertEquals(config.spatialResolution(), river.getSpatial_resolution(), "La resolución espacial (dx) no coincide.");
         assertEquals(config.initialElevation(), river.cloneElevationProfile()[0], 1e-6, "La elevación inicial no coincide.");
 
         log.info("Test de aserciones superado. El objeto RiverGeometry es estructuralmente válido.");
