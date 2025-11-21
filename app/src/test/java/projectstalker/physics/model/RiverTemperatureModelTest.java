@@ -24,12 +24,7 @@ class RiverTemperatureModelTest {
     void setUp() {
         // Configuración reutilizable para las pruebas.
         // Estos valores deberían ser representativos de tu simulación.
-        this.defaultConfig = new RiverConfig(
-                12345L, 0.0f, 0.05f, 0.001f, 100000.0, 50.0, 200.0, 0.4, 0.0002,
-                0.0001, 150.0, 40.0, 4.0, 1.5, 0.030, 0.005, 0.1, 0.05,
-                15.0, 2.0, 8.0, 14.0, 7.5, 0.5,
-                4.0, 25000.0, 1.5, 1.0, 0.25
-        );
+        this.defaultConfig = RiverConfig.getTestingRiver();
 
         RiverGeometryFactory factory = new RiverGeometryFactory();
         int expectedCellCount = (int) (this.defaultConfig.totalLength() / this.defaultConfig.spatialResolution());
@@ -78,37 +73,7 @@ class RiverTemperatureModelTest {
         // --- 1. Arrange ---
         // Se crea una config SIN EFECTOS ESPACIALES, mapeando cuidadosamente cada parámetro
         // a su posición correcta en el constructor del record.
-        RiverConfig configWithoutEffects = new RiverConfig(
-                /* seed */ 12345L,
-                /* noiseFrequency */ 0.0f,
-                /* detailNoiseFrequency */ 0.05f,
-                /* zoneNoiseFrequency */ 0.001f,
-                /* totalLength */ 100000.0,
-                /* spatialResolution */ 50.0,
-                /* initialElevation */ 200.0,
-                /* concavityFactor */ 0.4,
-                /* averageSlope */ 0.0002,
-                /* slopeVariability */ 0.0001,
-                /* baseWidth */ 150.0,
-                /* widthVariability */ 40.0,
-                /* baseSideSlope */ 4.0,
-                /* sideSlopeVariability */ 1.5,
-                /* baseManning */ 0.030,
-                /* manningVariability */ 0.005,
-                /* baseDecayRateAt20C */ 0.1,
-                /* decayRateVariability */ 0.05,
-                /* baseTemperature */ 15.0, // Parámetro original, no usado por RiverTemperatureModel
-                /* dailyTempVariation */ 5.0,     // <--- VALOR PARA EL TEST
-                /* seasonalTempVariation */ 2.0,  // <--- VALOR PARA EL TEST
-                /* averageAnnualTemperature */ 20.0, // <--- VALOR PARA EL TEST
-                /* basePh */ 7.5,
-                /* phVariability */ 0.5,
-                /* maxHeadwaterCoolingEffect */ 0.0,  // <--- DESACTIVADO
-                /* headwaterCoolingDistance */ 20000.0,
-                /* widthHeatingFactor */ 0.0,       // <--- DESACTIVADO
-                /* slopeCoolingFactor */ 0.0,       // <--- DESACTIVADO
-                /* temperatureNoiseAmplitude */ 0.0  // <--- DESACTIVADO
-        );
+        RiverConfig configWithoutEffects = RiverConfig.getTestingRiver();
 
         RiverTemperatureModel model = new RiverTemperatureModel(configWithoutEffects, defaultGeometry);
 
