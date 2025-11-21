@@ -229,6 +229,11 @@ public final class RiverGeometry {
         return dispersionAlpha[cellIndex];
     }
 
+    public double getSideSlopeAt(int cellIndex) {
+        validateCellIndex(cellIndex);
+        return sideSlope[cellIndex];
+    }
+
     /**
      * Devuelve el tipo de sección para una celda específica.
      *
