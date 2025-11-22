@@ -5,7 +5,8 @@
 #include <cuda_runtime.h>
 #include <iostream>
 #include <stdexcept>
-
+#include <string>
+#include <sstream>
 // --- Macro de Comprobación de Errores de CUDA ---
 // Envuelve cada llamada a la API de CUDA para una depuración robusta.
 #define CUDA_CHECK(call) { \
