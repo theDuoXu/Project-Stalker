@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'application'
     id 'org.openjfx.javafxplugin' version '0.1.0'
+    id 'me.champeau.jmh' version '0.7.2'
 }
 
 group = 'projectstalker'
@@ -91,8 +92,20 @@ dependencies {
     implementation 'org.slf4j:slf4j-api:2.0.13'
     runtimeOnly 'ch.qos.logback:logback-classic:1.5.13'
     implementation 'org.knowm.xchart:xchart:3.8.6'
-}
 
+    // =======================================================
+    // --- DEPENDENCIAS EXPLÍCITAS PARA JMH (FIX) ---
+    // =======================================================
+    jmhImplementation 'org.openjdk.jmh:jmh-core:1.37'
+    jmhAnnotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
+    jmhImplementation project
+}
+jmh {
+    fork = 1
+    warmupIterations = 2
+    iterations = 3
+    resultFormat = 'JSON'
+}
 
 // ===================================================================
 // --- CONFIGURACIÓN DE TESTS ---
