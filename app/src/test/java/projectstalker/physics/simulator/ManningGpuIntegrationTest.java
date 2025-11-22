@@ -48,7 +48,7 @@ class ManningGpuIntegrationTest {
         RiverConfig riverConfig = RiverConfig.getTestingRiver();
         RiverGeometryFactory factory = new RiverGeometryFactory();
         this.realGeometry = factory.createRealisticRiver(riverConfig);
-
+        this.cellCount = this.realGeometry.getCellCount();
         // --- 2. Inicializar INSTANCIAS REALES de Modelos Fisicoquímicos ---
         this.realTempModel = new RiverTemperatureModel(riverConfig, this.realGeometry);
         this.realPhModel = new RiverPhModel(this.realGeometry);
@@ -65,7 +65,7 @@ class ManningGpuIntegrationTest {
                 .useGpuAccelerationOnManning(true) // Intención explícita
                 .useGpuAccelerationOnTransport(false) // Por ahora false
                 .build();
-        this.cellCount = this.realGeometry.getCellCount();
+
         log.info("Entorno configurado. Geometría con {} celdas.", this.realGeometry.getCellCount());
     }
 
@@ -79,7 +79,7 @@ class ManningGpuIntegrationTest {
 
         // 1. Estado Inicial
         double initialUniformDepth = 0.5;
-        double[] initialData = new double[cellCount];
+        double[] initialData = new double[this.cellCount];
         Arrays.fill(initialData, initialUniformDepth);
         RiverState initialRiverState = new RiverState(
                 initialData, initialData, initialData, initialData
@@ -88,7 +88,7 @@ class ManningGpuIntegrationTest {
         // 2. Perfiles de Caudal
         double[] newDischarges = new double[BATCH_SIZE];
         Arrays.fill(newDischarges, 200.0);
-        double[] initialDischarges = new double[cellCount];
+        double[] initialDischarges = new double[this.cellCount];
         Arrays.fill(initialDischarges, 50);
 
         // 3. Instanciar el SUT (Subject Under Test) REAL
@@ -105,7 +105,7 @@ class ManningGpuIntegrationTest {
         double[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(BATCH_SIZE, newDischarges, initialDischarges);
 
         // 4. Resultados Fisicoquímicos (Pre-cálculo)
-        double[][][] phTmp = new double[BATCH_SIZE][2][cellCount];
+        double[][][] phTmp = new double[BATCH_SIZE][2][this.cellCount];
         double timeStep = 0.0;
         for (int i = 0; i < BATCH_SIZE; i++) {
             double t = currentTime + timeStep;
