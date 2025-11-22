@@ -36,7 +36,9 @@ file(GLOB_RECURSE PROJECT_SOURCES
 
 # Creamos la librería falsa
 add_library(native_lib_ide SHARED ${PROJECT_SOURCES}
-        native-lib/src/main/cpp/include/projectstalker/physics/manning_kernel.h)
+        native-lib/src/main/cpp/include/projectstalker/physics/manning_kernel.h
+        native-lib/src/main/cpp/include/projectstalker/physics/transport_kernel.h
+        native-lib/src/main/cpp/src/physics/transport_kernel.cu)
 
 # 3. CONECTAMOS JNI
 # Le decimos a nuestro target falso que use las cabeceras de JNI
