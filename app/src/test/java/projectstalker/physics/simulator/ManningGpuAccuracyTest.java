@@ -139,4 +139,82 @@ class ManningGpuAccuracyTest {
             }
         }
     }
+
+    @Test
+    @DisplayName("Benchmark de Escalabilidad: CPU vs GPU")
+    void benchmarkScalability() {
+        log.info("=== INICIANDO BENCHMARK DE RENDIMIENTO (CPU vs GPU) ===");
+
+        // Tamaños de lote a probar (ajusta según tu RAM disponible)
+        // Nota: 100_000 muestras requieren bastante memoria Heap en Java (-Xmx4G recomendado)
+        int[] batchSizes = {100, 1_000, 10_000, 50_000};
+
+        // --- FASE 0: CALENTAMIENTO (WARM-UP) ---
+        log.info(">> Calentando motores (JIT y Contexto CUDA)...");
+        runBenchmarkIteration(100, false); // Warmup CPU
+        runBenchmarkIteration(100, true);  // Warmup GPU
+        log.info(">> Calentamiento completado.\n");
+
+        System.out.printf("%-15s | %-15s | %-15s | %-15s%n", "BATCH SIZE", "CPU (ms)", "GPU (ms)", "SPEEDUP");
+        System.out.println("---------------------------------------------------------------------");
+
+        // --- FASE 1: BUCLE DE PRUEBA ---
+        for (int size : batchSizes) {
+            // Forzamos limpieza de memoria antes de cada lote grande
+            System.gc();
+
+            // 1. Ejecutar CPU
+            double cpuTimeMs = runBenchmarkIteration(size, false);
+
+            // 2. Ejecutar GPU
+            double gpuTimeMs = runBenchmarkIteration(size, true);
+
+            // 3. Calcular Speedup
+            double speedup = cpuTimeMs / gpuTimeMs;
+
+            // 4. Reportar tabla
+            System.out.printf("%-15d | %-15.2f | %-15.2f | %-15.2fx %s%n",
+                    size, cpuTimeMs, gpuTimeMs, speedup,
+                    (speedup > 1.0 ? "🚀" : "🐌"));
+        }
+    }
+
+    /**
+     * Ejecuta una iteración aislada y devuelve el tiempo en milisegundos.
+     */
+    private double runBenchmarkIteration(int batchSize, boolean useGpu) {
+        // Generación de datos FUERA del cronómetro (no queremos medir cuán rápido Java crea arrays)
+        double[] flowInput = new double[batchSize];
+        Arrays.fill(flowInput, 150.0);
+        double[] flowInitial = new double[cellCount];
+        Arrays.fill(flowInitial, 50.0);
+
+        // Usamos un processor temporal para preparar inputs
+        ManningBatchProcessor setupProc = new ManningBatchProcessor(realGeometry, cpuConfig);
+        double[][] discharges = setupProc.createDischargeProfiles(batchSize, flowInput, flowInitial);
+        double[][][] phTmp = new double[batchSize][2][cellCount];
+
+        RiverState initialState = new RiverState(
+                new double[cellCount], new double[cellCount],
+                new double[cellCount], new double[cellCount]
+        );
+        Arrays.fill(initialState.waterDepth(), 0.5); // Rellenar con algo válido
+
+        // Selección de configuración
+        SimulationConfig configToUse = useGpu ? gpuConfig : cpuConfig;
+        ManningBatchProcessor processor = new ManningBatchProcessor(realGeometry, configToUse);
+
+        // --- MEDICIÓN CRÍTICA ---
+        long start = System.nanoTime();
+
+        processor.processBatch(
+                batchSize, initialState, discharges, phTmp,
+                configToUse.isUseGpuAccelerationOnManning()
+        );
+
+        long end = System.nanoTime();
+        // -----------------------
+
+        return (end - start) / 1_000_000.0;
+    }
 }
