@@ -29,7 +29,7 @@ class ManningGpuAccuracyTest {
 
     private int cellCount;
     private final int BATCH_SIZE = 5;
-    private final double EPSILON = 1e-4; // Tolerancia Float vs Double
+    private final float EPSILON = 1e-4f; // Tolerancia Float vs Double
 
     @BeforeEach
     void setUp() {
@@ -64,23 +64,23 @@ class ManningGpuAccuracyTest {
         log.info("=== INICIANDO TEST DE PRECISIÓN NUMÉRICA ===");
 
         // --- DATOS DE ENTRADA COMUNES ---
-        double[] zeroArray = new double[cellCount];
-        double[] initialDepth = new double[cellCount];
-        Arrays.fill(initialDepth, 0.5);
+        float[] zeroArray = new float[cellCount];
+        float[] initialDepth = new float[cellCount];
+        Arrays.fill(initialDepth, 0.5f);
 
         RiverState initialState = new RiverState(
-                initialDepth, zeroArray, zeroArray, zeroArray
+                initialDepth, zeroArray, zeroArray, zeroArray, zeroArray
         );
 
-        double[] flowInput = new double[BATCH_SIZE];
-        Arrays.fill(flowInput, 150.0);
-        double[] flowInitial = new double[cellCount];
-        Arrays.fill(flowInitial, 50.0);
+        float[] flowInput = new float[BATCH_SIZE];
+        Arrays.fill(flowInput, 150.0f);
+        float[] flowInitial = new float[cellCount];
+        Arrays.fill(flowInitial, 50.0f);
 
         // Usamos un processor temporal para generar los perfiles (da igual qué config use)
         ManningBatchProcessor helperProcessor = new ManningBatchProcessor(realGeometry, cpuConfig);
-        double[][] discharges = helperProcessor.createDischargeProfiles(BATCH_SIZE, flowInput, flowInitial);
-        double[][][] phTmp = new double[BATCH_SIZE][2][cellCount]; // Ceros (no afectan hidráulica)
+        float[][] discharges = helperProcessor.createDischargeProfiles(BATCH_SIZE, flowInput, flowInitial);
+        float[][][] phTmp = new float[BATCH_SIZE][2][cellCount]; // Ceros (no afectan hidráulica)
 
         // --- EJECUCIÓN A: MODO CPU ---
         log.info(">> Ejecutando en CPU...");

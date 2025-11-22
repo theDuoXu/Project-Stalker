@@ -1,5 +1,7 @@
 package projectstalker.domain.river;
 
+import lombok.Builder;
+
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -10,20 +12,23 @@ import java.util.Objects;
  * Como es un objeto de valor, dos instancias de {@code RiverState} se consideran
  * iguales si todos sus atributos correspondientes son iguales.
  *
- * @param waterDepth  Array con la profundidad del agua (H) en cada celda [m].
- * @param velocity    Array con la velocidad del agua (v) en cada celda [m/s].
- * @param temperature Array con la temperatura del agua (T) en cada celda [°C].
- * @param ph          Array con el pH del agua en cada celda.
+ * @param waterDepth                Array con la profundidad del agua (H) en cada celda [m].
+ * @param velocity                  Array con la velocidad del agua (v) en cada celda [m/s].
+ * @param temperature               Array con la temperatura del agua (T) en cada celda [°C].
+ * @param ph                        Array con el pH del agua en cada celda.
+ * @param contaminantConcentration  Array con la concentración de contaminante en cada celda
  *
  * @author Duo Xu
  * @version 0.1
  * @since 2025-10-13
  */
+@Builder
 public record RiverState(
-        double[] waterDepth,
-        double[] velocity,
-        double[] temperature,
-        double[] ph
+        float[] waterDepth,
+        float[] velocity,
+        float[] temperature,
+        float[] ph,
+        float[] contaminantConcentration
 ) {
     /**
      * Constructor canónico que garantiza la validez e inmutabilidad del estado.
@@ -65,7 +70,7 @@ public record RiverState(
      * @return La profundidad del agua en metros [m].
      * @throws IndexOutOfBoundsException si el índice de celda es inválido.
      */
-    public double getWaterDepthAt(int cellIndex) {
+    public float getWaterDepthAt(int cellIndex) {
         validateCellIndex(cellIndex);
         return this.waterDepth[cellIndex];
     }
@@ -77,7 +82,7 @@ public record RiverState(
      * @return La velocidad del agua en metros por segundo [m/s].
      * @throws IndexOutOfBoundsException si el índice de celda es inválido.
      */
-    public double getVelocityAt(int cellIndex) {
+    public float getVelocityAt(int cellIndex) {
         validateCellIndex(cellIndex);
         return this.velocity[cellIndex];
     }
@@ -89,7 +94,7 @@ public record RiverState(
      * @return La temperatura en grados Celsius [°C].
      * @throws IndexOutOfBoundsException si el índice de celda es inválido.
      */
-    public double getTemperatureAt(int cellIndex) {
+    public float getTemperatureAt(int cellIndex) {
         validateCellIndex(cellIndex);
         return this.temperature[cellIndex];
     }
@@ -101,7 +106,7 @@ public record RiverState(
      * @return El valor del pH.
      * @throws IndexOutOfBoundsException si el índice de celda es inválido.
      */
-    public double getPhAt(int cellIndex) {
+    public float getPhAt(int cellIndex) {
         validateCellIndex(cellIndex);
         return this.ph[cellIndex];
     }

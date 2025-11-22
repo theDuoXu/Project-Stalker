@@ -72,7 +72,7 @@ public class ManningSimulator {
         this.phModel = new RiverPhModel(this.geometry); // Inicialización del nuevo modelo de pH
 
         int cellCount = geometry.getCellCount();
-        this.currentState = new RiverState(new double[cellCount], new double[cellCount], new double[cellCount], new double[cellCount]);
+        this.currentState = new RiverState(new float[cellCount], new float[cellCount], new float[cellCount], new float[cellCount], new float[cellCount]);
         this.currentTimeInSeconds = 0.0;
         this.isGpuAccelerated = simulationConfig.isUseGpuAccelerationOnManning();
 
@@ -121,8 +121,8 @@ public class ManningSimulator {
         RiverState initialRiverState = this.currentState;
 
         // 1. Pre-cómputo de caudales de entrada y variables fisicoquímicas para todo el batch.
-        double[] newDischarges = new double[batchSize];
-        double[][][] phTmp = new double[batchSize][2][cellCount]; // [i][0]=Temperatura, [i][1]=pH
+        float[] newDischarges = new float[batchSize];
+        float[][][] phTmp = new float[batchSize][2][cellCount]; // [i][0]=Temperatura, [i][1]=pH
         for (int i = 0; i < batchSize; i++) {
             newDischarges[i] = flowGenerator.getDischargeAt(currentTimeInSeconds);
             phTmp[i] = calculateTemperatureAndPh();
@@ -131,15 +131,15 @@ public class ManningSimulator {
         }
 
         // 2. Calcular el estado de caudales en el río justo antes de que entre la nueva onda.
-        double[] initialDischarges = new double[cellCount];
+        float[] initialDischarges = new float[cellCount];
         for (int j = 0; j < cellCount - 1; j++) {
             double area = geometry.getCrossSectionalArea(j, initialRiverState.getWaterDepthAt(j));
             double velocity = initialRiverState.getVelocityAt(j);
-            initialDischarges[j + 1] = area * velocity;
+            initialDischarges[j + 1] = (float) (area * velocity);
         }
 
         // 3. Construir la matriz de perfiles de caudal para cada paso de tiempo del batch.
-        double[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(batchSize, newDischarges, initialDischarges);
+        float[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(batchSize, newDischarges, initialDischarges);
 
         // 4. Ejecución delegada (CPU concurrente o GPU)
         ManningSimulationResult result = batchProcessor.processBatch(batchSize, initialRiverState,
@@ -163,11 +163,11 @@ public class ManningSimulator {
         RiverState nextStateHydro = cpuSolver.calculateNextState(currentState, geometry, config, currentTimeInSeconds, inputDischarge);
 
         // Se añaden los perfiles fisicoquímicos
-        double[][] tempAndPh = calculateTemperatureAndPh();
-        double[] newTemperature = tempAndPh[0];
-        double[] newPh = tempAndPh[1];
+        float[][] tempAndPh = calculateTemperatureAndPh();
+        float[] newTemperature = tempAndPh[0];
+        float[] newPh = tempAndPh[1];
 
-        this.currentState = new RiverState(nextStateHydro.waterDepth(), nextStateHydro.velocity(), newTemperature, newPh);
+        this.currentState = new RiverState(nextStateHydro.waterDepth(), nextStateHydro.velocity(), newTemperature, newPh, new float[nextStateHydro.waterDepth().length]);
         this.cpuFillIterations++;
         this.cpuFillTimeNanos += (System.nanoTime() - startTime);
     }
@@ -181,33 +181,33 @@ public class ManningSimulator {
         }
 
         // 1. Delegar el cálculo hidrológico completo al solver de GPU.
-        double[][] gpuResults = this.gpuSolver.solve(currentState, geometry, flowGenerator, currentTimeInSeconds);
-        double[] newWaterDepth = gpuResults[0];
-        double[] newVelocity = gpuResults[1];
+        float[][] gpuResults = this.gpuSolver.solve(currentState, geometry, flowGenerator, currentTimeInSeconds);
+        float[] newWaterDepth = gpuResults[0];
+        float[] newVelocity = gpuResults[1];
 
         // 2. Temperatura y pH se siguen calculando en la CPU.
-        double[][] tempAndPh = calculateTemperatureAndPh();
-        double[] newTemperature = tempAndPh[0];
-        double[] newPh = tempAndPh[1];
+        float[][] tempAndPh = calculateTemperatureAndPh();
+        float[] newTemperature = tempAndPh[0];
+        float[] newPh = tempAndPh[1];
 
         // 3. Construir el nuevo estado del río a partir de todos los resultados.
-        this.currentState = new RiverState(newWaterDepth, newVelocity, newTemperature, newPh);
+        this.currentState = new RiverState(newWaterDepth, newVelocity, newTemperature, newPh, new float[gpuResults[0].length]);
     }
 
     /**
      * Calcula los perfiles de temperatura y pH para el estado actual.
      * Solo llama a los modelos específicos.
      */
-    private double[][] calculateTemperatureAndPh() {
-        double[] newTemperature = temperatureModel.calculate(currentTimeInSeconds);
-        double[] newPh = phModel.getPhProfile();
-        return new double[][]{newTemperature, newPh};
+    private float[][] calculateTemperatureAndPh() {
+        float[] newTemperature = temperatureModel.calculate(currentTimeInSeconds);
+        float[] newPh = phModel.getPhProfile();
+        return new float[][]{newTemperature, newPh};
     }
 
     /**
      * Devuelve el caudal de entrada para el tiempo actual de la simulación.
      */
-    public double getCurrentInputDischarge() {
+    public float getCurrentInputDischarge() {
         return flowGenerator.getDischargeAt(currentTimeInSeconds);
     }
 }

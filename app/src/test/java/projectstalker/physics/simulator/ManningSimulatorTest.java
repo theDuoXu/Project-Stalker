@@ -46,34 +46,34 @@ class ManningSimulatorTest {
         mockConfig = mock(RiverConfig.class);
 
         // Parámetros usados para calcular CELL_COUNT (25.0 / 5.0 = 5)
-        when(mockConfig.totalLength()).thenReturn(25.0);
-        when(mockConfig.spatialResolution()).thenReturn(5.0);
+        when(mockConfig.totalLength()).thenReturn(25.0f);
+        when(mockConfig.spatialResolution()).thenReturn(5.0f);
 
         // Otros parámetros usados en RiverGeometryFactory.createRealisticRiver()
         when(mockConfig.seed()).thenReturn(12345L);
-        when(mockConfig.initialElevation()).thenReturn(100.0);
-        when(mockConfig.concavityFactor()).thenReturn(0.0);
-        when(mockConfig.averageSlope()).thenReturn(0.001);
-        when(mockConfig.slopeVariability()).thenReturn(0.0);
-        when(mockConfig.baseWidth()).thenReturn(10.0);
-        when(mockConfig.widthVariability()).thenReturn(0.0);
-        when(mockConfig.baseSideSlope()).thenReturn(2.0);
-        when(mockConfig.sideSlopeVariability()).thenReturn(0.0);
-        when(mockConfig.baseManning()).thenReturn(0.035);
-        when(mockConfig.manningVariability()).thenReturn(0.0);
-        when(mockConfig.baseDecayRateAt20C()).thenReturn(0.1);
-        when(mockConfig.decayRateVariability()).thenReturn(0.0);
-        when(mockConfig.basePh()).thenReturn(7.5); // Necesario para RiverPhModel
-        when(mockConfig.phVariability()).thenReturn(0.0);
-        when(mockConfig.baseTemperature()).thenReturn(15.0); // Necesario para RiverTemperatureModel
-        when(mockConfig.averageAnnualTemperature()).thenReturn(15.0);
-        when(mockConfig.dailyTempVariation()).thenReturn(0.0);
-        when(mockConfig.seasonalTempVariation()).thenReturn(0.0);
-        when(mockConfig.maxHeadwaterCoolingEffect()).thenReturn(0.0);
-        when(mockConfig.headwaterCoolingDistance()).thenReturn(1.0);
-        when(mockConfig.widthHeatingFactor()).thenReturn(0.0);
-        when(mockConfig.slopeCoolingFactor()).thenReturn(0.0);
-        when(mockConfig.temperatureNoiseAmplitude()).thenReturn(0.0);
+        when(mockConfig.initialElevation()).thenReturn(100.0f);
+        when(mockConfig.concavityFactor()).thenReturn(0.0f);
+        when(mockConfig.averageSlope()).thenReturn(0.001f);
+        when(mockConfig.slopeVariability()).thenReturn(0.0f);
+        when(mockConfig.baseWidth()).thenReturn(10.0f);
+        when(mockConfig.widthVariability()).thenReturn(0.0f);
+        when(mockConfig.baseSideSlope()).thenReturn(2.0f);
+        when(mockConfig.sideSlopeVariability()).thenReturn(0.0f);
+        when(mockConfig.baseManning()).thenReturn(0.035f);
+        when(mockConfig.manningVariability()).thenReturn(0.0f);
+        when(mockConfig.baseDecayRateAt20C()).thenReturn(0.1f);
+        when(mockConfig.decayRateVariability()).thenReturn(0.0f);
+        when(mockConfig.basePh()).thenReturn(7.5f); // Necesario para RiverPhModel
+        when(mockConfig.phVariability()).thenReturn(0.0f);
+        when(mockConfig.baseTemperature()).thenReturn(15.0f); // Necesario para RiverTemperatureModel
+        when(mockConfig.averageAnnualTemperature()).thenReturn(15.0f);
+        when(mockConfig.dailyTempVariation()).thenReturn(0.0f);
+        when(mockConfig.seasonalTempVariation()).thenReturn(0.0f);
+        when(mockConfig.maxHeadwaterCoolingEffect()).thenReturn(0.0f);
+        when(mockConfig.headwaterCoolingDistance()).thenReturn(1.0f);
+        when(mockConfig.widthHeatingFactor()).thenReturn(0.0f);
+        when(mockConfig.slopeCoolingFactor()).thenReturn(0.0f);
+        when(mockConfig.temperatureNoiseAmplitude()).thenReturn(0.0f);
         when(mockConfig.noiseFrequency()).thenReturn(0.05f); // Necesario para FastNoiseLite
         when(mockConfig.detailNoiseFrequency()).thenReturn(0.05f);
         when(mockConfig.zoneNoiseFrequency()).thenReturn(0.001f);
@@ -82,8 +82,8 @@ class ManningSimulatorTest {
         mockSimConfig = mock(SimulationConfig.class);
         // Simular un FlowConfig simple para evitar NPE en FlowProfileModel
         SimulationConfig.FlowConfig mockFlowConfig = mock(SimulationConfig.FlowConfig.class);
-        when(mockFlowConfig.getBaseDischarge()).thenReturn(10.0);
-        when(mockFlowConfig.getNoiseAmplitude()).thenReturn(5.0);
+        when(mockFlowConfig.getBaseDischarge()).thenReturn(10.0f);
+        when(mockFlowConfig.getNoiseAmplitude()).thenReturn(5.0f);
         when(mockFlowConfig.getNoiseFrequency()).thenReturn(0.001f);
         when(mockSimConfig.getFlowConfig()).thenReturn(mockFlowConfig);
 
@@ -94,7 +94,7 @@ class ManningSimulatorTest {
         // Aquí creamos una geometría mockeada para inyectar después y controlar los getters
         mockGeometry = mock(RiverGeometry.class);
         when(mockGeometry.getCellCount()).thenReturn(CELL_COUNT);
-        when(mockGeometry.clonePhProfile()).thenReturn(new double[CELL_COUNT]);
+        when(mockGeometry.clonePhProfile()).thenReturn(new float[CELL_COUNT]);
 
         // --- 3. Inicializar el Simulador y Mocks de Dependencias Pesadas ---
 
@@ -127,14 +127,14 @@ class ManningSimulatorTest {
         cpuSolverField.set(simulator, mockCpuSolver);
 
         // Configurar el mock del CPU Solver para devolver un estado de "éxito"
-        double[] successData = new double[CELL_COUNT];
-        Arrays.fill(successData, 1.0);
+        float[] successData = new float[CELL_COUNT];
+        Arrays.fill(successData, 1.0f);
         // Nota: Los arrays deben ser de longitud 5 (CELL_COUNT)
-        RiverState mockNextStateHydro = new RiverState(successData.clone(), successData.clone(), successData.clone(), successData.clone());
+        RiverState mockNextStateHydro = new RiverState(successData.clone(), successData.clone(), successData.clone(), successData.clone(), successData.clone());
         when(mockCpuSolver.calculateNextState(any(), any(), any(), anyDouble(), anyDouble())).thenReturn(mockNextStateHydro);
 
         // --- 4. Estado Inicial del Simulador ---
-        simulator.setCurrentState(new RiverState(new double[CELL_COUNT], new double[CELL_COUNT], new double[CELL_COUNT], new double[CELL_COUNT]));
+        simulator.setCurrentState(new RiverState(new float[CELL_COUNT], new float[CELL_COUNT], new float[CELL_COUNT], new float[CELL_COUNT], new float[CELL_COUNT]));
         simulator.setCurrentTimeInSeconds(100.0);
         simulator.setGpuAccelerated(false);
         log.info("ManningSimulator inicializado para pruebas de orquestación con {} celdas simuladas.", CELL_COUNT);
@@ -187,11 +187,11 @@ class ManningSimulatorTest {
         double initialTime = simulator.getCurrentTimeInSeconds();
 
         // 1. Simular que el GPU Solver (el mock inyectado) devuelve un resultado
-        double[] gpuDepthResult = new double[CELL_COUNT];
-        Arrays.fill(gpuDepthResult, 5.0);
-        double[] gpuVelocityResult = new double[CELL_COUNT];
-        Arrays.fill(gpuVelocityResult, 2.0);
-        double[][] mockGpuResults = new double[][]{gpuDepthResult, gpuVelocityResult};
+        float[] gpuDepthResult = new float[CELL_COUNT];
+        Arrays.fill(gpuDepthResult, 5.0f);
+        float[] gpuVelocityResult = new float[CELL_COUNT];
+        Arrays.fill(gpuVelocityResult, 2.0f);
+        float[][] mockGpuResults = new float[][]{gpuDepthResult, gpuVelocityResult};
 
         // 2. Configurar el MOCK (el que inyectamos en setUp)
         // Se configura el mock de instancia 'mockGpuSolver'.
@@ -232,8 +232,8 @@ class ManningSimulatorTest {
         double initialTime = simulator.getCurrentTimeInSeconds();
 
         // 1. Configurar el Mock de BatchProcessor para devolver un resultado final
-        double[] finalDepth = new double[CELL_COUNT]; Arrays.fill(finalDepth, 10.0);
-        RiverState finalState = new RiverState(finalDepth, new double[CELL_COUNT], new double[CELL_COUNT], new double[CELL_COUNT]);
+        float[] finalDepth = new float[CELL_COUNT]; Arrays.fill(finalDepth, 10.0f);
+        RiverState finalState = new RiverState(finalDepth, new float[CELL_COUNT], new float[CELL_COUNT], new float[CELL_COUNT], new float[CELL_COUNT]);
 
         // Simular un ManningSimulationResult con los 3 pasos, donde el último es el finalState
         ManningSimulationResult mockResult = ManningSimulationResult.builder()
@@ -243,7 +243,7 @@ class ManningSimulatorTest {
 
         // MOCKEAR LA SECUENCIA DE LLAMADAS DEL BATCH PROCESSOR
         // El simulador llama a createDischargeProfiles y luego a processBatch
-        double[][] mockDischargeProfiles = new double[batchSize][CELL_COUNT];
+        float[][] mockDischargeProfiles = new float[batchSize][CELL_COUNT];
         when(mockBatchProcessor.createDischargeProfiles(anyInt(), any(), any())).thenReturn(mockDischargeProfiles);
         when(mockBatchProcessor.processBatch(anyInt(), any(), any(), any(), anyBoolean())).thenReturn(mockResult);
 

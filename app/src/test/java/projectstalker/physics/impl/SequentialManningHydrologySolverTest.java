@@ -12,6 +12,7 @@ import projectstalker.factory.RiverGeometryFactory;
 
 import java.util.Arrays;
 import java.util.DoubleSummaryStatistics;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -42,11 +43,11 @@ class SequentialManningHydrologySolverTest {
     @DisplayName("Debería calcular el primer estado del río a partir de un cauce seco")
     void calculateNextState_fromDryBed_shouldProduceFlow() {
         // --- 1. Arrange ---
-        final double inputDischarge = 150.0;
+        final float inputDischarge = 150.0F;
         final double currentTimeInSeconds = 0.0;
         final int cellCount = riverGeometry.getCellCount();
         RiverState initialState = new RiverState(
-                new double[cellCount], new double[cellCount], new double[cellCount], new double[cellCount]
+                new float[cellCount], new float[cellCount], new float[cellCount], new float[cellCount], new float[cellCount]
         );
         log.info("Iniciando test 'calculateNextState_fromDryBed' con caudal de {} m³/s sobre cauce seco.", inputDischarge);
 
@@ -88,13 +89,13 @@ class SequentialManningHydrologySolverTest {
         // --- 0. Constantes y Configuración Inicial ---
         final int cellCount = riverGeometry.getCellCount();
         final int lastCellIndex = cellCount - 1;
-        final double steadyDischarge = 150.0;
-        final double floodDischarge = 200.0;
+        final float steadyDischarge = 150.0F;
+        final float floodDischarge = 200.0F;
         final int maxIterations = cellCount * 2;
 
         // --- FASE 1: Llenado del río hasta alcanzar el estado estacionario ---
         log.info("--- FASE 1: Llenando el río con {} m³/s hasta el estado estacionario... ---", steadyDischarge);
-        RiverState currentState = new RiverState(new double[cellCount], new double[cellCount], new double[cellCount], new double[cellCount]);
+        RiverState currentState = new RiverState(new float[cellCount], new float[cellCount], new float[cellCount], new float[cellCount], new  float[cellCount]);
         long timeInSeconds = 0;
         int iterations = 0;
 
@@ -135,8 +136,10 @@ class SequentialManningHydrologySolverTest {
         assertEquals(floodDischarge, currentOutputDischarge, 1.0, "El caudal de salida final debería ser cercano a 200 m³/s.");
         describeArray("Profundidad (Estado de Crecida)", floodState.waterDepth());
 
-        DoubleSummaryStatistics steadyStats = Arrays.stream(steadyState.waterDepth()).summaryStatistics();
-        DoubleSummaryStatistics floodStats = Arrays.stream(floodState.waterDepth()).summaryStatistics();
+        DoubleSummaryStatistics steadyStats = IntStream.range(0, steadyState.waterDepth().length)
+                .mapToDouble(i -> steadyState.waterDepth()[i]).summaryStatistics();
+        DoubleSummaryStatistics floodStats = IntStream.range(0, floodState.waterDepth().length)
+                .mapToDouble(i -> floodState.waterDepth()[i]).summaryStatistics();
 
         log.info("Comparación de Profundidad Media:");
         log.info(" - Estado Estacionario ({} m³/s): {} m", steadyDischarge, String.format("%.4f", steadyStats.getAverage()));
@@ -145,24 +148,34 @@ class SequentialManningHydrologySolverTest {
         assertTrue(floodStats.getAverage() > steadyStats.getAverage(), "La profundidad media durante la crecida debe ser mayor.");
     }
 
-    private void describeArray(String name, double[] data) {
+    /**
+     * Calcula y registra un resumen estadístico para un array de doubles.
+     */
+    private void describeArray(String name, float[] data) {
         if (data == null || data.length == 0) {
             log.warn("--- {} ---: Datos no disponibles o array vacío.", name);
             return;
         }
+
         log.info("--- {} ---", name);
-        DoubleSummaryStatistics stats = Arrays.stream(data).summaryStatistics();
+        DoubleSummaryStatistics stats = IntStream.range(0, data.length).mapToDouble(i -> data[i]).summaryStatistics();
         double mean = stats.getAverage();
-        double variance = Arrays.stream(data).map(x -> (x - mean) * (x - mean)).average().orElse(0.0);
+        // El cálculo de la varianza se hace una vez para ser eficiente.
+        double variance = IntStream.range(0, data.length)
+                .mapToDouble(x -> (data[x] - mean) * (data[x] - mean))
+                .average()
+                .orElse(0.0);
         double stdDev = Math.sqrt(variance);
 
+        // Usamos String.format para mantener la precisión de los decimales en los logs.
         log.info("  Count:    {}", stats.getCount());
         log.info("  Mean:     {}", String.format("%.4f", mean));
         log.info("  Std Dev:  {}", String.format("%.4f", stdDev));
+        log.info("  Variance: {}", String.format("%.4f", variance));
         log.info("  Min:      {}", String.format("%.4f", stats.getMin()));
         log.info("  Max:      {}", String.format("%.4f", stats.getMax()));
         int headCount = Math.min(5, data.length);
-        double[] head = Arrays.copyOfRange(data, 0, headCount);
+        float[] head = Arrays.copyOfRange(data, 0, headCount);
         log.info("  Primeros {} valores: {}", headCount, Arrays.toString(head));
     }
 }

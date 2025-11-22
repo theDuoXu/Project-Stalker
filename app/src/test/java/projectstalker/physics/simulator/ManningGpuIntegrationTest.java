@@ -78,17 +78,17 @@ class ManningGpuIntegrationTest {
         double currentTime = 300.0 * 3600.0;
 
         // 1. Estado Inicial
-        double initialUniformDepth = 0.5;
-        double[] initialData = new double[this.cellCount];
+        float initialUniformDepth = 0.5f;
+        float[] initialData = new float[this.cellCount];
         Arrays.fill(initialData, initialUniformDepth);
         RiverState initialRiverState = new RiverState(
-                initialData, initialData, initialData, initialData
+                initialData, initialData, initialData, initialData, initialData
         );
 
         // 2. Perfiles de Caudal
-        double[] newDischarges = new double[BATCH_SIZE];
-        Arrays.fill(newDischarges, 200.0);
-        double[] initialDischarges = new double[this.cellCount];
+        float[] newDischarges = new float[BATCH_SIZE];
+        Arrays.fill(newDischarges, 200.0f);
+        float[] initialDischarges = new float[this.cellCount];
         Arrays.fill(initialDischarges, 50);
 
         // 3. Instanciar el SUT (Subject Under Test) REAL
@@ -102,10 +102,10 @@ class ManningGpuIntegrationTest {
         log.info("ManningBatchProcessor instanciado. Librería nativa cargada.");
 
         // (Re-usamos el método del SUT para crear los perfiles)
-        double[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(BATCH_SIZE, newDischarges, initialDischarges);
+        float[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(BATCH_SIZE, newDischarges, initialDischarges);
 
         // 4. Resultados Fisicoquímicos (Pre-cálculo)
-        double[][][] phTmp = new double[BATCH_SIZE][2][this.cellCount];
+        float[][][] phTmp = new float[BATCH_SIZE][2][this.cellCount];
         double timeStep = 0.0;
         for (int i = 0; i < BATCH_SIZE; i++) {
             double t = currentTime + timeStep;

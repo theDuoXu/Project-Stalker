@@ -51,8 +51,8 @@ public class ManningBatchProcessor {
      * @return El resultado de la simulación del batch.
      */
     public ManningSimulationResult processBatch(int batchSize,
-                                                RiverState initialRiverState, double[][] allDischargeProfiles,
-                                                double[][][] phTmp, boolean isGpuAccelerated) {
+                                                RiverState initialRiverState, float[][] allDischargeProfiles,
+                                                float[][][] phTmp, boolean isGpuAccelerated) {
         long startTimeInMilis = System.currentTimeMillis();
 
         ManningSimulationResult result;
@@ -73,8 +73,8 @@ public class ManningBatchProcessor {
      * @param initialDischarges  Los caudales del río justo antes del batch.
      * @return Una matriz `[batchSize][cellCount]` con los perfiles de caudal.
      */
-    public double[][] createDischargeProfiles(int batchSize, double[] newDischarges, double[] initialDischarges) {
-        double[][] dischargeProfiles = new double[batchSize][cellCount];
+    public float[][] createDischargeProfiles(int batchSize, float[] newDischarges, float[] initialDischarges) {
+        float[][] dischargeProfiles = new float[batchSize][cellCount];
         for (int j = 0; j < batchSize; j++) {
             for (int k = 0; k < cellCount; k++) {
                 if (k <= j) {
@@ -99,9 +99,9 @@ public class ManningBatchProcessor {
      * Realiza el cómputo del batch utilizando el pool de hilos de la CPU.
      */
     private ManningSimulationResult cpuComputeBatch(int batchSize, RiverState initialRiverState,
-                                                    double[][] allDischargeProfiles, double[][][] phTmp) {
+                                                    float[][] allDischargeProfiles, float[][][] phTmp) {
         List<ManningProfileCalculatorTask> tasks = new ArrayList<>(batchSize);
-        double[] initialWaterDepth = initialRiverState.waterDepth();
+        float[] initialWaterDepth = initialRiverState.waterDepth();
 
         // 1. Crear las tareas
         for (int i = 0; i < batchSize; i++) {
@@ -122,8 +122,8 @@ public class ManningBatchProcessor {
         }
 
         // 3. Recoger resultados
-        double[][] resultingDepths = new double[batchSize][cellCount];
-        double[][] resultingVelocities = new double[batchSize][cellCount];
+        float[][] resultingDepths = new float[batchSize][cellCount];
+        float[][] resultingVelocities = new float[batchSize][cellCount];
         for (int i = 0; i < batchSize; i++) {
             try {
                 ManningProfileCalculatorTask completedTask = futures.get(i).get();
@@ -146,10 +146,10 @@ public class ManningBatchProcessor {
      * Realiza el cómputo del batch delegando al solver nativo de GPU.
      */
     private ManningSimulationResult gpuComputeBatch(int batchSize, RiverState initialRiverState,
-                                                    double[][] allDischargeProfiles, double[][][] phTmp) {
+                                                    float[][] allDischargeProfiles, float[][][] phTmp) {
 
         // 1. Llamada al solver de GPU
-        double[][][] results = gpuSolver.solveBatch(initialRiverState.waterDepth(), allDischargeProfiles, this.geometry);
+        float[][][] results = gpuSolver.solveBatch(initialRiverState.waterDepth(), allDischargeProfiles, this.geometry);
 
         // 2. Validación y manejo de errores
         if (results == null || results.length != batchSize) {
@@ -159,12 +159,12 @@ public class ManningBatchProcessor {
         }
 
         // 3. Desempaquetar resultados
-        double[][] resultingDepths = new double[batchSize][cellCount];
-        double[][] resultingVelocities = new double[batchSize][cellCount];
+        float[][] resultingDepths = new float[batchSize][cellCount];
+        float[][] resultingVelocities = new float[batchSize][cellCount];
 
         for (int i = 0; i < batchSize; i++) {
-            double[] depthsForStep = results[i][0];
-            double[] velocitiesForStep = results[i][1];
+            float[] depthsForStep = results[i][0];
+            float[] velocitiesForStep = results[i][1];
 
             if (depthsForStep == null || depthsForStep.length != cellCount || velocitiesForStep == null || velocitiesForStep.length != cellCount) {
                 log.error("Error crítico en gpuComputeBatch: Datos corruptos en el paso de simulación {}.", i);
@@ -183,11 +183,17 @@ public class ManningBatchProcessor {
     /**
      * Ensambla los arrays de profundidad, velocidad, temperatura y pH en una lista de RiverState.
      */
-    private static List<RiverState> assembleRiverStateResults(int batchSize, double[][][] phTmp, double[][] resultingDepths, double[][] resultingVelocities) {
+    private static List<RiverState> assembleRiverStateResults(int batchSize, float[][][] phTmp, float[][] resultingDepths, float[][] resultingVelocities) {
         List<RiverState> states = new ArrayList<>(batchSize);
         for (int i = 0; i < batchSize; i++) {
             // phTmp[i][0] es el array de Temperatura, phTmp[i][1] es el array de pH
-            states.add(new RiverState(resultingDepths[i], resultingVelocities[i], phTmp[i][0], phTmp[i][1]));
+            states.add(RiverState.builder()
+                    .waterDepth(resultingDepths[i])
+                    .velocity(resultingVelocities[i])
+                    .temperature(phTmp[i][0])
+                    .ph(phTmp[i][1])
+                    .contaminantConcentration(new float[resultingDepths[i].length])
+                    .build());
         }
         return states;
     }

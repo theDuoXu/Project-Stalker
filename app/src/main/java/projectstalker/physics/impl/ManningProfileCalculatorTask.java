@@ -21,27 +21,27 @@ import java.util.concurrent.Callable;
 public class ManningProfileCalculatorTask implements Callable<ManningProfileCalculatorTask> {
 
     // --- Entradas para la tarea ---
-    private final double[] targetDischarges; // Caudales para cada celda de ESTA simulación
-    private final double[] initialDepthGuess; // Profundidad inicial para cada celda
+    private final float[] targetDischarges; // Caudales para cada celda de ESTA simulación
+    private final float[] initialDepthGuess; // Profundidad inicial para cada celda
     private final RiverGeometry geometry; // Geometría del río (compartida)
 
     // --- Resultados de la tarea ---
-    private double[] calculatedWaterDepth;
-    private double[] calculatedVelocity;
+    private float[] calculatedWaterDepth;
+    private float[] calculatedVelocity;
 
     @Override
     public ManningProfileCalculatorTask call() throws Exception {
         int cellCount = geometry.getCellCount();
-        this.calculatedWaterDepth = new double[cellCount];
-        this.calculatedVelocity = new double[cellCount];
+        this.calculatedWaterDepth = new float[cellCount];
+        this.calculatedVelocity = new float[cellCount];
 
         for (int i = 0; i < cellCount; i++) {
-            final double currentDischarge = targetDischarges[i];
+            final float currentDischarge = targetDischarges[i];
 
             // Si el caudal es insignificante, la celda está seca.
             if (currentDischarge < 1e-6) {
-                calculatedWaterDepth[i] = 0.0;
-                calculatedVelocity[i] = 0.0;
+                calculatedWaterDepth[i] = 0.0F;
+                calculatedVelocity[i] = 0.0F;
                 continue;
             }
 
@@ -56,9 +56,9 @@ public class ManningProfileCalculatorTask implements Callable<ManningProfileCalc
             // Calcular la velocidad a partir de la nueva profundidad
             double newArea = geometry.getCrossSectionalArea(i, calculatedWaterDepth[i]);
             if (newArea > 1e-6) {
-                calculatedVelocity[i] = currentDischarge / newArea;
+                calculatedVelocity[i] = (float) (currentDischarge / newArea);
             } else {
-                calculatedVelocity[i] = 0.0;
+                calculatedVelocity[i] = 0.0F;
             }
         }
         return this;

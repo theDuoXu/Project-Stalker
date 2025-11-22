@@ -30,7 +30,7 @@ public class RiverPhModel {
      *
      * @return Un nuevo array que representa el perfil de pH del río.
      */
-    public double[] getPhProfile() {
+    public float[] getPhProfile() {
         return geometry.clonePhProfile();
     }
 }

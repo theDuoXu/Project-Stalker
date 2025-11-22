@@ -28,9 +28,9 @@ public final class GeoEvManMadeDam implements GeologicalEvent {
      */
     private static final double TIME_TO_FULL_SEDIMENTATION = 100.0; // en años
 
-    private final double position;
-    private final double crestElevation;
-    private final double reservoirWidth;
+    private final float position;
+    private final float crestElevation;
+    private final float reservoirWidth;
     private final int damAge;
 
     /**
@@ -41,7 +41,7 @@ public final class GeoEvManMadeDam implements GeologicalEvent {
      * @param reservoirWidth El ancho en metros que alcanzará el embalse en su madurez.
      * @param damAge         La edad de la presa en años, para simular la sedimentación parcial.
      */
-    public GeoEvManMadeDam(double position, double crestElevation, double reservoirWidth, int damAge) {
+    public GeoEvManMadeDam(float position, float crestElevation, float reservoirWidth, int damAge) {
         if (position < 0 || crestElevation < 0 || reservoirWidth <= 0 || damAge < 0) {
             throw new IllegalArgumentException("Los parámetros de la presa deben ser positivos (la edad puede ser 0).");
         }
@@ -53,10 +53,10 @@ public final class GeoEvManMadeDam implements GeologicalEvent {
 
     @Override
     public void apply(
-            double spatialResolution,
-            double[] elevationProfile,
-            double[] bottomWidth,
-            double[] manningCoefficient,
+            float spatialResolution,
+            float[] elevationProfile,
+            float[] bottomWidth,
+            float[] manningCoefficient,
             RiverSectionType[] sectionTypes
     ) {
         final int cellCount = elevationProfile.length;
@@ -70,8 +70,8 @@ public final class GeoEvManMadeDam implements GeologicalEvent {
         // Esto lo permite la excepción escrita en RiverGeometry
         sectionTypes[damCell] = RiverSectionType.DAM_STRUCTURE;
         elevationProfile[damCell] = this.crestElevation;
-        bottomWidth[damCell] = 10.0; // Ancho de la estructura
-        manningCoefficient[damCell] = 0.013; // Rugosidad del hormigón
+        bottomWidth[damCell] = 10.0F; // Ancho de la estructura
+        manningCoefficient[damCell] = 0.013F; // Rugosidad del hormigón
 
         // --- 2. Calcular el factor de envejecimiento para la sedimentación ---
         final double ageFactor = Math.min(1.0, this.damAge / TIME_TO_FULL_SEDIMENTATION);
@@ -116,7 +116,7 @@ public final class GeoEvManMadeDam implements GeologicalEvent {
             bottomWidth[i] += actualWidthToAdd;
 
             // c. Actualizar propiedades del lecho (se consideran de embalse en cuanto hay sedimento)
-            manningCoefficient[i] = 0.025;
+            manningCoefficient[i] = 0.025F;
             sectionTypes[i] = RiverSectionType.RESERVOIR;
         }
     }

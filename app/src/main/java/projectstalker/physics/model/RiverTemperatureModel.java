@@ -12,7 +12,8 @@ import javax.swing.*;
 import java.awt.event.WindowAdapter; 
 import java.awt.event.WindowEvent; 
 import java.util.concurrent.CountDownLatch; 
-import java.util.stream.DoubleStream; 
+import java.util.stream.DoubleStream;
+import java.util.stream.IntStream;
 
 /**
  * Modela la temperatura del agua a lo largo de un río.
@@ -55,18 +56,18 @@ public class RiverTemperatureModel {
      * @param currentTimeInSeconds El tiempo absoluto de la simulación.
      * @return Un array de doubles con la temperatura para cada celda del río.
      */
-    public double[] calculate(double currentTimeInSeconds) {
+    public float[] calculate(double currentTimeInSeconds) {
         final int cellCount = geometry.getCellCount();
-        double[] temperatures = new double[cellCount];
+        float[] temperatures = new float[cellCount];
 
         // 1. Se calcula la temperatura base (dependiente del tiempo) una sola vez.
-        final double baseTemp = calculateBaseTemperature(currentTimeInSeconds);
+        final float baseTemp = calculateBaseTemperature(currentTimeInSeconds);
 
         // 2. Se calcula la temperatura final para cada celda sumando los diferentes efectos.
         for (int i = 0; i < cellCount; i++) {
-            double headwaterEffect = calculateHeadwaterCooling(i);
-            double geomorphologyEffect = calculateGeomorphologyEffect(i);
-            double noiseEffect = calculateNoiseEffect(i);
+            float headwaterEffect = calculateHeadwaterCooling(i);
+            float geomorphologyEffect = calculateGeomorphologyEffect(i);
+            float noiseEffect = calculateNoiseEffect(i);
 
             temperatures[i] = baseTemp + headwaterEffect + geomorphologyEffect + noiseEffect;
         }
@@ -77,7 +78,7 @@ public class RiverTemperatureModel {
     /**
      * Calcula la temperatura base del agua influenciada por los ciclos estacionales y diarios.
      */
-    private double calculateBaseTemperature(double currentTimeInSeconds) {
+    private float calculateBaseTemperature(double currentTimeInSeconds) {
         final double dayOfYear = (currentTimeInSeconds / SECONDS_IN_A_DAY) % DAYS_IN_A_YEAR;
         final double seasonalCycle = Math.sin((dayOfYear / DAYS_IN_A_YEAR) * 2.0 * Math.PI);
         final double baseSeasonalTemp = config.averageAnnualTemperature() + config.seasonalTempVariation() * seasonalCycle;
@@ -85,22 +86,22 @@ public class RiverTemperatureModel {
         final double secondOfDay = currentTimeInSeconds % SECONDS_IN_A_DAY;
         final double dailyCycle = Math.sin((secondOfDay / SECONDS_IN_A_DAY) * 2.0 * Math.PI);
 
-        return baseSeasonalTemp + config.dailyTempVariation() * dailyCycle;
+        return (float) (baseSeasonalTemp + config.dailyTempVariation() * dailyCycle);
     }
 
     /**
      * Calcula el efecto de enfriamiento en la cabecera del río.
      */
-    private double calculateHeadwaterCooling(int cellIndex) {
+    private float calculateHeadwaterCooling(int cellIndex) {
         double position = cellIndex * geometry.getSpatial_resolution();
         double gradientFactor = Math.max(0, 1.0 - (position / config.headwaterCoolingDistance()));
-        return -config.maxHeadwaterCoolingEffect() * gradientFactor;
+        return (float) (-config.maxHeadwaterCoolingEffect() * gradientFactor);
     }
 
     /**
      * Calcula el efecto combinado del ancho del cauce y la pendiente sobre la temperatura.
      */
-    private double calculateGeomorphologyEffect(int cellIndex) {
+    private float calculateGeomorphologyEffect(int cellIndex) {
         // Efecto del ancho: ríos más anchos se calientan más.
         double relativeWidth = geometry.getWidthAt(cellIndex) / config.baseWidth();
         double widthEffect = config.widthHeatingFactor() * Math.max(0, relativeWidth - 1.0);
@@ -109,13 +110,13 @@ public class RiverTemperatureModel {
         double relativeSlope = geometry.getBedSlopeAt(cellIndex) / config.averageSlope();
         double slopeEffect = -config.slopeCoolingFactor() * Math.max(0, relativeSlope - 1.0);
 
-        return widthEffect + slopeEffect;
+        return (float) (widthEffect + slopeEffect);
     }
 
     /**
      * Calcula una variación local aleatoria usando ruido Perlin.
      */
-    private double calculateNoiseEffect(int cellIndex) {
+    private float calculateNoiseEffect(int cellIndex) {
         return tempNoise.GetNoise(cellIndex, 0) * config.temperatureNoiseAmplitude();
     }
     /**
@@ -129,7 +130,10 @@ public class RiverTemperatureModel {
      */
     public void displayProfileChart(double currentTimeInSeconds) throws InterruptedException {
         // --- 1. Generación de Datos ---
-        double[] temperatureProfile = this.calculate(currentTimeInSeconds); // Y-Axis
+        float[] fTemperatureProfile = this.calculate(currentTimeInSeconds);
+        double[] temperatureProfile = IntStream.range(0, fTemperatureProfile.length)
+                .mapToDouble(i -> fTemperatureProfile[i])
+                .toArray(); // Y-Axis cast to double
         double[] distanceInMeters = DoubleStream.iterate(0, d -> d + geometry.getSpatial_resolution())
                 .limit(temperatureProfile.length)
                 .toArray(); // X-Axis

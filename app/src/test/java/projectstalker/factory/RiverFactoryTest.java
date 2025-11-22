@@ -14,6 +14,8 @@ import projectstalker.physics.i.IHydrologySolver;
 
 import java.util.Arrays;
 import java.util.DoubleSummaryStatistics;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -47,7 +49,7 @@ class RiverFactoryTest {
     @DisplayName("Debería crear un río estable y completamente poblado")
     void createStableRiver_shouldReturnPopulatedRiver() {
         // --- 1. Arrange ---
-        final double initialDischarge = 150.0; // Caudal para estabilizar el río.
+        final float initialDischarge = 150; // Caudal para estabilizar el río.
         log.info("Iniciando test 'createStableRiver' con un caudal de entrada de {} m³/s", initialDischarge);
 
         // --- 2. Act ---
@@ -89,20 +91,23 @@ class RiverFactoryTest {
         describeArray("Temperatura (°C)", state.temperature());
     }
 
-    private void describeArray(String name, double[] data) {
+    private void describeArray(String name, float[] data) {
         if (data == null || data.length == 0) {
             log.warn("--- {} ---: Datos no disponibles o array vacío.", name);
             return;
         }
         log.info("--- {} ---", name);
-        DoubleSummaryStatistics stats = Arrays.stream(data).summaryStatistics();
+
+        DoubleSummaryStatistics stats = IntStream.range(0, data.length)
+                .mapToDouble(i -> data[i])
+                .summaryStatistics();
 
         log.info("  Count:    {}", stats.getCount());
         log.info("  Mean:     {}", String.format("%.4f", stats.getAverage()));
         log.info("  Min:      {}", String.format("%.4f", stats.getMin()));
         log.info("  Max:      {}", String.format("%.4f", stats.getMax()));
         int headCount = Math.min(5, data.length);
-        double[] head = Arrays.copyOfRange(data, 0, headCount);
+        float[] head = Arrays.copyOfRange(data, 0, headCount);
         log.info("  Primeros {} valores: {}", headCount, Arrays.toString(head));
     }
 }

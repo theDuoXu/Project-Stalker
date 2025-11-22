@@ -29,14 +29,14 @@ public final class RiverGeometry {
     @Getter
     private final int cellCount;
     @Getter
-    private final double spatial_resolution;
-    private final double[] elevationProfile;
-    private final double[] bottomWidth;
-    private final double[] sideSlope;
-    private final double[] manningCoefficient;
-    private final double[] baseDecayCoefficientAt20C;
-    private final double[] phProfile;
-    private final double[] dispersionAlpha;
+    private final float spatial_resolution;
+    private final float[] elevationProfile;
+    private final float[] bottomWidth;
+    private final float[] sideSlope;
+    private final float[] manningCoefficient;
+    private final float[] baseDecayCoefficientAt20C;
+    private final float[] phProfile;
+    private final float[] dispersionAlpha;
     private final RiverSectionType[] sectionTypes;
 
     /**
@@ -58,14 +58,14 @@ public final class RiverGeometry {
      */
     @JsonCreator
     public RiverGeometry(@JsonProperty("cellCount") int cellCount,
-                         @JsonProperty("dx") double spatial_resolution,
-                         @JsonProperty("elevationProfile") double[] elevationProfile,
-                         @JsonProperty("bottomWidth") double[] bottomWidth,
-                         @JsonProperty("sideSlope") double[] sideSlope,
-                         @JsonProperty("manningCoefficient") double[] manningCoefficient,
-                         @JsonProperty("baseDecayCoefficientAt20C") double[] baseDecayCoefficientAt20C,
-                         @JsonProperty("phProfile") double[] phProfile,
-                         @JsonProperty("dispersionAlpha") double[] dispersionAlpha,
+                         @JsonProperty("dx") float spatial_resolution,
+                         @JsonProperty("elevationProfile") float[] elevationProfile,
+                         @JsonProperty("bottomWidth") float[] bottomWidth,
+                         @JsonProperty("sideSlope") float[] sideSlope,
+                         @JsonProperty("manningCoefficient") float[] manningCoefficient,
+                         @JsonProperty("baseDecayCoefficientAt20C") float[] baseDecayCoefficientAt20C,
+                         @JsonProperty("phProfile") float[] phProfile,
+                         @JsonProperty("dispersionAlpha") float[] dispersionAlpha,
                          @JsonProperty("sectionTypes") RiverSectionType[] sectionTypes) {
         // --- Validación de Parámetros ---
         if (cellCount <= 1) {
@@ -133,23 +133,23 @@ public final class RiverGeometry {
      * @return La pendiente del cauce (adimensional, m/m).
      * @throws IndexOutOfBoundsException si el índice está fuera de rango.
      */
-    public double getBedSlopeAt(int cellIndex) {
+    public float getBedSlopeAt(int cellIndex) {
         validateCellIndex(cellIndex);
         int nextIndex = (cellIndex == cellCount - 1) ? cellIndex - 1 : cellIndex;
         return (elevationProfile[nextIndex] - elevationProfile[nextIndex + 1]) / spatial_resolution;
     }
 
-    public double getManningAt(int cellIndex) {
+    public float getManningAt(int cellIndex) {
         validateCellIndex(cellIndex);
         return manningCoefficient[cellIndex];
     }
 
-    public double getBaseDecayAt(int cellIndex) {
+    public float getBaseDecayAt(int cellIndex) {
         validateCellIndex(cellIndex);
         return baseDecayCoefficientAt20C[cellIndex];
     }
 
-    public double getWidthAt(int cellIndex) {
+    public float getWidthAt(int cellIndex) {
         validateCellIndex(cellIndex);
         return bottomWidth[cellIndex];
     }
@@ -160,7 +160,7 @@ public final class RiverGeometry {
      * @param cellIndex El índice de la celda.
      * @return El valor del pH para esa sección del río.
      */
-    public double getPhAt(int cellIndex) {
+    public float getPhAt(int cellIndex) {
         validateCellIndex(cellIndex);
         return phProfile[cellIndex];
     }
@@ -224,12 +224,12 @@ public final class RiverGeometry {
      * Devuelve el coeficiente de proporcionalidad de dispersión (alpha).
      * Usado para calcular D_L = alpha * H * u
      */
-    public double getDispersionAlphaAt(int cellIndex) {
+    public float getDispersionAlphaAt(int cellIndex) {
         validateCellIndex(cellIndex);
         return dispersionAlpha[cellIndex];
     }
 
-    public double getSideSlopeAt(int cellIndex) {
+    public float getSideSlopeAt(int cellIndex) {
         validateCellIndex(cellIndex);
         return sideSlope[cellIndex];
     }
@@ -332,35 +332,31 @@ public final class RiverGeometry {
         return result;
     }
 
-    public double[] cloneElevationProfile() {
+    public float[] cloneElevationProfile() {
         return elevationProfile.clone();
     }
 
-    public double[] cloneBottomWidth() {
+    public float[] cloneBottomWidth() {
         return bottomWidth.clone();
     }
 
-    public double[] cloneSideSlope() {
+    public float[] cloneSideSlope() {
         return sideSlope.clone();
     }
 
-    public double[] cloneManningCoefficient() {
+    public float[] cloneManningCoefficient() {
         return manningCoefficient.clone();
     }
 
-    public double[] cloneBaseDecayCoefficientAt20C() {
+    public float[] cloneBaseDecayCoefficientAt20C() {
         return baseDecayCoefficientAt20C.clone();
     }
 
-    public double[] clonePhProfile() {
+    public float[] clonePhProfile() {
         return phProfile.clone();
     }
 
     public RiverSectionType[] cloneSectionTypes() {
         return sectionTypes.clone();
-    }
-
-    public static record ManningGpuRiverGeometryFP32(float[] bottomWidthsFP32, float[] sideSlopesFP32,
-                                                     float[] manningCoefficientsFP32, float[] bedSlopesFP32) {
     }
 }

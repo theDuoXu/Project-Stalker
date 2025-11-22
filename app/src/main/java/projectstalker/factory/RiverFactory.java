@@ -25,13 +25,19 @@ public class RiverFactory {
      * @param initialDischarge El caudal constante (en m³/s) para estabilizar el río.
      * @return Un objeto InitialRiver que contiene tanto la geometría como el estado estable.
      */
-    public InitialRiver createStableRiver(RiverConfig config, double initialDischarge) {
+    public InitialRiver createStableRiver(RiverConfig config, float initialDischarge) {
         // 1. Crear la geometría del río
         RiverGeometry geometry = geometryFactory.createRealisticRiver(config);
         int cellCount = geometry.getCellCount();
 
         // 2. Simular el llenado desde un cauce seco
-        RiverState currentState = new RiverState(new double[cellCount], new double[cellCount], new double[cellCount], new double[cellCount]);
+        RiverState currentState = RiverState.builder()
+                .waterDepth(new float[cellCount])
+                .velocity(new float[cellCount])
+                .temperature(new float[cellCount])
+                .ph(new float[cellCount])
+                .contaminantConcentration(new float[cellCount])
+                .build();
 
         long timeInSeconds = 0;
         int iterations = 0;

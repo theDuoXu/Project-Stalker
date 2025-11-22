@@ -20,10 +20,10 @@ public interface GeologicalEvent {
      * @param manningCoefficient El array del coeficiente de Manning a modificar.
      */
     void apply(
-            double spatialResolution,
-            double[] elevationProfile,
-            double[] bottomWidth,
-            double[] manningCoefficient,
+            float spatialResolution,
+            float[] elevationProfile,
+            float[] bottomWidth,
+            float[] manningCoefficient,
             RiverSectionType[] sectionTypes
     );
     double getPosition();

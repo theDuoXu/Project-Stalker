@@ -89,23 +89,23 @@ public class ManningGpuBenchmark {
      */
     private double runBenchmarkIteration(int batchSize, boolean useGpu) {
         // Generación de datos FUERA del cronómetro
-        double[] flowInput = new double[batchSize];
-        Arrays.fill(flowInput, 150.0);
-        double[] flowInitial = new double[cellCount];
-        Arrays.fill(flowInitial, 50.0);
+        float[] flowInput = new float[batchSize];
+        Arrays.fill(flowInput, 150.0F);
+        float[] flowInitial = new float[cellCount];
+        Arrays.fill(flowInitial, 50.0F);
 
         // Usamos un processor temporal para preparar inputs
         ManningBatchProcessor setupProc = new ManningBatchProcessor(realGeometry, cpuConfig);
-        double[][] discharges = setupProc.createDischargeProfiles(batchSize, flowInput, flowInitial);
-        double[][][] phTmp = new double[batchSize][2][cellCount];
+        float[][] discharges = setupProc.createDischargeProfiles(batchSize, flowInput, flowInitial);
+        float[][][] phTmp = new float[batchSize][2][cellCount];
 
         RiverState initialState = new RiverState(
-                new double[cellCount], new double[cellCount],
-                new double[cellCount], new double[cellCount]
+                new float[cellCount], new float[cellCount],
+                new float[cellCount], new float[cellCount], new float[cellCount]
         );
 
         // Inicialización rápida para el benchmark (rompiendo encapsulación para velocidad de setup)
-        Arrays.fill(initialState.waterDepth(), 0.5);
+        Arrays.fill(initialState.waterDepth(), 0.5F);
 
         // Selección de configuración
         SimulationConfig configToUse = useGpu ? gpuConfig : cpuConfig;
