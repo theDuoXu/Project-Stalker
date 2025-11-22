@@ -128,9 +128,27 @@ tasks.register('gpuTest', Test) {
         // Incluye SÓLO los tests marcados con @Tag("GPU")
         includeTags 'GPU'
     }
+    // Muestra una salida clara en la consola para esta tarea
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
+}
+tasks.register('benchmark', Test){
+    description = 'Ejecuta las pruebas de rendimiento masivo CPU vs GPU.'
+    group = 'verification'
+    dependsOn copyNativeLib
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    jvmArgs "-Djava.library.path=${layout.buildDirectory.dir('libs/native').get().asFile.absolutePath}"
+    systemProperty 'projectstalker.native.enabled', 'true'
+
+    // para evitar pausas de Garbage Collection durante la medición.
     minHeapSize = "6G"
     maxHeapSize = "6G"
-    // Muestra una salida clara en la consola para esta tarea
+
+    useJUnitPlatform {
+        includeTags 'Benchmark'
+    }
     testLogging {
         events "passed", "skipped", "failed"
     }
