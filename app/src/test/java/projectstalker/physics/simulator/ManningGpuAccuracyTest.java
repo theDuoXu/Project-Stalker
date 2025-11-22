@@ -27,7 +27,7 @@ class ManningGpuAccuracyTest {
     private SimulationConfig cpuConfig;
     private SimulationConfig gpuConfig;
 
-    private final int CELL_COUNT = 5000;
+    private int cellCount;
     private final int BATCH_SIZE = 5;
     private final double EPSILON = 1e-4; // Tolerancia Float vs Double
 
@@ -37,6 +37,10 @@ class ManningGpuAccuracyTest {
         RiverConfig riverConfig = RiverConfig.getTestingRiver();
         RiverGeometryFactory factory = new RiverGeometryFactory();
         this.realGeometry = factory.createRealisticRiver(riverConfig);
+
+
+        this.cellCount = this.realGeometry.getCellCount();
+        log.info("Test configurado. Geometría real tiene {} celdas.", this.cellCount);
 
         // 2. Configuración Base
         SimulationConfig baseConfig = SimulationConfig.builder()
@@ -60,8 +64,8 @@ class ManningGpuAccuracyTest {
         log.info("=== INICIANDO TEST DE PRECISIÓN NUMÉRICA ===");
 
         // --- DATOS DE ENTRADA COMUNES ---
-        double[] zeroArray = new double[CELL_COUNT];
-        double[] initialDepth = new double[CELL_COUNT];
+        double[] zeroArray = new double[cellCount];
+        double[] initialDepth = new double[cellCount];
         Arrays.fill(initialDepth, 0.5);
 
         RiverState initialState = new RiverState(
@@ -70,13 +74,13 @@ class ManningGpuAccuracyTest {
 
         double[] flowInput = new double[BATCH_SIZE];
         Arrays.fill(flowInput, 150.0);
-        double[] flowInitial = new double[CELL_COUNT];
+        double[] flowInitial = new double[cellCount];
         Arrays.fill(flowInitial, 50.0);
 
         // Usamos un processor temporal para generar los perfiles (da igual qué config use)
         ManningBatchProcessor helperProcessor = new ManningBatchProcessor(realGeometry, cpuConfig);
         double[][] discharges = helperProcessor.createDischargeProfiles(BATCH_SIZE, flowInput, flowInitial);
-        double[][][] phTmp = new double[BATCH_SIZE][2][CELL_COUNT]; // Ceros (no afectan hidráulica)
+        double[][][] phTmp = new double[BATCH_SIZE][2][cellCount]; // Ceros (no afectan hidráulica)
 
         // --- EJECUCIÓN A: MODO CPU ---
         log.info(">> Ejecutando en CPU...");
@@ -119,7 +123,7 @@ class ManningGpuAccuracyTest {
     }
 
     private void compareStates(int step, RiverState cpu, RiverState gpu) {
-        for (int i = 0; i < CELL_COUNT; i++) {
+        for (int i = 0; i < cellCount; i++) {
             // Profundidad
             double hCpu = cpu.getWaterDepthAt(i);
             double hGpu = gpu.getWaterDepthAt(i);
