@@ -143,8 +143,8 @@ tasks.register('benchmark', Test){
     systemProperty 'projectstalker.native.enabled', 'true'
 
     // para evitar pausas de Garbage Collection durante la medición.
-    minHeapSize = "6G"
-    maxHeapSize = "6G"
+    minHeapSize = "16G"
+    maxHeapSize = "16G"
 
     useJUnitPlatform {
         includeTags 'Benchmark'
