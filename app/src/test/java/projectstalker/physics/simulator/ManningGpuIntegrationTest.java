@@ -36,7 +36,7 @@ class ManningGpuIntegrationTest {
     private RiverGeometry realGeometry;
     private RiverTemperatureModel realTempModel;
     private RiverPhModel realPhModel;
-    private SimulationConfig mockConfig;
+    private SimulationConfig simConfig;
 
     // Dimensiones (igual que en el test de CPU)
     private final int CELL_COUNT = 2000;
@@ -45,18 +45,30 @@ class ManningGpuIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        log.info("Configurando entorno para Test de Integración GPU...");
         // --- 1. Inicializar INSTANCIA REAL de Geometría y Configuración ---
-        RiverConfig config = RiverConfig.getTestingRiver();
+        RiverConfig riverConfig = RiverConfig.getTestingRiver();
         RiverGeometryFactory factory = new RiverGeometryFactory();
-        this.realGeometry = factory.createRealisticRiver(config);
+        this.realGeometry = factory.createRealisticRiver(riverConfig);
 
         // --- 2. Inicializar INSTANCIAS REALES de Modelos Fisicoquímicos ---
-        this.realTempModel = new RiverTemperatureModel(config, this.realGeometry);
+        this.realTempModel = new RiverTemperatureModel(riverConfig, this.realGeometry);
         this.realPhModel = new RiverPhModel(this.realGeometry);
 
         // --- 3. Inicializar Mocks de Configuración ---
-        mockConfig = mock(SimulationConfig.class);
-        when(mockConfig.getCpuProcessorCount()).thenReturn(2);
+        simConfig = mock(SimulationConfig.class);
+        this.simConfig = SimulationConfig.builder()
+                .riverConfig(riverConfig)
+                .seed(12345L)
+                .totalTime(3600) // 1 hora
+                .deltaTime((float) DELTA_TIME)
+                .cpuProcessorCount(Runtime.getRuntime().availableProcessors())
+                .cpuTimeBatchSize(BATCH_SIZE) // Sincronizado con la constante del test
+                .useGpuAccelerationOnManning(true) // Intención explícita
+                .useGpuAccelerationOnTransport(false) // Por ahora false
+                .build();
+
+        log.info("Entorno configurado. Geometría con {} celdas.", this.realGeometry.getCellCount());
         // NOTA: 'isUseGpuAccelerationOnManning' no importa aquí,
         // lo forzaremos manualmente en la llamada al método.
     }
@@ -88,7 +100,7 @@ class ManningGpuIntegrationTest {
         // (porque 'gpuTest' define 'projectstalker.native.enabled=true')
         log.info("Instanciando ManningBatchProcessor (esto debería cargar la librería nativa)...");
         batchProcessor = assertDoesNotThrow(
-                () -> new ManningBatchProcessor(this.realGeometry, mockConfig),
+                () -> new ManningBatchProcessor(this.realGeometry, simConfig),
                 "Falló la instanciación de ManningBatchProcessor. ¿Error al cargar la librería nativa?"
         );
         log.info("ManningBatchProcessor instanciado. Librería nativa cargada.");
