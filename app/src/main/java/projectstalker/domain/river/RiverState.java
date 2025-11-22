@@ -1,6 +1,7 @@
 package projectstalker.domain.river;
 
 import lombok.Builder;
+import lombok.With;
 
 import java.util.Arrays;
 import java.util.Objects;
@@ -23,6 +24,7 @@ import java.util.Objects;
  * @since 2025-10-13
  */
 @Builder
+@With
 public record RiverState(
         float[] waterDepth,
         float[] velocity,
