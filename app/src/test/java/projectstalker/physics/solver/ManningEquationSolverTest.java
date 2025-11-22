@@ -39,8 +39,8 @@ class ManningEquationSolverTest {
         mockGeometry = mock(RiverGeometry.class);
 
         // Configuración BASE: Canal Rectangular (m=0)
-        when(mockGeometry.cloneBottomWidth()).thenReturn(new double[]{TEST_B});
-        when(mockGeometry.cloneSideSlope()).thenReturn(new double[]{TEST_M_RECTANGULAR}); // m=0
+        when(mockGeometry.getWidthAt(CELL_INDEX)).thenReturn(TEST_B);
+        when(mockGeometry.getSideSlopeAt(CELL_INDEX)).thenReturn(TEST_M_RECTANGULAR);
         when(mockGeometry.getManningAt(CELL_INDEX)).thenReturn(TEST_N);
         when(mockGeometry.getBedSlopeAt(CELL_INDEX)).thenReturn(TEST_S);
     }
@@ -152,7 +152,7 @@ class ManningEquationSolverTest {
         final double initialGuess = 0.5;
 
         // Re-mockear la geometría para la forma trapezoidal (m=2)
-        when(mockGeometry.cloneSideSlope()).thenReturn(new double[]{TEST_M_TRAPEZOIDAL});
+        when(mockGeometry.getSideSlopeAt(CELL_INDEX)).thenReturn(TEST_M_TRAPEZOIDAL);
 
         // ACT
         double calculatedH = ManningEquationSolver.findDepth(targetQ, initialGuess, CELL_INDEX, mockGeometry);
