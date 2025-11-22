@@ -1,25 +1,42 @@
 package projectstalker.physics.impl;
 
+import lombok.Builder;
+import lombok.With;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.physics.i.IReactionSolver;
+import java.util.stream.IntStream;
 
-/**
- * Implementación de cinética química de primer orden (Decaimiento exponencial).
- * Útil para DBO (Demanda Biológica de Oxígeno), patógenos o isótopos radiactivos.
- */
+@Builder
+@With
 public class FirstOrderReactionSolver implements IReactionSolver {
 
-    private static final double THETA = 1.047;
-    private static final double REF_TEMP = 20.0;
+    // Configuración inmutable
+    private final double thetaArrhenius;
+    private final double referenceTemperature;
+    private final boolean useParallelExecution;
 
-    @Override
-    public String getName() {
-        return "FirstOrderDecay";
+    /**
+     * Constructor por defecto (Valores estándar para calidad de aguas).
+     */
+    public FirstOrderReactionSolver() {
+        this(1.047, 20.0, false);
+    }
+
+    /**
+     * Constructor configurable.
+     * @param thetaArrhenius Coeficiente de temperatura (típicamente 1.0 - 1.1).
+     * @param referenceTemperature Temperatura de referencia donde k es conocida (típicamente 20°C).
+     * @param useParallelExecution Si es true, usa ForkJoinPool para arrays muy grandes.
+     */
+    public FirstOrderReactionSolver(double thetaArrhenius, double referenceTemperature, boolean useParallelExecution) {
+        this.thetaArrhenius = thetaArrhenius;
+        this.referenceTemperature = referenceTemperature;
+        this.useParallelExecution = useParallelExecution;
     }
 
     @Override
-    public String getDescription() {
-        return "Cinética de 1er orden corregida por temperatura: k(T) = k20 * theta^(T-20)";
+    public String getName() {
+        return "Reaction_1stOrder_Arrhenius";
     }
 
     @Override
@@ -27,22 +44,29 @@ public class FirstOrderReactionSolver implements IReactionSolver {
         int n = concentration.length;
         float[] result = new float[n];
 
-        for (int i = 0; i < n; i++) {
-            // 1. Obtener k base a 20°C
-            double k20 = geometry.getBaseDecayAt(i);
-
-            // 2. Obtener temperatura actual (si el array es nulo o vacío, asumimos 20°C)
-            double T = (temperature != null && i < temperature.length) ? temperature[i] : REF_TEMP;
-
-            // 3. Aplicar corrección de Arrhenius
-            // k_real = k20 * theta^(T - 20)
-            double kReal = k20 * Math.pow(THETA, T - REF_TEMP);
-
-            // 4. Decaimiento
-            double decayFactor = Math.exp(-kReal * dt);
-            result[i] = (float) (concentration[i] * decayFactor);
+        // Ejemplo de cómo usar Parallel Streams correctamente si se solicita
+        if (this.useParallelExecution && n > 10_000) {
+            IntStream.range(0, n).parallel().forEach(i -> computeCell(i, concentration, temperature, geometry, dt, result));
+        } else {
+            // Bucle simple para tamaños normales (evita overhead de hilos)
+            for (int i = 0; i < n; i++) {
+                computeCell(i, concentration, temperature, geometry, dt, result);
+            }
         }
 
         return result;
+    }
+
+    // Lógica extraída para ser usada tanto en secuencial como paralelo
+    private void computeCell(int i, float[] c, float[] t, RiverGeometry geo, float dt, float[] res) {
+        double k20 = geo.getBaseDecayAt(i);
+
+        // Si no hay datos de temperatura, usamos la de referencia (sin corrección)
+        double temp = (t != null && i < t.length) ? t[i] : this.referenceTemperature;
+
+        double kReal = k20 * Math.pow(this.thetaArrhenius, temp - this.referenceTemperature);
+        double decayFactor = Math.exp(-kReal * dt);
+
+        res[i] = (float) (c[i] * decayFactor);
     }
 }

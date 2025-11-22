@@ -1,133 +1,129 @@
 package projectstalker.physics.impl;
 
+import lombok.Builder;
+import lombok.With;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.physics.i.IAdvectionSolver;
 
-/**
- * Solver de Advección de Alta Resolución (High-Resolution Scheme).
- * Implementa el esquema MUSCL (Monotonic Upstream-Centered Scheme for Conservation Laws)
- * con un limitador de flujo MinMod para garantizar la propiedad TVD (Total Variation Diminishing).
- * Esto permite transportar "ondas cuadradas" (vertidos bruscos) sin que se difuminen
- * demasiado (como pasa con Upwind 1er orden) ni oscilen (como pasa con Lax-Wendroff).
- */
+@Builder
+@With
 public class MusclAdvectionSolver implements IAdvectionSolver {
 
-    @Override
-    public String getName() {
-        return "MUSCL_MinMod";
-    }
+    public enum Limiter { MINMOD, SUPERBEE, VAN_LEER }
 
-    @Override
-    public String getDescription() {
-        return "FVM Conservativo de 2do orden con reconstrucción lineal y limitador MinMod.";
+    private final float upstreamConcentration;
+    private final Limiter limiterType;
+
+    /**
+     * Constructor por defecto. Asume entrada limpia y limitador MinMod.
+     */
+    public MusclAdvectionSolver() {
+        this(0.0f, Limiter.MINMOD);
     }
 
     /**
-     * Resuelve la ecuación de advección: d(AC)/dt + d(QC)/dx = 0
+     * Constructor configurado.
+     * @param upstreamConcentration Concentración constante que entra por la frontera (mg/L).
+     * @param limiter Tipo de limitador de flujo para TVD.
      */
+    public MusclAdvectionSolver(float upstreamConcentration, Limiter limiter) {
+        this.upstreamConcentration = upstreamConcentration;
+        this.limiterType = limiter;
+    }
+
+    @Override
+    public String getName() {
+        return "MUSCL_" + limiterType.name();
+    }
+
     @Override
     public float[] solveAdvection(float[] concentration, float[] velocity, float[] area, RiverGeometry geometry, float dt) {
         int n = concentration.length;
         float[] newConcentration = new float[n];
         double dx = geometry.getSpatial_resolution();
-
-        // Array temporal para almacenar los flujos en las caras (i+1/2)
-        // flux[i] representa el flujo entre la celda i y la i+1
         float[] flux = new float[n + 1];
 
-        // --- PASO 1: Calcular Flujos en las caras (Reconstrucción + Riemann) ---
-        // Iteramos sobre las caras entre celdas (desde 0 hasta N-1)
-        // La cara i está entre la celda i y la i+1
+        // 1. CALCULAR FLUJOS
         for (int i = 0; i < n - 1; i++) {
-            // Necesitamos 4 puntos para MUSCL: i-1, i, i+1, i+2
-            // Para simplificar en los bordes, usamos un esquema de bajo orden (Upwind)
-            // si estamos muy cerca del inicio o del final.
             if (i == 0 || i >= n - 2) {
-                // Borde: Usamos Upwind simple (1er orden)
-                // Flujo = Q * C_upwind
-                double Q = velocity[i] * area[i]; // Caudal aproximado en la cara
+                // Borde: Upwind (1er orden) para estabilidad en extremos
+                double Q = velocity[i] * area[i];
                 flux[i] = (float) (Q * concentration[i]);
             } else {
-                // Interior: Usamos MUSCL (2do orden)
-                flux[i] = calculateMusclFlux(concentration, velocity, area, i, dt, dx);
+                // Interior: MUSCL (2do orden)
+                flux[i] = calculateMusclFlux(concentration, velocity, area, i);
             }
         }
 
-        // Condiciones de Frontera para Flujos
-        // Flujo entrante (i=-1): Asumimos 0 (o valor de frontera Dirichlet si lo hubiera)
-        float fluxIn = 0.0f;
-        // Flujo saliente (i=N-1): Calculado en el bucle anterior (flux[n-2]) o extrapolado
-        // Para la última celda, usamos Upwind simple para sacar el agua
-        double Q_last = velocity[n - 1] * area[n - 1];
-        flux[n - 1] = (float) (Q_last * concentration[n - 1]); // Flujo que sale del sistema
+        // --- CONDICIONES DE FRONTERA CONFIGURABLES ---
 
-        // --- PASO 2: Actualizar Estado (Balance de Masas) ---
-        // C_new = C_old - (dt / (A * dx)) * (Flux_out - Flux_in)
+        // Frontera Aguas Arriba (Inlet): Dirichlet
+        // Calculamos el caudal entrante (Q_in) basándonos en la primera celda
+        double Q_in = velocity[0] * area[0];
+        // Flux = Q * Concentración configurada en el constructor
+        float fluxIn = (float) (Q_in * this.upstreamConcentration);
+
+        // Frontera Aguas Abajo (Outlet): Transmisiva (Neumann dC/dx = 0)
+        double Q_out = velocity[n - 1] * area[n - 1];
+        flux[n - 1] = (float) (Q_out * concentration[n - 1]);
+
+        // 2. ACTUALIZAR ESTADO
         for (int i = 0; i < n; i++) {
-            float fluxOutRight = flux[i];     // Flujo que sale por la derecha (cara i)
-            float fluxInLeft = (i == 0) ? fluxIn : flux[i - 1]; // Flujo que entra por la izquierda
+            float fluxOutRight = flux[i];
+            float fluxInLeft = (i == 0) ? fluxIn : flux[i - 1];
 
-            // Volumen de control V = A * dx
             double volume = area[i] * dx;
 
-            // Evitar división por cero si el río está seco
-            if (volume < 1e-9) {
-                newConcentration[i] = 0.0f;
-            } else {
+            if (volume > 1e-9) {
                 double change = (dt / volume) * (fluxInLeft - fluxOutRight);
                 newConcentration[i] = (float) (concentration[i] + change);
+            } else {
+                newConcentration[i] = 0.0f;
             }
 
-            // Saneamiento: La concentración no puede ser negativa por errores numéricos
             if (newConcentration[i] < 0) newConcentration[i] = 0.0f;
         }
 
         return newConcentration;
     }
 
-    /**
-     * Calcula el flujo numérico en la cara entre i e i+1 usando reconstrucción MUSCL.
-     */
-    private float calculateMusclFlux(float[] c, float[] u, float[] A, int i, float dt, double dx) {
-        // Índices vecinos
-        int prev = i - 1;
-        int curr = i;
-        int next = i + 1;
-        int next2 = i + 2;
+    private float calculateMusclFlux(float[] c, float[] u, float[] A, int i) {
+        int prev = i - 1; int curr = i; int next = i + 1;
 
-        // 1. Calcular pendientes (r)
-        // r_i = (C_i - C_i-1) / (C_i+1 - C_i)
-        // Mide qué tan suave es el cambio. Si r cerca de 1, es suave. Si r lejos, es un pico.
         float slope_left = c[curr] - c[prev];
         float slope_right = c[next] - c[curr];
 
-        // 2. Aplicar Limitador MinMod para obtener la pendiente limitada (phi)
-        // Esto evita oscilaciones. Si las pendientes son opuestas (pico), la pendiente es 0 (plana).
-        float limitedSlope = minmod(slope_left, slope_right);
+        // Usamos el limitador configurado
+        float limitedSlope = applyLimiter(slope_left, slope_right);
 
-        // 3. Reconstrucción de valores en la cara (i + 1/2)
-        // Extrapolamos desde el centro de la celda 'i' hasta su borde derecho.
-        // C_L = C_i + 0.5 * phi * (C_i+1 - C_i)  <-- Simplificación estándar MUSCL
-        // Nota: Para MUSCL-Hancock completo se usa dt también, aquí usamos la versión espacial
         float c_left_at_face = c[curr] + 0.5f * limitedSlope;
-
-        // 4. Calcular Caudal en la cara (Promedio o Upwind)
-        // Como v > 0 siempre (tu premisa), el flujo viene de la izquierda.
-        // Usamos la velocidad y área de la celda 'i' (Upwind).
         double Q = u[curr] * A[curr];
 
-        // 5. Flujo Final
         return (float) (Q * c_left_at_face);
     }
 
-    /**
-     * Función Limitadora MinMod.
-     * Devuelve el valor más pequeño en magnitud si ambos tienen el mismo signo.
-     * Devuelve 0 si tienen signos opuestos (es un máximo o mínimo local).
-     */
-    private float minmod(float a, float b) {
-        if (a * b <= 0) return 0.0f; // Signos opuestos -> 0
-        if (Math.abs(a) < Math.abs(b)) return a;
-        return b;
+    private float applyLimiter(float a, float b) {
+        // Si tienen signos opuestos, es un pico -> pendiente 0 para todos los limitadores TVD
+        if (a * b <= 0) return 0.0f;
+
+        switch (this.limiterType) {
+            case SUPERBEE:
+                // Superbee: max(0, min(2a, b), min(a, 2b))
+                // Es más "agresivo", mantiene los bordes de la mancha más verticales.
+                float absA = Math.abs(a);
+                float absB = Math.abs(b);
+                if (a > 0) {
+                    return Math.max(0, Math.max(Math.min(2*a, b), Math.min(a, 2*b)));
+                } else {
+                    return -Math.max(0, Math.max(Math.min(2*absA, absB), Math.min(absA, 2*absB)));
+                }
+            case VAN_LEER:
+                // Van Leer: (r + |r|) / (1 + |r|) ... implementación armónica
+                return (2.0f * a * b) / (a + b);
+            case MINMOD:
+            default:
+                // MinMod: El más seguro y difusivo.
+                return (Math.abs(a) < Math.abs(b)) ? a : b;
+        }
     }
 }
