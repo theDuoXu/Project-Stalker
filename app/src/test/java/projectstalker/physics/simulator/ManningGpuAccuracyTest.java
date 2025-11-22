@@ -198,6 +198,11 @@ class ManningGpuAccuracyTest {
                 new double[cellCount], new double[cellCount],
                 new double[cellCount], new double[cellCount]
         );
+        /*
+            Forma muy eficiente de inicializar los datos sin crear arrays temporales extra
+            Atención, estamos rompiendo la encapsulación a propósito con Arrays.fill para evitar
+            tener que hacer 50000 copias de memoria para un benchmark
+         */
         Arrays.fill(initialState.waterDepth(), 0.5); // Rellenar con algo válido
 
         // Selección de configuración
