@@ -5,6 +5,10 @@ import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.physics.model.FlowProfileModel;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+
 /**
  * Actúa como un puente (wrapper) hacia la librería nativa JNI para resolver
  * la ecuación de Manning en la GPU. Encapsula toda la lógica de carga,
@@ -14,6 +18,8 @@ import projectstalker.physics.model.FlowProfileModel;
 public final class ManningGpuSolver {
 
     private final INativeManningSolver nativeSolver;
+    private RiverGeometry.GpuGeometryBuffers cachedGeometry;
+    private int cachedGeometryId = -1;
 
     public ManningGpuSolver(INativeManningSolver nativeSolver) {
         this.nativeSolver = nativeSolver;
@@ -39,16 +45,19 @@ public final class ManningGpuSolver {
         float[] targetDischarges = precomputeTargetDischarges(cellCount, currentState, geometry, flowGenerator, targetTimeInSeconds);
         float[] initialDepthGuesses = sanitizeInitialDepths(cellCount, currentState);
 
-        // 2. Llamada al método nativo.
+        // 2. Preparar la geometría
+        RiverGeometry.GpuGeometryBuffers buffers = getOrComputeGeometryBuffers(geometry);
+
+        // 3. Llamada al método nativo.
         float[] gpuResults = nativeSolver.solveManningGpu(
                 targetDischarges,
                 initialDepthGuesses,
-                geometry.cloneBottomWidth(),
-                geometry.cloneSideSlope(),
-                geometry.cloneManningCoefficient(),
-                calculateAndSanitizeBedSlopes(geometry));
+                buffers.bottomWidth(),
+                buffers.sideSlope(),
+                buffers.manning(),
+                buffers.bedSlope());
 
-        // 3. Desempaquetar los resultados a un formato útil para Java.
+        // 4. Desempaquetar los resultados a un formato útil para Java.
         return unpackGpuResults(gpuResults, cellCount);
     }
 
@@ -85,6 +94,7 @@ public final class ManningGpuSolver {
         float[] flatDischargeProfiles = flattenDischargeProfiles(allDischargeProfiles);
 
         // 3. Preparar la geometría
+        RiverGeometry.GpuGeometryBuffers buffers = getOrComputeGeometryBuffers(geometry);
 
         // 4. Llamada al método nativo con la firma completa.
         float[] gpuResults = nativeSolver.solveManningGpuBatch(
@@ -92,13 +102,55 @@ public final class ManningGpuSolver {
                 flatDischargeProfiles,
                 batchSize,
                 cellCount,
-                geometry.cloneBottomWidth(),
-                geometry.cloneSideSlope(),
-                geometry.cloneManningCoefficient(),
-                calculateAndSanitizeBedSlopes(geometry)
-        ); // TODO NO es necesario clonar esos arrays, creo que hay que pasarlos como FloatBuffer
+                buffers.bottomWidth(),
+                buffers.sideSlope(),
+                buffers.manning(),
+                buffers.bedSlope()
+        );
         // 5. Desempaquetar los resultados
         return unpackGpuResults(gpuResults, batchSize, cellCount);
+    }
+    /**
+     * Gestiona la creación de Direct Buffers.
+     * Solo paga el coste de asignación y copia una vez por geometría.
+     */
+    private RiverGeometry.GpuGeometryBuffers getOrComputeGeometryBuffers(RiverGeometry geometry) {
+        // Si ya tenemos buffers y son para ESTA geometría, los devolvemos
+        if (this.cachedGeometry != null && this.cachedGeometryId == geometry.hashCode()) {
+            return this.cachedGeometry;
+        }
+
+        log.info("Inicializando Direct Buffers para geometría GPU (Hash: {})...", geometry.hashCode());
+
+        // Calculamos la pendiente una sola vez aquí
+        float[] slopeArray = calculateAndSanitizeBedSlopes(geometry);
+
+        // Creamos los buffers directos
+        // Usamos getters directos de la geometría (asumiendo que devuelve float[])
+        RiverGeometry.GpuGeometryBuffers newBuffers = new RiverGeometry.GpuGeometryBuffers(
+                createDirectBuffer(geometry.getBottomWidth()),
+                createDirectBuffer(geometry.getSideSlope()),
+                createDirectBuffer(geometry.getManningCoefficient()),
+                createDirectBuffer(slopeArray)
+        );
+
+        this.cachedGeometry = newBuffers;
+        this.cachedGeometryId = geometry.hashCode();
+
+        return newBuffers;
+    }
+
+    /**
+     * Crea un Buffer Directo (fuera del Heap) y copia los datos.
+     * Esto permite que C++ lea la memoria directamente sin copiarla de nuevo.
+     */
+    private FloatBuffer createDirectBuffer(float[] data) {
+        ByteBuffer bb = ByteBuffer.allocateDirect(data.length * 4); // 4 bytes por float
+        bb.order(ByteOrder.nativeOrder()); // Vital para JNI
+        FloatBuffer fb = bb.asFloatBuffer();
+        fb.put(data);
+        fb.position(0); // Rebobinar para leer desde el principio
+        return fb;
     }
 
     /**
@@ -120,14 +172,14 @@ public final class ManningGpuSolver {
         for (int i = 0; i < batchSize; i++) {
             // Iterar sobre el espacio (celda)
             for (int j = 0; j < cellCount; j++) {
-                double originalDischarge = allDischargeProfiles[i][j];
+                float originalDischarge = allDischargeProfiles[i][j];
                 int flatIndex = i * cellCount + j; // Cálculo del índice 1D
 
                 // Sanitización
                 if (originalDischarge <= 0) {
                     flatDischarges[flatIndex] = 0.001f;
                 } else {
-                    flatDischarges[flatIndex] = (float) originalDischarge;
+                    flatDischarges[flatIndex] = originalDischarge;
                 }
             }
         }
@@ -140,7 +192,6 @@ public final class ManningGpuSolver {
      * Desempaqueta el array plano de resultados de la GPU a la estructura tridimensional de Java. (Lógica existente)
      */
     private float[][][] unpackGpuResults(float[] gpuResults, int batchSize, int cellCount) {
-        // ... (Lógica de desempaquetado mantenida e intacta) ...
         int expectedSize = batchSize * cellCount * 2;
         if (gpuResults == null || gpuResults.length != expectedSize) {
             throw new IllegalArgumentException(String.format("Error al desempaquetar resultados de GPU. Tamaño de array inesperado. Esperado: %d, Recibido: %d", expectedSize, gpuResults != null ? gpuResults.length : 0));
