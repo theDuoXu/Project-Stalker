@@ -49,7 +49,10 @@ abstract class CompileCudaTask extends DefaultTask {
 //                        '-gencode=arch=compute_61,code=sm_61',
 
                         // Genera código para tu objetivo de producción (Blackwell)
+                        '-gencode=arch=compute_90,code=sm_90',
                         '-gencode=arch=compute_100,code=sm_100',
+                        '-gencode=arch=compute_100,code=compute_100',
+                        '-gencode=arch=compute_120,code=sm_120',
 
                         sourceFile.absolutePath, // Archivo de entrada
                         '-o', objectFile.absolutePath // Archivo de salida
