@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.With;
 
+import java.nio.FloatBuffer;
 import java.util.Objects;
 import java.util.Arrays;
 
@@ -31,8 +32,11 @@ public final class RiverGeometry {
     @Getter
     private final float spatial_resolution;
     private final float[] elevationProfile;
+    @Getter
     private final float[] bottomWidth;
+    @Getter
     private final float[] sideSlope;
+    @Getter
     private final float[] manningCoefficient;
     private final float[] baseDecayCoefficientAt20C;
     private final float[] phProfile;
@@ -359,4 +363,12 @@ public final class RiverGeometry {
     public RiverSectionType[] cloneSectionTypes() {
         return sectionTypes.clone();
     }
+
+
+    public record GpuGeometryBuffers(
+            FloatBuffer bottomWidth,
+            FloatBuffer sideSlope,
+            FloatBuffer manning,
+            FloatBuffer bedSlope
+    ) {}
 }
