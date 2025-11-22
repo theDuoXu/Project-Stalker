@@ -2,6 +2,7 @@ package projectstalker.config;
 
 import lombok.Builder;
 import lombok.Value;
+import lombok.With;
 
 /**
  * Contenedor principal para todas las configuraciones de una simulación.
@@ -9,6 +10,7 @@ import lombok.Value;
  */
 @Value
 @Builder
+@With
 public class SimulationConfig {
 
     /**
