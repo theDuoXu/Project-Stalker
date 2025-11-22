@@ -44,7 +44,7 @@ public class FirstOrderReactionSolver implements IReactionSolver {
         int n = concentration.length;
         float[] result = new float[n];
 
-        // Ejemplo de cómo usar Parallel Streams correctamente si se solicita
+        // Usar Parallel Streams correctamente si se solicita
         if (this.useParallelExecution && n > 10_000) {
             IntStream.range(0, n).parallel().forEach(i -> computeCell(i, concentration, temperature, geometry, dt, result));
         } else {
