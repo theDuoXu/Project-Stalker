@@ -2,6 +2,8 @@ package projectstalker.physics.jni;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.nio.FloatBuffer;
+
 @Slf4j
 public class NativeManningGpuSingleton implements INativeManningSolver{
     private static volatile NativeManningGpuSingleton INSTANCE = null;
@@ -28,9 +30,9 @@ public class NativeManningGpuSingleton implements INativeManningSolver{
     /**
      * Declaración del JNI nativo que se comunica con la librería C++/CUDA.
      */
-    public native float[] solveManningGpu(float[] targetDischarges, float[] initialDepthGuesses, float[] bottomWidths, float[] sideSlopes, float[] manningCoefficients, float[] bedSlopes);
+    public native float[] solveManningGpu(float[] targetDischarges, float[] initialDepthGuesses, FloatBuffer bottomWidths, FloatBuffer sideSlopes, FloatBuffer manningCoefficients, FloatBuffer bedSlopes);
 
-    public native float[] solveManningGpuBatch(float[] gpuInitialGuess, float[] flatDischargeProfiles, int batchSize, int cellCount, float[] bottomWidths, float[] sideSlopesFP32, float[] manningCoefficientsFP32, float[] bedSlopesFP32);
+    public native float[] solveManningGpuBatch(float[] gpuInitialGuess, float[] flatDischargeProfiles, int batchSize, int cellCount, FloatBuffer bottomWidths, FloatBuffer sideSlopesFP32, FloatBuffer manningCoefficientsFP32, FloatBuffer bedSlopesFP32);
 
     public static NativeManningGpuSingleton getInstance() {
         if (INSTANCE == null) {
