@@ -8,12 +8,16 @@
 
 // --- Macro de Comprobación de Errores de CUDA ---
 // Envuelve cada llamada a la API de CUDA para una depuración robusta.
-#define CUDA_CHECK(err) { \
-    cudaError_t err_code = err; \
+#define CUDA_CHECK(call) { \
+    cudaError_t err_code = call; \
     if (err_code != cudaSuccess) { \
-        std::cerr << "Error CUDA en " << __FILE__ << ":" << __LINE__ \
-                  << ": " << cudaGetErrorString(err_code) << std::endl; \
-        throw std::runtime_error("Error en la ejecución de CUDA."); \
+        std::stringstream ss; \
+        ss << "CUDA Error en " << __FILE__ << ":" << __LINE__ \
+           << " | Código: " << err_code \
+           << " (" << cudaGetErrorName(err_code) << ") " \
+           << " | Mensaje: " << cudaGetErrorString(err_code); \
+        std::cerr << ss.str() << std::endl; \
+        throw std::runtime_error(ss.str()); \
     } \
 }
 
