@@ -18,13 +18,11 @@ import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 /**
  * Test de Integración End-to-End para el solver de GPU.
  * Este test carga la librería nativa real (.so) y ejecuta una simulación
  * a través del stack JNI -> C++ -> CUDA.
- *
  * Requiere la tarea 'gpuTest' de Gradle para ejecutarse, ya que necesita
  * que 'projectstalker.native.enabled' y 'java.library.path' estén configurados.
  */
@@ -39,7 +37,7 @@ class ManningGpuIntegrationTest {
     private SimulationConfig simConfig;
 
     // Dimensiones (igual que en el test de CPU)
-    private final int CELL_COUNT = 2000;
+    private int cellCount;
     private final int BATCH_SIZE = 3;
     private final double DELTA_TIME = 10.0;
 
@@ -67,10 +65,8 @@ class ManningGpuIntegrationTest {
                 .useGpuAccelerationOnManning(true) // Intención explícita
                 .useGpuAccelerationOnTransport(false) // Por ahora false
                 .build();
-
+        this.cellCount = this.realGeometry.getCellCount();
         log.info("Entorno configurado. Geometría con {} celdas.", this.realGeometry.getCellCount());
-        // NOTA: 'isUseGpuAccelerationOnManning' no importa aquí,
-        // lo forzaremos manualmente en la llamada al método.
     }
 
     @Test
@@ -83,7 +79,7 @@ class ManningGpuIntegrationTest {
 
         // 1. Estado Inicial
         double initialUniformDepth = 0.5;
-        double[] initialData = new double[CELL_COUNT];
+        double[] initialData = new double[cellCount];
         Arrays.fill(initialData, initialUniformDepth);
         RiverState initialRiverState = new RiverState(
                 initialData, initialData, initialData, initialData
@@ -92,7 +88,7 @@ class ManningGpuIntegrationTest {
         // 2. Perfiles de Caudal
         double[] newDischarges = new double[BATCH_SIZE];
         Arrays.fill(newDischarges, 200.0);
-        double[] initialDischarges = new double[CELL_COUNT];
+        double[] initialDischarges = new double[cellCount];
         Arrays.fill(initialDischarges, 50);
 
         // 3. Instanciar el SUT (Subject Under Test) REAL
@@ -109,7 +105,7 @@ class ManningGpuIntegrationTest {
         double[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(BATCH_SIZE, newDischarges, initialDischarges);
 
         // 4. Resultados Fisicoquímicos (Pre-cálculo)
-        double[][][] phTmp = new double[BATCH_SIZE][2][CELL_COUNT];
+        double[][][] phTmp = new double[BATCH_SIZE][2][cellCount];
         double timeStep = 0.0;
         for (int i = 0; i < BATCH_SIZE; i++) {
             double t = currentTime + timeStep;
