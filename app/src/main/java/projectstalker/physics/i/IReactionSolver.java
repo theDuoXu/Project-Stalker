@@ -2,7 +2,7 @@ package projectstalker.physics.i;
 
 import projectstalker.domain.river.RiverGeometry;
 
-public interface IReactionSolver {
+public interface IReactionSolver extends ISolverComponent {
     /**
      * Calcula la nueva concentración considerando SOLO la química.
      */

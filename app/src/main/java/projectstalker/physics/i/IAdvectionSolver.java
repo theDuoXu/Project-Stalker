@@ -2,7 +2,7 @@ package projectstalker.physics.i;
 
 import projectstalker.domain.river.RiverGeometry;
 
-public interface IAdvectionSolver{
+public interface IAdvectionSolver extends ISolverComponent {
     /**
      * Calcula la nueva concentración considerando SOLO el movimiento del agua.
      * @param concentration Array actual de concentraciones [mg/L]
