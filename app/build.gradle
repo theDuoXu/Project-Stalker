@@ -131,6 +131,10 @@ tasks.register('gpuTest', Test) {
     // Muestra una salida clara en la consola para esta tarea
     testLogging {
         events "passed", "skipped", "failed"
+        showExceptions true
+        showCauses true
+        showStackTraces true
+        exceptionFormat "full"
     }
 }
 tasks.register('benchmark', Test){
@@ -151,5 +155,9 @@ tasks.register('benchmark', Test){
     }
     testLogging {
         events "passed", "skipped", "failed"
+        showExceptions true
+        showCauses true
+        showStackTraces true
+        exceptionFormat "full"
     }
 }
