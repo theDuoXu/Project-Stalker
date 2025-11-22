@@ -100,8 +100,8 @@ dependencies {
 
 test {
     useJUnitPlatform {
-        // Excluye los tests de GPU de la ejecución 'test' estándar
-        excludeTags 'GPU'
+        // Excluye los tests de GPU de la ejecución 'test' estándar y los benchmarks
+        excludeTags 'GPU', 'Benchmark'
     }
 }
 
