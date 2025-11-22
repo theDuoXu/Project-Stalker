@@ -51,43 +51,43 @@ public record RiverConfig(
         float zoneNoiseFrequency,
 
         // --- Parámetros Geométricos ---
-        double totalLength,
-        double spatialResolution,
-        double initialElevation,
-        double concavityFactor,
-        double averageSlope,
-        double slopeVariability,
-        double baseWidth,
-        double widthVariability,
-        double baseSideSlope,
-        double sideSlopeVariability,
+        float totalLength,
+        float spatialResolution,
+        float initialElevation,
+        float concavityFactor,
+        float averageSlope,
+        float slopeVariability,
+        float baseWidth,
+        float widthVariability,
+        float baseSideSlope,
+        float sideSlopeVariability,
 
         // --- Parámetros Hidráulicos ---
-        double baseManning,
-        double manningVariability,
+        float baseManning,
+        float manningVariability,
 
         // --- Parámetros de Reacción ---
-        double baseDecayRateAt20C,
-        double decayRateVariability,
+        float baseDecayRateAt20C,
+        float decayRateVariability,
 
         // --- Parámetro de dispersión ---
-        double baseDispersionAlpha,
-        double alphaVariability,
+        float baseDispersionAlpha,
+        float alphaVariability,
 
         // --- Parámetros de Calidad de Agua (Temporales) ---
-        double baseTemperature,
-        double dailyTempVariation,
-        double seasonalTempVariation,
-        double averageAnnualTemperature,
-        double basePh,
-        double phVariability,
+        float baseTemperature,
+        float dailyTempVariation,
+        float seasonalTempVariation,
+        float averageAnnualTemperature,
+        float basePh,
+        float phVariability,
 
         // --- Parámetros de Modelo de Temperatura Espacial ---
-        double maxHeadwaterCoolingEffect,
-        double headwaterCoolingDistance,
-        double widthHeatingFactor,
-        double slopeCoolingFactor,
-        double temperatureNoiseAmplitude
+        float maxHeadwaterCoolingEffect,
+        float headwaterCoolingDistance,
+        float widthHeatingFactor,
+        float slopeCoolingFactor,
+        float temperatureNoiseAmplitude
 ) {
     // El 'record' se encarga de los getters, constructor, etc.
     public static RiverConfig getTestingRiver(){
@@ -96,33 +96,33 @@ public record RiverConfig(
                 .noiseFrequency(0.0f)
                 .detailNoiseFrequency(0.05f)
                 .zoneNoiseFrequency(0.001f)
-                .totalLength(100000.0)
-                .spatialResolution(50.0)
+                .totalLength(100000)
+                .spatialResolution(50)
                 .initialElevation(200)
-                .concavityFactor(0.4)
-                .averageSlope(0.0002)
-                .slopeVariability(0.0001)
-                .baseWidth(150.0)
-                .widthVariability(40.0)
-                .baseSideSlope(4.0)
-                .sideSlopeVariability(1.5)
-                .baseManning(0.030)
-                .manningVariability(0.005)
-                .baseDecayRateAt20C(0.1)
-                .decayRateVariability(0.05)
+                .concavityFactor(0.4F)
+                .averageSlope(0.0002F)
+                .slopeVariability(0.0001F)
+                .baseWidth(150)
+                .widthVariability(40)
+                .baseSideSlope(4)
+                .sideSlopeVariability(1.5F)
+                .baseManning(0.030F)
+                .manningVariability(0.005F)
+                .baseDecayRateAt20C(0.1F)
+                .decayRateVariability(0.05F)
                 .baseDispersionAlpha(10)
                 .alphaVariability(2)
                 .baseTemperature(15)
-                .dailyTempVariation(2.0)
-                .seasonalTempVariation(8.0)
-                .averageAnnualTemperature(14.0)
-                .basePh(7.5)
-                .phVariability(0.5)
-                .maxHeadwaterCoolingEffect(4.0)
-                .headwaterCoolingDistance(20000.0)
-                .widthHeatingFactor(1.5)
-                .slopeCoolingFactor(1.0)
-                .temperatureNoiseAmplitude(0.25)
+                .dailyTempVariation(2)
+                .seasonalTempVariation(8)
+                .averageAnnualTemperature(14)
+                .basePh(7.5F)
+                .phVariability(0.5F)
+                .maxHeadwaterCoolingEffect(4)
+                .headwaterCoolingDistance(20000)
+                .widthHeatingFactor(1.5F)
+                .slopeCoolingFactor(1.0F)
+                .temperatureNoiseAmplitude(0.25F)
                 .build();
     }
 }

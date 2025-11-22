@@ -15,6 +15,7 @@ import projectstalker.physics.model.RiverPhModel;
 import projectstalker.physics.model.RiverTemperatureModel;
 
 import java.util.Arrays;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -70,12 +71,12 @@ class ManningBatchProcessorTest {
         double currentTime = 300.0 * 3600.0;
 
         // 1. Estado Inicial
-        double initialUniformDepth = 0.5;
-        double[] initialData = new double[CELL_COUNT];
+        float initialUniformDepth = 0.5f;
+        float[] initialData = new float[CELL_COUNT];
         Arrays.fill(initialData, initialUniformDepth);
 
         RiverState initialRiverState = new RiverState(
-                initialData, initialData, initialData, initialData
+                initialData, initialData, initialData, initialData, initialData
         );
 
         // Logging del estado ANTES de la simulación
@@ -89,16 +90,16 @@ class ManningBatchProcessorTest {
         log.info("==============================================================");
 
         // 2. Perfiles de Caudal
-        double[] newDischarges = new double[BATCH_SIZE];
-        Arrays.fill(newDischarges, 200.0);
-        double[] initialDischarges = new double[CELL_COUNT];
+        float[] newDischarges = new float[BATCH_SIZE];
+        Arrays.fill(newDischarges, 200.0f);
+        float[] initialDischarges = new float[CELL_COUNT];
 
         Arrays.fill(initialDischarges, 50);
-        double[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(BATCH_SIZE, newDischarges, initialDischarges);
+        float[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(BATCH_SIZE, newDischarges, initialDischarges);
 
         // 3. Resultados Fisicoquímicos (Pre-cálculo)
-        double[][][] phTmp = new double[BATCH_SIZE][2][CELL_COUNT];
-        double timeStep = 0.0;
+        float[][][] phTmp = new float[BATCH_SIZE][2][CELL_COUNT];
+        float timeStep = 0.0f;
         for (int i = 0; i < BATCH_SIZE; i++) {
             double t = currentTime + timeStep;
             phTmp[i][0] = realTempModel.calculate(t);
@@ -142,7 +143,7 @@ class ManningBatchProcessorTest {
      */
     private double calculateAverageDepth(RiverState state) {
         if (state.waterDepth().length == 0) return 0.0;
-        return Arrays.stream(state.waterDepth()).average().orElse(0.0);
+        return IntStream.range(0, state.waterDepth().length).mapToDouble(i->state.waterDepth()[i]).average().orElse(0.0);
     }
 
     /**
@@ -150,6 +151,6 @@ class ManningBatchProcessorTest {
      */
     private double calculateAverageVelocity(RiverState state) {
         if (state.velocity().length == 0) return 0.0;
-        return Arrays.stream(state.velocity()).average().orElse(0.0);
+        return IntStream.range(0, state.velocity().length).mapToDouble(i->state.velocity()[i]).average().orElse(0.0);
     }
 }

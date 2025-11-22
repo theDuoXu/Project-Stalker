@@ -32,16 +32,21 @@ public final class ManningGpuSolver {
      * @param targetTimeInSeconds El tiempo actual de la simulación.
      * @return Un array de arrays de doubles donde [0] son las nuevas profundidades y [1] son las nuevas velocidades.
      */
-    public double[][] solve(RiverState currentState, RiverGeometry geometry, FlowProfileModel flowGenerator, double targetTimeInSeconds) {
+    public float[][] solve(RiverState currentState, RiverGeometry geometry, FlowProfileModel flowGenerator, double targetTimeInSeconds) {
         final int cellCount = geometry.getCellCount();
 
         // 1. Preparar y sanitizar todos los datos para la GPU.
         float[] targetDischarges = precomputeTargetDischarges(cellCount, currentState, geometry, flowGenerator, targetTimeInSeconds);
         float[] initialDepthGuesses = sanitizeInitialDepths(cellCount, currentState);
-        RiverGeometry.ManningGpuRiverGeometryFP32 gpuGeometry = createGpuGeometry(geometry);
 
         // 2. Llamada al método nativo.
-        float[] gpuResults = nativeSolver.solveManningGpu(targetDischarges, initialDepthGuesses, gpuGeometry.bottomWidthsFP32(), gpuGeometry.sideSlopesFP32(), gpuGeometry.manningCoefficientsFP32(), gpuGeometry.bedSlopesFP32());
+        float[] gpuResults = nativeSolver.solveManningGpu(
+                targetDischarges,
+                initialDepthGuesses,
+                geometry.cloneBottomWidth(),
+                geometry.cloneSideSlope(),
+                geometry.cloneManningCoefficient(),
+                calculateAndSanitizeBedSlopes(geometry));
 
         // 3. Desempaquetar los resultados a un formato útil para Java.
         return unpackGpuResults(gpuResults, cellCount);
@@ -55,7 +60,7 @@ public final class ManningGpuSolver {
      * @param geometry             Geometría básica del río.
      * @return [batchSize][0][cellCount] son las nuevas profundidades y [batchSize][1][cellCount] son las nuevas velocidades.
      */
-    public double[][][] solveBatch(double[] initialGuess, double[][] allDischargeProfiles, RiverGeometry geometry) {
+    public float[][][] solveBatch(float[] initialGuess, float[][] allDischargeProfiles, RiverGeometry geometry) {
 
         // 1. Parámetros de control
         int batchSize = allDischargeProfiles.length;
@@ -80,7 +85,6 @@ public final class ManningGpuSolver {
         float[] flatDischargeProfiles = flattenDischargeProfiles(allDischargeProfiles);
 
         // 3. Preparar la geometría
-        RiverGeometry.ManningGpuRiverGeometryFP32 gpuGeometry = createGpuGeometry(geometry);
 
         // 4. Llamada al método nativo con la firma completa.
         float[] gpuResults = nativeSolver.solveManningGpuBatch(
@@ -88,11 +92,11 @@ public final class ManningGpuSolver {
                 flatDischargeProfiles,
                 batchSize,
                 cellCount,
-                gpuGeometry.bottomWidthsFP32(),
-                gpuGeometry.sideSlopesFP32(),
-                gpuGeometry.manningCoefficientsFP32(),
-                gpuGeometry.bedSlopesFP32()
-        );
+                geometry.cloneBottomWidth(),
+                geometry.cloneSideSlope(),
+                geometry.cloneManningCoefficient(),
+                calculateAndSanitizeBedSlopes(geometry)
+        ); // TODO NO es necesario clonar esos arrays, creo que hay que pasarlos como FloatBuffer
         // 5. Desempaquetar los resultados
         return unpackGpuResults(gpuResults, batchSize, cellCount);
     }
@@ -105,7 +109,7 @@ public final class ManningGpuSolver {
      *
      * @return Array 1D aplanado [batchSize * cellCount]
      */
-    float[] flattenDischargeProfiles(double[][] allDischargeProfiles) {
+    float[] flattenDischargeProfiles(float[][] allDischargeProfiles) {
         int batchSize = allDischargeProfiles.length;
         int cellCount = allDischargeProfiles[0].length;
         int totalSize = batchSize * cellCount;
@@ -135,14 +139,14 @@ public final class ManningGpuSolver {
     /**
      * Desempaqueta el array plano de resultados de la GPU a la estructura tridimensional de Java. (Lógica existente)
      */
-    private double[][][] unpackGpuResults(float[] gpuResults, int batchSize, int cellCount) {
+    private float[][][] unpackGpuResults(float[] gpuResults, int batchSize, int cellCount) {
         // ... (Lógica de desempaquetado mantenida e intacta) ...
         int expectedSize = batchSize * cellCount * 2;
         if (gpuResults == null || gpuResults.length != expectedSize) {
             throw new IllegalArgumentException(String.format("Error al desempaquetar resultados de GPU. Tamaño de array inesperado. Esperado: %d, Recibido: %d", expectedSize, gpuResults != null ? gpuResults.length : 0));
         }
 
-        double[][][] results = new double[batchSize][2][cellCount];
+        float[][][] results = new float[batchSize][2][cellCount];
 
         for (int i = 0; i < batchSize; i++) {
             int timeStepOffset = i * cellCount * 2;
@@ -172,11 +176,11 @@ public final class ManningGpuSolver {
         return discharges;
     }
 
-    float[] sanitizeInitialDepths(double[] initialGuess) {
+    float[] sanitizeInitialDepths(float[] initialGuess) {
         float[] depths = new float[initialGuess.length];
         for (int i = 0; i < initialGuess.length; i++) {
-            double d = initialGuess[i];
-            depths[i] = (d <= 1e-3) ? 0.001f : (float) d;
+            float d = initialGuess[i];
+            depths[i] = (d <= 1e-3) ? 0.001f : d;
         }
         return depths;
     }
@@ -190,13 +194,9 @@ public final class ManningGpuSolver {
         return depths;
     }
 
-    private RiverGeometry.ManningGpuRiverGeometryFP32 createGpuGeometry(RiverGeometry geometry) {
-        return new RiverGeometry.ManningGpuRiverGeometryFP32(toFloatArray(geometry.cloneBottomWidth()), toFloatArray(geometry.cloneSideSlope()), toFloatArray(geometry.cloneManningCoefficient()), calculateAndSanitizeBedSlopes(geometry));
-    }
-
     private float[] calculateAndSanitizeBedSlopes(RiverGeometry geometry) {
-        double[] elevations = geometry.cloneElevationProfile();
-        double dx = geometry.getSpatial_resolution();
+        float[] elevations = geometry.cloneElevationProfile();
+        float dx = geometry.getSpatial_resolution();
         int cellCount = geometry.getCellCount();
         float[] sanitizedSlopes = new float[cellCount];
 
@@ -213,22 +213,14 @@ public final class ManningGpuSolver {
         return sanitizedSlopes;
     }
 
-    private double[][] unpackGpuResults(float[] gpuResults, int cellCount) {
-        double[] newWaterDepth = new double[cellCount];
-        double[] newVelocity = new double[cellCount];
+    private float[][] unpackGpuResults(float[] gpuResults, int cellCount) {
+        float[] newWaterDepth = new float[cellCount];
+        float[] newVelocity = new float[cellCount];
 
         for (int i = 0; i < cellCount; i++) {
             newWaterDepth[i] = gpuResults[i * 2];
             newVelocity[i] = gpuResults[i * 2 + 1];
         }
-        return new double[][]{newWaterDepth, newVelocity};
-    }
-
-    private float[] toFloatArray(double[] doubleArray) {
-        float[] floatArray = new float[doubleArray.length];
-        for (int i = 0; i < doubleArray.length; i++) {
-            floatArray[i] = (float) doubleArray[i];
-        }
-        return floatArray;
+        return new float[][]{newWaterDepth, newVelocity};
     }
 }

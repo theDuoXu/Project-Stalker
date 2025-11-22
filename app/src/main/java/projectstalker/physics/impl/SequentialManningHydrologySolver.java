@@ -66,10 +66,10 @@ public class SequentialManningHydrologySolver implements IHydrologySolver {
         }
 
         // --- Arrays para el nuevo estado ---
-        double[] newWaterDepth = new double[cellCount];
-        double[] newVelocity = new double[cellCount];
-        double[] newTemperature;
-        double[] newPh = new double[cellCount];
+        float[] newWaterDepth = new float[cellCount];
+        float[] newVelocity = new float[cellCount];
+        float[] newTemperature;
+        float[] newPh = new float[cellCount];
 
 
         // 1. Calcular el perfil de temperaturas usando el nuevo modelo.
@@ -96,15 +96,15 @@ public class SequentialManningHydrologySolver implements IHydrologySolver {
 
             // Si el caudal de entrada es prácticamente cero, el río está seco en este punto.
             if (currentDischarge < 1e-6) {
-                newWaterDepth[i] = 0.0;
-                newVelocity[i] = 0.0;
+                newWaterDepth[i] = 0.0F;
+                newVelocity[i] = 0.0F;
                 continue; // Saltar al siguiente ciclo del bucle
             }
 
             // 2. Encontrar la Profundidad (H) que satisface la Ecuación de Manning
-            double initialGuess = currentState.getWaterDepthAt(i);
+            float initialGuess = currentState.getWaterDepthAt(i);
             newWaterDepth[i] = ManningEquationSolver.findDepth(
-                    currentDischarge,
+                    (float) currentDischarge,
                     initialGuess,
                     i,
                     geometry
@@ -113,13 +113,19 @@ public class SequentialManningHydrologySolver implements IHydrologySolver {
             // 3. Calcular la Velocidad (v) a partir de la nueva profundidad y el caudal
             double newArea = geometry.getCrossSectionalArea(i, newWaterDepth[i]);
             if (newArea > 1e-6) { // Evitar división por cero si el río está seco
-                newVelocity[i] = currentDischarge / newArea;
+                newVelocity[i] = (float) (currentDischarge / newArea);
             } else {
-                newVelocity[i] = 0.0;
+                newVelocity[i] = 0.0F;
             }
         }
         // --- Devolver el nuevo estado inmutable ---
-        return new RiverState(newWaterDepth, newVelocity, newTemperature, newPh);
+        return RiverState.builder()
+                .waterDepth(newWaterDepth)
+                .velocity(newVelocity)
+                .temperature(newTemperature)
+                .ph(newPh)
+                .contaminantConcentration(new float[cellCount])
+                .build();
     }
 
 

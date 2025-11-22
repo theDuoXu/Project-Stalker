@@ -70,11 +70,11 @@ public class SimulationConfig {
         /**
          * Caudal promedio o base sobre el cual se aplican las variaciones.
          */
-        double baseDischarge;
+        float baseDischarge;
         /**
          * Magnitud máxima de la variación sobre el caudal base.
          */
-        double noiseAmplitude;
+        float noiseAmplitude;
         /**
          * Frecuencia de la variación (valores bajos para cambios lentos).
          */

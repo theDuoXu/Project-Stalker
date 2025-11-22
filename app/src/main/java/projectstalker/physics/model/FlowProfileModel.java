@@ -79,7 +79,7 @@ public class FlowProfileModel {
      * @param timeInSeconds El punto en el tiempo (en segundos) para el cual se calcula el caudal.
      * @return El valor del caudal (en m³/s), garantizado como no negativo.
      */
-    public double getDischargeAt(double timeInSeconds) {
+    public float getDischargeAt(double timeInSeconds) {
         // Obtiene un valor de ruido Perlin 1D en el rango [-1, 1].
         float noiseValue = noise.GetNoise((float) timeInSeconds, 0.0f);
 
@@ -87,7 +87,7 @@ public class FlowProfileModel {
         double discharge = baseDischarge + noiseValue * noiseAmplitude;
 
         // Asegura que el caudal nunca sea negativo.
-        return Math.max(0, discharge);
+        return (float) Math.max(0, discharge);
     }
 
     /**

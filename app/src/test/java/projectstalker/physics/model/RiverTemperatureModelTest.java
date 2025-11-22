@@ -60,7 +60,7 @@ class RiverTemperatureModelTest {
         double anyTime = 123456.0;
 
         // --- 2. Act ---
-        double[] temperatureProfile = model.calculate(anyTime);
+        float[] temperatureProfile = model.calculate(anyTime);
 
         // --- 3. Assert ---
         assertEquals(defaultGeometry.getCellCount(), temperatureProfile.length,
@@ -82,7 +82,7 @@ class RiverTemperatureModelTest {
         double expectedBaseTemp = 20.0 /* avgAnnual */ + 5.0 /* daily */;
 
         // --- 2. Act ---
-        double[] temperatureProfile = model.calculate(timeAt6AM);
+        float[] temperatureProfile = model.calculate(timeAt6AM);
 
         // --- 3. Assert ---
         // Todas las celdas deben tener exactamente la misma temperatura base.
@@ -98,9 +98,9 @@ class RiverTemperatureModelTest {
                 .withWidthHeatingFactor(0)
                 .withSlopeCoolingFactor(0)
                 .withTemperatureNoiseAmplitude(0)
-                .withDailyTempVariation(5.0)
-                .withSeasonalTempVariation(2.0)
-                .withAverageAnnualTemperature(20.0);
+                .withDailyTempVariation(5.0f)
+                .withSeasonalTempVariation(2.0f)
+                .withAverageAnnualTemperature(20.0f);
         RiverTemperatureModel model = new RiverTemperatureModel(configWithoutEffects, defaultGeometry);
         return model;
     }

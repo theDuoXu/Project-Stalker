@@ -29,7 +29,7 @@ public final class ManningEquationSolver {
      * @return La profundidad calculada (m).
      */
 
-    public static double findDepth(double targetDischarge, double initialDepthGuess, int cellIndex, RiverGeometry geometry) {
+    public static float findDepth(float targetDischarge, float initialDepthGuess, int cellIndex, RiverGeometry geometry) {
 
         // Extraer parámetros geométricos una sola vez
         final double b = geometry.getWidthAt(cellIndex);
@@ -53,7 +53,7 @@ public final class ManningEquationSolver {
 
             // Si el error es suficientemente pequeño, hemos convergido.
             if (Math.abs(f_H) < TOLERANCE) {
-                return H;
+                return (float) H;
             }
 
             // Derivada f'(H) = dQ/dH
@@ -69,7 +69,7 @@ public final class ManningEquationSolver {
 
             // Comprobar convergencia por cambio en H
             if (Math.abs(h_next - H) < TOLERANCE) {
-                return Math.max(0, h_next);
+                return (float) Math.max(0, h_next);
             }
 
             // Actualizar H para la siguiente iteración, asegurando que no sea negativo.
@@ -77,7 +77,7 @@ public final class ManningEquationSolver {
         }
 
         // Si no converge, devuelve la última mejor estimación.
-        return H;
+        return (float) H;
     }
 
     /**

@@ -21,18 +21,18 @@ class ManningEquationSolverTest {
     private RiverGeometry mockGeometry;
 
     // --- Parámetros de prueba para un canal de referencia ---
-    private static final double TEST_B = 10.0;    // Ancho del fondo (b)
-    private static final double TEST_M_RECTANGULAR = 0.0; // Pendiente lateral (m=0)
-    private static final double TEST_M_TRAPEZOIDAL = 2.0; // Pendiente lateral (m=2)
-    private static final double TEST_N = 0.030;   // Coeficiente de Manning (n)
-    private static final double TEST_S = 0.001;   // Pendiente de fondo (S)
+    private static final float TEST_B = 10.0f;    // Ancho del fondo (b)
+    private static final float TEST_M_RECTANGULAR = 0.0f; // Pendiente lateral (m=0)
+    private static final float TEST_M_TRAPEZOIDAL = 2.0f; // Pendiente lateral (m=2)
+    private static final float TEST_N = 0.030f;   // Coeficiente de Manning (n)
+    private static final float TEST_S = 0.001f;   // Pendiente de fondo (S)
     private static final int CELL_INDEX = 0;
 
     // VALORES ESPERADOS (con n=0.030, S=0.001)
     // El error en los tests originales se debió a que estos valores de referencia eran incorrectos.
-    private static final double H_Q5_RECT = 0.6723118;   // Q=5, m=0
-    private static final double H_Q100_RECT = 5.1124239; // Q=100, m=0
-    private static final double H_Q10_TRAP = 0.9385240;  // Q=10, m=2
+    private static final float H_Q5_RECT = 0.6723118f;   // Q=5, m=0
+    private static final float H_Q100_RECT = 5.1124239f; // Q=100, m=0
+    private static final float H_Q10_TRAP = 0.9385240f;  // Q=10, m=2
 
     @BeforeEach
     void setUp() {
@@ -65,11 +65,11 @@ class ManningEquationSolverTest {
     @DisplayName("Convergencia Básica: Caudal medio conocido (Q=5 m³/s)")
     void findDepth_shouldConvergeToKnownValue() {
         // ARRANGE
-        final double targetQ = 5.0;
-        final double initialGuess = 0.5;
+        final float targetQ = 5.0f;
+        final float initialGuess = 0.5f;
 
         // ACT
-        double calculatedH = ManningEquationSolver.findDepth(targetQ, initialGuess, CELL_INDEX, mockGeometry);
+        float calculatedH = ManningEquationSolver.findDepth(targetQ, initialGuess, CELL_INDEX, mockGeometry);
 
         // ASSERT
         // Se usa la constante H_Q5_RECT
@@ -81,11 +81,11 @@ class ManningEquationSolverTest {
     @DisplayName("Caudal Cero/Seco: Debe devolver una profundidad insignificante")
     void findDepth_shouldReturnNearZeroForZeroDischarge() {
         // ARRANGE
-        final double targetQ = 1e-7; // Caudal muy cercano a cero
-        final double initialGuess = 0.2;
+        final float targetQ = 1e-7f; // Caudal muy cercano a cero
+        final float initialGuess = 0.2f;
 
         // ACT
-        double calculatedH = ManningEquationSolver.findDepth(targetQ, initialGuess, CELL_INDEX, mockGeometry);
+        float calculatedH = ManningEquationSolver.findDepth(targetQ, initialGuess, CELL_INDEX, mockGeometry);
 
         // ASSERT
         assertTrue(calculatedH < 0.005, "La profundidad para caudal cero debe ser casi cero.");
@@ -95,11 +95,11 @@ class ManningEquationSolverTest {
     @DisplayName("Caudal de Crecida: Debe converger rápidamente a una gran profundidad (Q=100 m³/s)")
     void findDepth_shouldConvergeForFloodDischarge() {
         // ARRANGE
-        final double targetQ = 100.0;
-        final double initialGuess = 1.0;
+        final float targetQ = 100.0f;
+        final float initialGuess = 1.0f;
 
         // ACT
-        double calculatedH = ManningEquationSolver.findDepth(targetQ, initialGuess, CELL_INDEX, mockGeometry);
+        float calculatedH = ManningEquationSolver.findDepth(targetQ, initialGuess, CELL_INDEX, mockGeometry);
 
         // ASSERT
         // Se usa la constante H_Q100_RECT
@@ -115,11 +115,11 @@ class ManningEquationSolverTest {
     @DisplayName("Estimación Inicial Negativa/Cero: Debe usar la estimación de 0.1 m")
     void findDepth_shouldHandleNegativeInitialGuess() {
         // ARRANGE
-        final double targetQ = 5.0;
-        final double negativeGuess = -1.0;
+        final float targetQ = 5.0f;
+        final float negativeGuess = -1.0f;
 
         // ACT
-        double calculatedH = ManningEquationSolver.findDepth(targetQ, negativeGuess, CELL_INDEX, mockGeometry);
+        float calculatedH = ManningEquationSolver.findDepth(targetQ, negativeGuess, CELL_INDEX, mockGeometry);
 
         // ASSERT
         // Debe converger al valor correcto (H_Q5_RECT) a pesar de la mala estimación.
@@ -130,14 +130,14 @@ class ManningEquationSolverTest {
     @DisplayName("Pendiente de Fondo Cero: Debe usar el valor saneado de 1e-7")
     void findDepth_shouldHandleZeroBedSlope() {
         // ARRANGE
-        final double targetQ = 10.0;
-        final double initialGuess = 1.0;
+        final float targetQ = 10.0f;
+        final float initialGuess = 1.0f;
 
         // Re-mockear la geometría con pendiente cero (activa el saneamiento dentro de findDepth)
-        when(mockGeometry.getBedSlopeAt(CELL_INDEX)).thenReturn(0.0);
+        when(mockGeometry.getBedSlopeAt(CELL_INDEX)).thenReturn(0.0f);
 
         // ACT
-        double calculatedH = ManningEquationSolver.findDepth(targetQ, initialGuess, CELL_INDEX, mockGeometry);
+        float calculatedH = ManningEquationSolver.findDepth(targetQ, initialGuess, CELL_INDEX, mockGeometry);
 
         // ASSERT: Se verifica que el solver no colapsa y devuelve un valor plausible
         assertTrue(calculatedH > 1.0, "La profundidad debe ser alta o el solver debe converger sin errores.");
@@ -148,14 +148,14 @@ class ManningEquationSolverTest {
     @DisplayName("Canal Trapezoidal (m=2.0): Convergencia con geometría compleja")
     void findDepth_shouldHandleTrapezoidalChannel() {
         // ARRANGE
-        final double targetQ = 10.0;
-        final double initialGuess = 0.5;
+        final float targetQ = 10.0f;
+        final float initialGuess = 0.5f;
 
         // Re-mockear la geometría para la forma trapezoidal (m=2)
         when(mockGeometry.getSideSlopeAt(CELL_INDEX)).thenReturn(TEST_M_TRAPEZOIDAL);
 
         // ACT
-        double calculatedH = ManningEquationSolver.findDepth(targetQ, initialGuess, CELL_INDEX, mockGeometry);
+        float calculatedH = ManningEquationSolver.findDepth(targetQ, initialGuess, CELL_INDEX, mockGeometry);
 
         // ASSERT
         // Se usa la constante H_Q10_TRAP

@@ -9,6 +9,7 @@ import projectstalker.domain.river.RiverGeometry;
 
 import java.util.Arrays;
 import java.util.DoubleSummaryStatistics;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -32,33 +33,33 @@ class RiverGeometryFactoryTest {
                         .noiseFrequency(0.0f)
                         .detailNoiseFrequency(0.05f)
                         .zoneNoiseFrequency(0.001f)
-                        .totalLength(100000.0)
-                        .spatialResolution(50.0)
+                        .totalLength(100000.0F)
+                        .spatialResolution(50.0F)
                         .initialElevation(200)
-                        .concavityFactor(0.4)
-                        .averageSlope(0.0002)
-                        .slopeVariability(0.0001)
-                        .baseWidth(150.0)
-                        .widthVariability(40.0)
-                        .baseSideSlope(4.0)
-                        .sideSlopeVariability(1.5)
-                        .baseManning(0.030)
-                        .manningVariability(0.005)
-                        .baseDecayRateAt20C(0.1)
-                        .decayRateVariability(0.05)
+                        .concavityFactor(0.4F)
+                        .averageSlope(0.0002F)
+                        .slopeVariability(0.0001F)
+                        .baseWidth(150.0F)
+                        .widthVariability(40.0F)
+                        .baseSideSlope(4.0F)
+                        .sideSlopeVariability(1.5F)
+                        .baseManning(0.030F)
+                        .manningVariability(0.005F)
+                        .baseDecayRateAt20C(0.1F)
+                        .decayRateVariability(0.05F)
                         .baseDispersionAlpha(10)
                         .alphaVariability(2)
                         .baseTemperature(15)
-                        .dailyTempVariation(2.0)
-                        .seasonalTempVariation(8.0)
-                        .averageAnnualTemperature(14.0)
-                        .basePh(7.5)
-                        .phVariability(0.5)
-                        .maxHeadwaterCoolingEffect(4.0)
-                        .headwaterCoolingDistance(20000.0)
-                        .widthHeatingFactor(1.5)
-                        .slopeCoolingFactor(1.0)
-                        .temperatureNoiseAmplitude(0.25)
+                        .dailyTempVariation(2.0F)
+                        .seasonalTempVariation(8.0F)
+                        .averageAnnualTemperature(14.0F)
+                        .basePh(7.5F)
+                        .phVariability(0.5F)
+                        .maxHeadwaterCoolingEffect(4.0F)
+                        .headwaterCoolingDistance(20000.0F)
+                        .widthHeatingFactor(1.5F)
+                        .slopeCoolingFactor(1.0F)
+                        .temperatureNoiseAmplitude(0.25F)
                         .build();
 
         RiverGeometryFactory factory = new RiverGeometryFactory();
@@ -86,12 +87,12 @@ class RiverGeometryFactoryTest {
         log.info("--- Resumen Estadístico de la Geometría del Río ---");
 
         // Obtenemos los arrays una sola vez para optimizar.
-        double[] elevationProfile = river.cloneElevationProfile();
-        double[] bottomWidth = river.cloneBottomWidth();
-        double[] sideSlope = river.cloneSideSlope();
-        double[] manningCoefficient = river.cloneManningCoefficient();
-        double[] decayCoefficient = river.cloneBaseDecayCoefficientAt20C();
-        double[] phProfile = river.clonePhProfile();
+        float[] elevationProfile = river.cloneElevationProfile();
+        float[] bottomWidth = river.cloneBottomWidth();
+        float[] sideSlope = river.cloneSideSlope();
+        float[] manningCoefficient = river.cloneManningCoefficient();
+        float[] decayCoefficient = river.cloneBaseDecayCoefficientAt20C();
+        float[] phProfile = river.clonePhProfile();
 
         describeArray("Perfil de Elevación (m)", elevationProfile);
         describeArray("Ancho del Fondo (m)", bottomWidth);
@@ -104,18 +105,18 @@ class RiverGeometryFactoryTest {
     /**
      * Calcula y registra un resumen estadístico para un array de doubles.
      */
-    private void describeArray(String name, double[] data) {
+    private void describeArray(String name, float[] data) {
         if (data == null || data.length == 0) {
             log.warn("--- {} ---: Datos no disponibles o array vacío.", name);
             return;
         }
 
         log.info("--- {} ---", name);
-        DoubleSummaryStatistics stats = Arrays.stream(data).summaryStatistics();
+        DoubleSummaryStatistics stats = IntStream.range(0, data.length).mapToDouble(i -> data[i]).summaryStatistics();
         double mean = stats.getAverage();
         // El cálculo de la varianza se hace una vez para ser eficiente.
-        double variance = Arrays.stream(data)
-                .map(x -> (x - mean) * (x - mean))
+        double variance = IntStream.range(0, data.length)
+                .mapToDouble(x -> (data[x] - mean) * (data[x] - mean))
                 .average()
                 .orElse(0.0);
         double stdDev = Math.sqrt(variance);
@@ -128,7 +129,7 @@ class RiverGeometryFactoryTest {
         log.info("  Min:      {}", String.format("%.4f", stats.getMin()));
         log.info("  Max:      {}", String.format("%.4f", stats.getMax()));
         int headCount = Math.min(5, data.length);
-        double[] head = Arrays.copyOfRange(data, 0, headCount);
+        float[] head = Arrays.copyOfRange(data, 0, headCount);
         log.info("  Primeros {} valores: {}", headCount, Arrays.toString(head));
     }
 }

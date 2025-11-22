@@ -21,7 +21,7 @@ class RiverPhModelTest {
 
     private RiverGeometry mockGeometry;
     private RiverPhModel phModel;
-    private final double[] BASE_PH_PROFILE = new double[]{7.0, 7.1, 7.2, 7.3, 7.4};
+    private final float[] BASE_PH_PROFILE = new float[]{7.0f, 7.1f, 7.2f, 7.3f, 7.4f};
 
     @BeforeEach
     void setUp() {
@@ -44,17 +44,17 @@ class RiverPhModelTest {
 
         // ARRANGE
         // Obtenemos el primer perfil
-        double[] phProfile = phModel.getPhProfile();
+        float[] phProfile = phModel.getPhProfile();
 
         // ASSERT 1: Verificar el valor inicial antes de la mutación
         assertEquals(BASE_PH_PROFILE[0], phProfile[0], "El valor inicial del pH debe ser 7.0.");
 
         // ACT (Mutación)
         log.warn("Mutando la copia devuelta: phProfile[0] = 99.0");
-        phProfile[0] = 99.0;
+        phProfile[0] = 99.0f;
 
         // ARRANGE (Obtener un segundo perfil, que DEBE ser una COPIA nueva del original)
-        double[] secondPhProfile = phModel.getPhProfile();
+        float[] secondPhProfile = phModel.getPhProfile();
 
         // ASSERT 2: Verificar que el segundo perfil obtenido NO fue afectado por la mutación
         // ESTA ES LA VERIFICACIÓN CLAVE DEL REQUISITO DE CLONACIÓN/INMUTABILIDAD
@@ -71,12 +71,12 @@ class RiverPhModelTest {
     @DisplayName("Verificación de valores y tamaño del perfil")
     void getPhProfile_shouldReturnCorrectValuesAndSize() {
         // Act
-        double[] phProfile = phModel.getPhProfile();
+        float[] phProfile = phModel.getPhProfile();
 
         // Assert
         assertNotNull(phProfile);
         assertEquals(BASE_PH_PROFILE.length, phProfile.length, "El tamaño del perfil debe ser 5.");
-        assertArrayEquals(BASE_PH_PROFILE, phProfile, 0.001, "Los valores deben coincidir con el perfil base.");
+        assertArrayEquals(BASE_PH_PROFILE, phProfile, 0.001f, "Los valores deben coincidir con el perfil base.");
         log.info("Valores y tamaño del perfil verificados.");
     }
 }

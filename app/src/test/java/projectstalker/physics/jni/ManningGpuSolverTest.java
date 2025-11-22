@@ -35,11 +35,11 @@ class ManningGpuSolverTest {
         // 3. Configurar mocks de geometría (necesarios para createGpuGeometry)
         mockGeometry = mock(RiverGeometry.class);
         when(mockGeometry.getCellCount()).thenReturn(CELL_COUNT);
-        when(mockGeometry.cloneBottomWidth()).thenReturn(new double[]{10.0, 10.0, 10.0});
-        when(mockGeometry.cloneSideSlope()).thenReturn(new double[]{0.0, 0.0, 0.0});
-        when(mockGeometry.cloneManningCoefficient()).thenReturn(new double[]{0.03, 0.03, 0.03});
-        when(mockGeometry.cloneElevationProfile()).thenReturn(new double[]{10.0, 9.5, 9.0});
-        when(mockGeometry.getSpatial_resolution()).thenReturn(100.0);
+        when(mockGeometry.cloneBottomWidth()).thenReturn(new float[]{10.0f, 10.0f, 10.0f});
+        when(mockGeometry.cloneSideSlope()).thenReturn(new float[]{0.0f, 0.0f, 0.0f});
+        when(mockGeometry.cloneManningCoefficient()).thenReturn(new float[]{0.03f, 0.03f, 0.03f});
+        when(mockGeometry.cloneElevationProfile()).thenReturn(new float[]{10.0f, 9.5f, 9.0f});
+        when(mockGeometry.getSpatial_resolution()).thenReturn(100.0f);
     }
 
     @Test
@@ -49,10 +49,10 @@ class ManningGpuSolverTest {
         // --- ARRANGE ---
 
         // 1. Datos de ENTRADA para el método solveBatch
-        double[] initialGuess = {1.5, 0.0001, -0.5}; // Necesita saneamiento
-        double[][] discharges = {
-                {10.0, 0.0, 5.0},    // t=0, necesita saneamiento
-                {20.0, -5.0, 15.0}   // t=1, necesita saneamiento
+        float[] initialGuess = {1.5f, 0.0001f, -0.5f}; // Necesita saneamiento
+        float[][] discharges = {
+                {10.0f, 0.0f, 5.0f},    // t=0, necesita saneamiento
+                {20.0f, -5.0f, 15.0f}   // t=1, necesita saneamiento
         };
 
         // 2. Datos PROCESADOS que esperamos que se envíen al método nativo
@@ -86,7 +86,7 @@ class ManningGpuSolverTest {
         ArgumentCaptor<float[]> dischargeCaptor = ArgumentCaptor.forClass(float[].class);
 
         // --- ACT ---
-        double[][][] finalResult = gpuSolver.solveBatch(initialGuess, discharges, mockGeometry);
+        float[][][] finalResult = gpuSolver.solveBatch(initialGuess, discharges, mockGeometry);
 
         // --- ASSERT ---
 
@@ -104,11 +104,11 @@ class ManningGpuSolverTest {
         assertArrayEquals(expectedFlatDischarges, dischargeCaptor.getValue(), 1e-6f, "Los caudales no fueron aplanados o saneados correctamente.");
 
         // 3. Verificar que los datos devueltos (finalResult) fueron desempaquetados
-        double[] expectedDepthsBatch1 = {2.1, 2.2, 2.3};
-        double[] expectedVelsBatch1 = {1.1, 1.2, 1.3};
+        float[] expectedDepthsBatch1 = {2.1f, 2.2f, 2.3f};
+        float[] expectedVelsBatch1 = {1.1f, 1.2f, 1.3f};
 
-        assertArrayEquals(expectedDepthsBatch1, finalResult[1][0], 1e-6, "Las profundidades del batch 1 no se desempaquetaron correctamente.");
-        assertArrayEquals(expectedVelsBatch1, finalResult[1][1], 1e-6, "Las velocidades del batch 1 no se desempaquetaron correctamente.");
+        assertArrayEquals(expectedDepthsBatch1, finalResult[1][0], 1e-6f, "Las profundidades del batch 1 no se desempaquetaron correctamente.");
+        assertArrayEquals(expectedVelsBatch1, finalResult[1][1], 1e-6f, "Las velocidades del batch 1 no se desempaquetaron correctamente.");
     }
 
     // --- Tests para los métodos de ayuda (ahora que no son privados) ---
@@ -117,7 +117,7 @@ class ManningGpuSolverTest {
     @Test
     @DisplayName("El aplanamiento debe sanear valores negativos/cero y aplanar el array 2D a 1D")
     void flattenDischargeProfiles_shouldFlattenAndSanitize() {
-        double[][] inputDischarges = {{10.0, 0.0, 5.0}, {20.0, -5.0, 15.0}};
+        float[][] inputDischarges = {{10.0f, 0.0f, 5.0f}, {20.0f, -5.0f, 15.0f}};
         float[] expectedFlatArray = {10.0f, 0.001f, 5.0f, 20.0f, 0.001f, 15.0f};
 
         float[] flatDischarges = gpuSolver.flattenDischargeProfiles(inputDischarges);
@@ -128,7 +128,7 @@ class ManningGpuSolverTest {
     @Test
     @DisplayName("La sanitización de profundidades iniciales debe reemplazar valores bajos/cero por 0.001f")
     void sanitizeInitialDepths_shouldSanitizeLowValues() {
-        double[] initialGuess = {1.5, 0.0001, 1e-3, 0.5, -0.1};
+        float[] initialGuess = {1.5f, 0.0001f, 1e-3f, 0.5f, -0.1f};
         float[] expectedSanitized = {1.5f, 0.001f, 0.001f, 0.5f, 0.001f};
 
         float[] sanitizedDepths = gpuSolver.sanitizeInitialDepths(initialGuess);

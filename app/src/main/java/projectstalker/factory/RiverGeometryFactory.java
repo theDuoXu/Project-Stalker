@@ -73,13 +73,13 @@ public class RiverGeometryFactory {
         zoneNoise.SetFrequency(config.zoneNoiseFrequency());
 
         // 2. Creación de los arrays de atributos
-        double[] elevationProfile = new double[cellCount];
-        double[] bottomWidth = new double[cellCount];
-        double[] sideSlope = new double[cellCount];
-        double[] manningCoefficient = new double[cellCount];
-        double[] baseDecayCoefficientAt20C = new double[cellCount];
-        double[] phProfile = new double[cellCount];
-        double[] dispersionAlpha = new double[cellCount];
+        float[] elevationProfile = new float[cellCount];
+        float[] bottomWidth = new float[cellCount];
+        float[] sideSlope = new float[cellCount];
+        float[] manningCoefficient = new float[cellCount];
+        float[] baseDecayCoefficientAt20C = new float[cellCount];
+        float[] phProfile = new float[cellCount];
+        float[] dispersionAlpha = new float[cellCount];
         RiverSectionType[] sectionTypes = new RiverSectionType[cellCount];
         Arrays.fill(sectionTypes, RiverSectionType.NATURAL);
 
@@ -113,7 +113,7 @@ public class RiverGeometryFactory {
 
                 // 5. Calcular la caída total, asegurando que no sea negativa
                 double totalDrop = Math.max(0, baseDrop + noiseEffectOnDrop);
-                elevationProfile[i] = elevationProfile[i - 1] - totalDrop;
+                elevationProfile[i] = (float) (elevationProfile[i - 1] - totalDrop);
             }
 
             // --- Generar Ancho del Fondo (CORRELACIONADO) ---
@@ -121,27 +121,27 @@ public class RiverGeometryFactory {
             // Zonas abruptas (zoneMultiplier alto) son más estrechas.
             double widthModulation = (1.0 - zoneMultiplier) * config.widthVariability(); // Modulación inversa
             double widthValue = config.baseWidth() + widthModulation + (currentDetailNoise * config.widthVariability() * 0.2); // Añadimos un poco de detalle
-            bottomWidth[i] = Math.max(0.1, widthValue);
+            bottomWidth[i] = (float) Math.max(0.1, widthValue);
 
             // --- Generar Pendiente de Taludes ---
             // La mantenemos con el ruido de detalle para simplicidad.
             double sideSlopeValue = config.baseSideSlope() + currentDetailNoise * config.sideSlopeVariability();
-            sideSlope[i] = Math.max(0, sideSlopeValue);
+            sideSlope[i] = (float) Math.max(0, sideSlopeValue);
 
             // --- Generar Coeficiente de Manning (CORRELACIONADO) ---
             // Zonas suaves (zoneMultiplier bajo) tienen Manning bajo.
             // Zonas abruptas (zoneMultiplier alto) tienen Manning alto.
             double manningModulation = zoneMultiplier * config.manningVariability(); // Modulación directa
             double manningValue = config.baseManning() + manningModulation + (currentDetailNoise * config.manningVariability() * 0.2);
-            manningCoefficient[i] = Math.max(0.01, manningValue);
+            manningCoefficient[i] = (float) Math.max(0.01, manningValue);
 
             // --- Generar Coeficiente de Reacción y pH ---
             // Estos son menos dependientes de la pendiente, así que los mantenemos con el ruido de detalle.
             double decayValue = config.baseDecayRateAt20C() + currentDetailNoise * config.decayRateVariability();
-            baseDecayCoefficientAt20C[i] = Math.max(0.0, decayValue);
+            baseDecayCoefficientAt20C[i] = (float) Math.max(0.0, decayValue);
 
             double phValue = config.basePh() + currentDetailNoise * config.phVariability();
-            phProfile[i] = Math.max(6.0, Math.min(9.0, phValue));
+            phProfile[i] = (float) Math.max(6.0, Math.min(9.0, phValue));
 
             // --- Generar Coeficiente de Dispersión (Alpha) ---
             // La dispersión aumenta en zonas rugosas (Manning alto) y con el "caos" del río.
@@ -156,7 +156,7 @@ public class RiverGeometryFactory {
             double alphaValue = baseAlpha + (manningModulation * 100.0) + (currentDetailNoise * alphaVariability);
 
             // Alpha nunca debe ser negativo (físicamente imposible) ni cero (siempre hay algo de mezcla).
-            dispersionAlpha[i] = Math.max(0.1, alphaValue);
+            dispersionAlpha[i] = (float) Math.max(0.1, alphaValue);
         }
 
         // 4. Instanciar y devolver el objeto RiverGeometry final y validado
@@ -200,9 +200,9 @@ public class RiverGeometryFactory {
         // --- 3. Preparar datos mutables (clonación para inmutabilidad) ---
         // Obtenemos los arrays del río base. La clase RiverGeometry ya los devuelve clonados,
         // pero para ser explícitos y seguros, los clonamos de nuevo aquí.
-        double[] newElevationProfile = baseRiver.cloneElevationProfile();
-        double[] newBottomWidth = baseRiver.cloneBottomWidth();
-        double[] newManningCoefficient = baseRiver.cloneManningCoefficient();
+        float[] newElevationProfile = baseRiver.cloneElevationProfile();
+        float[] newBottomWidth = baseRiver.cloneBottomWidth();
+        float[] newManningCoefficient = baseRiver.cloneManningCoefficient();
         RiverSectionType[] newSectionTypes = baseRiver.cloneSectionTypes();
 
         // --- 4. Aplicar cada evento en serie sobre los datos clonados ---
