@@ -128,7 +128,8 @@ tasks.register('gpuTest', Test) {
         // Incluye SÓLO los tests marcados con @Tag("GPU")
         includeTags 'GPU'
     }
-
+    minHeapSize = "6G"
+    maxHeapSize = "6G"
     // Muestra una salida clara en la consola para esta tarea
     testLogging {
         events "passed", "skipped", "failed"
