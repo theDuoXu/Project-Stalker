@@ -6,19 +6,22 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import projectstalker.domain.river.RiverGeometry;
 
+import java.nio.FloatBuffer;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
  * Test unitario para ManningGpuSolver.
- * Este test utiliza Inyección de Dependencias para mockear la capa nativa
- * (INativeManningSolver) y probar la lógica de orquestación de la clase.
+ * <p>
+ * Actualizado para soportar la arquitectura de Zero-Copy con FloatBuffers.
+ * Verifica que la lógica Java transforme correctamente los arrays a Buffers
+ * antes de llamar a JNI.
  */
 class ManningGpuSolverTest {
 
-    // --- Mocks y SUT (Subject Under Test) ---
-    private ManningGpuSolver gpuSolver; // La clase que estamos probando
-    private INativeManningSolver mockNativeSolver; // El mock de la capa nativa
+    private ManningGpuSolver gpuSolver;
+    private INativeManningSolver mockNativeSolver;
     private RiverGeometry mockGeometry;
 
     private final int CELL_COUNT = 3;
@@ -26,62 +29,56 @@ class ManningGpuSolverTest {
 
     @BeforeEach
     void setUp() {
-        // 1. Crear el mock de la dependencia nativa
         mockNativeSolver = mock(INativeManningSolver.class);
-
-        // 2. Instanciar la clase bajo prueba (SUT) inyectando el mock
         gpuSolver = new ManningGpuSolver(mockNativeSolver);
 
-        // 3. Configurar mocks de geometría (necesarios para createGpuGeometry)
         mockGeometry = mock(RiverGeometry.class);
         when(mockGeometry.getCellCount()).thenReturn(CELL_COUNT);
-        when(mockGeometry.cloneBottomWidth()).thenReturn(new float[]{10.0f, 10.0f, 10.0f});
-        when(mockGeometry.cloneSideSlope()).thenReturn(new float[]{0.0f, 0.0f, 0.0f});
-        when(mockGeometry.cloneManningCoefficient()).thenReturn(new float[]{0.03f, 0.03f, 0.03f});
-        when(mockGeometry.cloneElevationProfile()).thenReturn(new float[]{10.0f, 9.5f, 9.0f});
         when(mockGeometry.getSpatial_resolution()).thenReturn(100.0f);
+
+        // Mockear datos de geometría (Arrays float[])
+        // Nota: Asegúrate de que estos métodos coinciden con tu RiverGeometry refactorizada
+        when(mockGeometry.getBottomWidth()).thenReturn(new float[]{10.0f, 10.0f, 10.0f});
+        when(mockGeometry.getSideSlope()).thenReturn(new float[]{0.0f, 0.0f, 0.0f});
+        when(mockGeometry.getManningCoefficient()).thenReturn(new float[]{0.03f, 0.03f, 0.03f});
+
+        // Para bedSlope, el solver calcula la pendiente internamente usando el perfil de elevación
+        when(mockGeometry.cloneElevationProfile()).thenReturn(new float[]{10.0f, 9.5f, 9.0f});
     }
 
     @Test
-    @DisplayName("solveBatch debe sanear, aplanar, llamar al nativo y desempaquetar la respuesta")
+    @DisplayName("solveBatch debe preparar Buffers, llamar al nativo y desempaquetar")
     void solveBatch_shouldPrepareData_callNative_andUnpackResults() {
 
         // --- ARRANGE ---
-
-        // 1. Datos de ENTRADA para el método solveBatch
-        float[] initialGuess = {1.5f, 0.0001f, -0.5f}; // Necesita saneamiento
+        float[] initialGuess = {1.5f, 0.0001f, -0.5f};
         float[][] discharges = {
-                {10.0f, 0.0f, 5.0f},    // t=0, necesita saneamiento
-                {20.0f, -5.0f, 15.0f}   // t=1, necesita saneamiento
+                {10.0f, 0.0f, 5.0f},
+                {20.0f, -5.0f, 15.0f}
         };
 
-        // 2. Datos PROCESADOS que esperamos que se envíen al método nativo
-        // El 'initialGuess' es saneado Y expandido (duplicado) para cada item del batch (batchSize=2)
-        // Esta expansión es para acomodar la forma que accedo en CUDA
+        // Datos esperados (Sanitizados y Expandidos)
         float[] expectedSanitizedGuess = {1.5f, 0.001f, 0.001f, 1.5f, 0.001f, 0.001f};
         float[] expectedFlatDischarges = {10.0f, 0.001f, 5.0f, 20.0f, 0.001f, 15.0f};
 
-        // 3. Datos de VUELTA (simulados) que devuelve el mock nativo
-        // Formato: [D_t0_c0, V_t0_c0, D_t0_c1, V_t0_c1, ..., D_t1_c0, V_t1_c0, ...]
+        // Respuesta simulada del Nativo (flat array)
         float[] mockGpuResult = {
-                // Batch 0
-                1.1f, 0.1f,  // Celda 0
-                1.2f, 0.2f,  // Celda 1
-                1.3f, 0.3f,  // Celda 2
-                // Batch 1
-                2.1f, 1.1f,  // Celda 0
-                2.2f, 1.2f,  // Celda 1
-                2.3f, 1.3f   // Celda 2
+                1.1f, 0.1f, 1.2f, 0.2f, 1.3f, 0.3f, // Batch 0
+                2.1f, 1.1f, 2.2f, 1.2f, 2.3f, 1.3f  // Batch 1
         };
 
-        // 4. Configurar el mock para que devuelva los datos simulados
+        // CONFIGURACIÓN DEL MOCK (La parte crítica del refactoring)
+        // Ahora esperamos FloatBuffer para la geometría, no float[]
         when(mockNativeSolver.solveManningGpuBatch(
-                any(float[].class), any(float[].class),
+                any(float[].class), // Initial Guess (Dinámico)
+                any(float[].class), // Discharges (Dinámico)
                 anyInt(), anyInt(),
-                any(float[].class), any(float[].class), any(float[].class), any(float[].class)
+                any(FloatBuffer.class), // BottomWidth (Estático/Buffer)
+                any(FloatBuffer.class), // SideSlope (Estático/Buffer)
+                any(FloatBuffer.class), // Manning (Estático/Buffer)
+                any(FloatBuffer.class)  // BedSlope (Estático/Buffer)
         )).thenReturn(mockGpuResult);
 
-        // 5. Preparar ArgumentCaptors para verificar los datos enviados al mock
         ArgumentCaptor<float[]> guessCaptor = ArgumentCaptor.forClass(float[].class);
         ArgumentCaptor<float[]> dischargeCaptor = ArgumentCaptor.forClass(float[].class);
 
@@ -90,32 +87,29 @@ class ManningGpuSolverTest {
 
         // --- ASSERT ---
 
-        // 1. Verificar que el método nativo fue llamado UNA VEZ
+        // 1. Verificar llamada con tipos correctos
         verify(mockNativeSolver, times(1)).solveManningGpuBatch(
                 guessCaptor.capture(),
                 dischargeCaptor.capture(),
                 eq(BATCH_SIZE),
                 eq(CELL_COUNT),
-                any(float[].class), any(float[].class), any(float[].class), any(float[].class)
+                any(FloatBuffer.class), // Verificamos que se pasaron buffers
+                any(FloatBuffer.class),
+                any(FloatBuffer.class),
+                any(FloatBuffer.class)
         );
 
-        // 2. Verificar que los datos enviados al nativo fueron saneados y aplanados
-        assertArrayEquals(expectedSanitizedGuess, guessCaptor.getValue(), 1e-6f, "La profundidad inicial no fue saneada correctamente.");
-        assertArrayEquals(expectedFlatDischarges, dischargeCaptor.getValue(), 1e-6f, "Los caudales no fueron aplanados o saneados correctamente.");
+        // 2. Verificar datos dinámicos
+        assertArrayEquals(expectedSanitizedGuess, guessCaptor.getValue(), 1e-6f);
+        assertArrayEquals(expectedFlatDischarges, dischargeCaptor.getValue(), 1e-6f);
 
-        // 3. Verificar que los datos devueltos (finalResult) fueron desempaquetados
-        float[] expectedDepthsBatch1 = {2.1f, 2.2f, 2.3f};
-        float[] expectedVelsBatch1 = {1.1f, 1.2f, 1.3f};
-
-        assertArrayEquals(expectedDepthsBatch1, finalResult[1][0], 1e-6f, "Las profundidades del batch 1 no se desempaquetaron correctamente.");
-        assertArrayEquals(expectedVelsBatch1, finalResult[1][1], 1e-6f, "Las velocidades del batch 1 no se desempaquetaron correctamente.");
+        // 3. Verificar desempaquetado
+        assertArrayEquals(new float[]{2.1f, 2.2f, 2.3f}, finalResult[1][0], 1e-6f);
+        assertArrayEquals(new float[]{1.1f, 1.2f, 1.3f}, finalResult[1][1], 1e-6f);
     }
 
-    // --- Tests para los métodos de ayuda (ahora que no son privados) ---
-    // (Estos son los tests que escribiste, ahora sin reflexión)
-
     @Test
-    @DisplayName("El aplanamiento debe sanear valores negativos/cero y aplanar el array 2D a 1D")
+    @DisplayName("flattenDischargeProfiles debe aplanar y sanear correctamente")
     void flattenDischargeProfiles_shouldFlattenAndSanitize() {
         float[][] inputDischarges = {{10.0f, 0.0f, 5.0f}, {20.0f, -5.0f, 15.0f}};
         float[] expectedFlatArray = {10.0f, 0.001f, 5.0f, 20.0f, 0.001f, 15.0f};
@@ -126,7 +120,7 @@ class ManningGpuSolverTest {
     }
 
     @Test
-    @DisplayName("La sanitización de profundidades iniciales debe reemplazar valores bajos/cero por 0.001f")
+    @DisplayName("sanitizeInitialDepths debe corregir valores no físicos")
     void sanitizeInitialDepths_shouldSanitizeLowValues() {
         float[] initialGuess = {1.5f, 0.0001f, 1e-3f, 0.5f, -0.1f};
         float[] expectedSanitized = {1.5f, 0.001f, 0.001f, 0.5f, 0.001f};
