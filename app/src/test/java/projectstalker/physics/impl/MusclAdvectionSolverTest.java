@@ -28,7 +28,7 @@ class MusclAdvectionSolverTest {
         solver = new MusclAdvectionSolver(0.0f, Limiter.MINMOD);
 
         mockGeometry = mock(RiverGeometry.class);
-        when(mockGeometry.getSpatial_resolution()).thenReturn(DX);
+        when(mockGeometry.getSpatialResolution()).thenReturn(DX);
     }
 
     @Test

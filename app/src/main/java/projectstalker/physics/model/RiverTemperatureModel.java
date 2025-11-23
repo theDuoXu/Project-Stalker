@@ -93,7 +93,7 @@ public class RiverTemperatureModel {
      * Calcula el efecto de enfriamiento en la cabecera del río.
      */
     private float calculateHeadwaterCooling(int cellIndex) {
-        double position = cellIndex * geometry.getSpatial_resolution();
+        double position = cellIndex * geometry.getSpatialResolution();
         double gradientFactor = Math.max(0, 1.0 - (position / config.headwaterCoolingDistance()));
         return (float) (-config.maxHeadwaterCoolingEffect() * gradientFactor);
     }
@@ -134,7 +134,7 @@ public class RiverTemperatureModel {
         double[] temperatureProfile = IntStream.range(0, fTemperatureProfile.length)
                 .mapToDouble(i -> fTemperatureProfile[i])
                 .toArray(); // Y-Axis cast to double
-        double[] distanceInMeters = DoubleStream.iterate(0, d -> d + geometry.getSpatial_resolution())
+        double[] distanceInMeters = DoubleStream.iterate(0, d -> d + geometry.getSpatialResolution())
                 .limit(temperatureProfile.length)
                 .toArray(); // X-Axis
 

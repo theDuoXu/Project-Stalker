@@ -51,7 +51,7 @@ class SplitOperatorTransportSolverTest {
 
         // 2. Configurar Geometría
         when(mockGeometry.getCellCount()).thenReturn(N);
-        when(mockGeometry.getSpatial_resolution()).thenReturn(DX);
+        when(mockGeometry.getSpatialResolution()).thenReturn(DX);
         // Mockear cálculo de área para que no devuelva 0
         when(mockGeometry.getCrossSectionalArea(anyInt(), anyDouble())).thenReturn(5.0);
 

@@ -27,7 +27,7 @@ class CentralDiffusionSolverTest {
         solver = new CentralDiffusionSolver(MIN_DIFFUSION);
 
         mockGeometry = mock(RiverGeometry.class);
-        when(mockGeometry.getSpatial_resolution()).thenReturn(DX);
+        when(mockGeometry.getSpatialResolution()).thenReturn(DX);
         // Mockeamos alpha constante para simplificar cálculos manuales
         when(mockGeometry.getDispersionAlphaAt(anyInt())).thenReturn(ALPHA);
     }

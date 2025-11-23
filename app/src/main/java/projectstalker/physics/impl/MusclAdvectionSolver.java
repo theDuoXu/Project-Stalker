@@ -40,7 +40,7 @@ public class MusclAdvectionSolver implements IAdvectionSolver {
     public float[] solveAdvection(float[] concentration, float[] velocity, float[] area, RiverGeometry geometry, float dt) {
         int n = concentration.length;
         float[] newConcentration = new float[n];
-        double dx = geometry.getSpatial_resolution();
+        double dx = geometry.getSpatialResolution();
         float[] flux = new float[n + 1];
 
         // 1. CALCULAR FLUJOS
