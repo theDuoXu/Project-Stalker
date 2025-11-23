@@ -26,75 +26,77 @@ class TransportGpuAccuracyTest {
     private RiverGeometry geometry;
     private int cellCount;
 
-    // Tolerancia: 1e-3 es razonable para diferencias acumuladas float vs double
     private final float EPSILON = 1e-3f;
 
     @BeforeEach
     void setUp() {
-        // 1. Geometría Controlada
+        // 1. Configuración
         RiverConfig config = RiverConfig.builder()
                 .totalLength(500)
-                .spatialResolution(10.0f)
+                .spatialResolution(10.0f) // dx = 10.0
                 .baseWidth(20.0f)
                 .averageSlope(0.001f)
                 .baseManning(0.03f)
-                .baseDecayRateAt20C(0.0f) // Sin reacción inicial
-                .baseDispersionAlpha(0.0f) // Sin dispersión inicial
+                .baseDecayRateAt20C(0.0f)
+                .baseDispersionAlpha(0.0f) // Sin dispersión para testear transporte puro
                 .build();
 
         RiverGeometryFactory factory = new RiverGeometryFactory();
         this.geometry = factory.createRealisticRiver(config);
         this.cellCount = geometry.getCellCount();
 
-        // VALIDACIÓN DE SEGURIDAD
-        if (this.geometry.getSpatialResolution() <= 0.001) {
-            throw new IllegalStateException("¡ERROR CRÍTICO! La geometría se creó con resolución 0.");
+        // Verificación de Seguridad
+        log.info("Geometría: Celdas={}, DX={}", cellCount, this.geometry.getSpatialResolution());
+        if (this.geometry.getSpatialResolution() < 0.1f) {
+            throw new IllegalStateException("DX es 0. Revisa RiverGeometryFactory.");
         }
 
-        this.cpuSolver = new SplitOperatorTransportSolver();
+        // 2. Solvers
+        // Aseguramos que el CFL no sea 0 pasando el valor explícito al constructor
+        this.cpuSolver = new SplitOperatorTransportSolver(
+                new projectstalker.physics.impl.MusclAdvectionSolver(),
+                new projectstalker.physics.impl.CentralDiffusionSolver(),
+                new projectstalker.physics.impl.FirstOrderReactionSolver(),
+                0.9 // <--- FORZAMOS CFL 0.9 PARA EVITAR BUCLE INFINITO
+        );
 
         try {
             this.gpuSolver = new GpuMusclTransportSolver();
         } catch (UnsatisfiedLinkError e) {
-            fail("No se pudo cargar la librería GPU. Ejecuta con ./gradlew gpuTest");
+            fail("Error librería nativa: " + e.getMessage());
         }
-
-        log.info("Setup completo. Celdas: {}", cellCount);
     }
 
     @Test
-    @DisplayName("Paridad: Advección Pura de Onda Cuadrada (CPU vs GPU)")
+    @DisplayName("Paridad: Advección Pura de Onda Cuadrada")
     void compare_advection_squareWave() {
         log.info(">>> INICIO TEST PARIDAD <<<");
 
-        // 1. DATOS LIMPIOS
+        // 1. Datos Iniciales
         float[] h = new float[cellCount]; Arrays.fill(h, 2.0f);
-        float[] u = new float[cellCount]; Arrays.fill(u, 1.0f);
-        float[] t = new float[cellCount]; Arrays.fill(t, 0.0f); // Temp 0 (Neutro)
-        float[] ph = new float[cellCount]; Arrays.fill(ph, 0.0f); // pH 0 (Neutro)
-
+        float[] u = new float[cellCount]; Arrays.fill(u, 1.0f); // 1 m/s
         float[] c = new float[cellCount];
-        // Onda cuadrada de 10 celdas en el centro
+
+        // Onda cuadrada en el centro (indices 20-30)
         int start = cellCount / 2 - 5;
         for(int i=0; i<10; i++) c[start + i] = 100.0f;
 
-        // USO DEL BUILDER: Evita errores de orden en los argumentos
+        // USO DEL BUILDER: Previene errores de orden de argumentos
         RiverState initialState = RiverState.builder()
                 .waterDepth(h)
                 .velocity(u)
-                .contaminantConcentration(c) // Explícito e inequívoco
-                .temperature(t)
-                .ph(ph)
+                .contaminantConcentration(c)
+                .temperature(new float[cellCount]) // Ceros
+                .ph(new float[cellCount])          // Ceros
                 .build();
 
-        // Simulamos 5 segundos (Media celda de movimiento)
-        float dt = 5.0f;
+        float dt = 5.0f; // Debería resultar en 1 solo paso si CFL=0.9
 
-        // 2. EJECUCIÓN
+        // 2. Ejecución
         RiverState resCpu = cpuSolver.solve(initialState, geometry, dt);
         RiverState resGpu = gpuSolver.solve(initialState, geometry, dt);
 
-        // 3. COMPARACIÓN
+        // 3. Validación
         compareStates(resCpu, resGpu);
     }
 
@@ -104,20 +106,17 @@ class TransportGpuAccuracyTest {
 
         double maxDiff = 0.0;
 
-        // IMPORTANTE: Saltamos las celdas frontera (0 y N-1)
-        // Las condiciones de frontera (Dirichlet vs Neumann) pueden tener ligeras
-        // diferencias de implementación numérica. Validamos el transporte interior.
+        // Saltamos bordes para evitar ruido de condiciones de frontera
         for (int i = 1; i < cellCount - 1; i++) {
-
             double diff = Math.abs(cCpu[i] - cGpu[i]);
             if (diff > maxDiff) maxDiff = diff;
 
             if (diff > EPSILON) {
                 log.error("Divergencia Celda {}: CPU={} vs GPU={}", i, cCpu[i], cGpu[i]);
-                fail(String.format("Divergencia en celda %d. Diff=%.4f", i, diff));
+                fail(String.format("Divergencia celda %d. Diff=%.4f", i, diff));
             }
         }
-        log.info("Máxima diferencia encontrada (Interior): {}", maxDiff);
+        log.info("Máxima diferencia (Interior): {}", maxDiff);
         log.info("¡PARIDAD CONFIRMADA!");
     }
 }
