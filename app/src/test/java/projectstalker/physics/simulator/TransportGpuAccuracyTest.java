@@ -1,10 +1,7 @@
 package projectstalker.physics.simulator;
 
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
@@ -14,11 +11,13 @@ import projectstalker.physics.impl.SplitOperatorTransportSolver;
 import projectstalker.physics.jni.GpuMusclTransportSolver;
 
 import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @Tag("GPU")
 @Slf4j
+@Timeout(value = 30, unit = TimeUnit.SECONDS)
 class TransportGpuAccuracyTest {
 
     private ITransportSolver cpuSolver;
