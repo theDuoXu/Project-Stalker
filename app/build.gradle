@@ -143,7 +143,8 @@ tasks.register('gpuTest', Test) {
     }
     // Muestra una salida clara en la consola para esta tarea
     testLogging {
-        events "passed", "skipped", "failed"
+        events "passed", "skipped", "failed", "standardOut", "standardError"
+        showStandardStreams = true
         showExceptions true
         showCauses true
         showStackTraces true
