@@ -15,26 +15,25 @@ import projectstalker.physics.jni.GpuMusclTransportSolver;
 
 import java.util.Arrays;
 
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.*;
 
 @Tag("GPU")
 @Slf4j
 class TransportGpuAccuracyTest {
 
     private ITransportSolver cpuSolver;
-    private ITransportSolver gpuSolver;
+    private GpuMusclTransportSolver gpuSolver; // Tipo concreto para acceder a métodos si fuera necesario
     private RiverGeometry geometry;
     private int cellCount;
 
-    // Tolerancia para diferencias de precisión (CPU double vs GPU float)
     private final float EPSILON = 1e-3f;
 
     @BeforeEach
     void setUp() {
-        // 1. Geometría "Micro" (Muy rápida para CPU)
+        log.info("--- SETUP INICIO ---");
         RiverConfig config = RiverConfig.builder()
-                .totalLength(500)         // 500m (antes 5000m)
-                .spatialResolution(10.0f) // 10m por celda -> TOTAL: 50 Celdas
+                .totalLength(500) // 500m
+                .spatialResolution(10.0f) // 10m
                 .baseWidth(20.0f)
                 .averageSlope(0.001f)
                 .baseManning(0.03f)
@@ -45,59 +44,69 @@ class TransportGpuAccuracyTest {
         RiverGeometryFactory factory = new RiverGeometryFactory();
         this.geometry = factory.createRealisticRiver(config);
         this.cellCount = geometry.getCellCount();
+        log.info("Geometría creada. Celdas: {}", cellCount);
 
-        // 2. Instanciar Solvers
         this.cpuSolver = new SplitOperatorTransportSolver();
+        log.info("Solver CPU instanciado.");
 
         try {
             this.gpuSolver = new GpuMusclTransportSolver();
+            log.info("Solver GPU instanciado (Librería cargada).");
         } catch (UnsatisfiedLinkError e) {
-            fail("No se pudo cargar la librería GPU. Ejecuta con ./gradlew gpuTest");
+            fail("No se pudo cargar la librería GPU: " + e.getMessage());
         }
-
-        log.info("Setup Micro-Test completo. Celdas: {}", cellCount);
+        log.info("--- SETUP FIN ---");
     }
 
     @Test
-    @DisplayName("Paridad: Advección de Onda Cuadrada (CPU vs GPU)")
+    @DisplayName("Paridad: Advección Pura de Onda Cuadrada (CPU vs GPU)")
     void compare_advection_squareWave() {
-        log.info(">>> TEST: Comparativa Advección Pura (Escenario Pequeño)");
+        log.info(">>> INICIO TEST PARIDAD <<<");
 
-        // ARRANGE
+        // 1. PREPARAR DATOS
         float[] h = new float[cellCount]; Arrays.fill(h, 2.0f);
-        float[] u = new float[cellCount]; Arrays.fill(u, 1.0f); // 1 m/s
+        float[] u = new float[cellCount]; Arrays.fill(u, 1.0f);
         float[] t = new float[cellCount]; Arrays.fill(t, 20.0f);
         float[] ph = new float[cellCount]; Arrays.fill(ph, 7.0f);
 
         float[] c = new float[cellCount];
-
-        // Onda cuadrada pequeña en el centro (aprox índices 20-30)
         int start = cellCount / 2 - 5;
         for(int i=0; i<10; i++) c[start + i] = 100.0f;
 
         RiverState initialState = new RiverState(h, u, c, t, ph);
-
-        // Paso de tiempo: 5 segundos (mueve la onda 0.5 celdas)
         float dt = 5.0f;
 
-        // ACT
+        // 2. EJECUTAR CPU
+        log.info("Ejecutando CPU...");
         long t1 = System.nanoTime();
         RiverState resCpu = cpuSolver.solve(initialState, geometry, dt);
         long tCpu = System.nanoTime() - t1;
+        log.info("CPU OK. Tiempo: {} us", tCpu/1000);
+
+        // 3. EJECUTAR GPU (Con logging agresivo)
+        log.info("Ejecutando GPU...");
+
+        // Pre-Validación de tamaños (Para detectar Segfaults potenciales)
+        if (h.length != cellCount) log.error("FATAL: Array H length mismatch");
 
         long t2 = System.nanoTime();
-        RiverState resGpu = gpuSolver.solve(initialState, geometry, dt);
+        RiverState resGpu = null;
+        try {
+            resGpu = gpuSolver.solve(initialState, geometry, dt);
+        } catch (Exception e) {
+            log.error("EXCEPCIÓN EN GPU SOLVE:", e);
+            fail("Excepción Java durante llamada GPU: " + e.getMessage());
+        }
         long tGpu = System.nanoTime() - t2;
+        log.info("GPU OK. Tiempo: {} us", tGpu/1000);
 
-        // Con 50 celdas, la CPU volará (posiblemente < 1ms), la GPU tardará ~50-100ms por latencia PCI
-        log.info("Tiempo CPU: {} us | Tiempo GPU: {} us (GPU lenta por overhead en tests pequeños)",
-                tCpu/1000, tGpu/1000);
-
-        // ASSERT
+        // 4. VALIDACIÓN
+        assertNotNull(resGpu, "El resultado GPU es nulo (posible crash nativo silencioso).");
         compareStates(resCpu, resGpu);
     }
 
     private void compareStates(RiverState cpu, RiverState gpu) {
+        log.info("Comparando resultados...");
         float[] cCpu = cpu.contaminantConcentration();
         float[] cGpu = gpu.contaminantConcentration();
 
@@ -106,9 +115,17 @@ class TransportGpuAccuracyTest {
             double diff = Math.abs(cCpu[i] - cGpu[i]);
             if (diff > maxDiff) maxDiff = diff;
 
+            if (Double.isNaN(diff)) {
+                fail("Detectado NaN en celda " + i + ". CPU=" + cCpu[i] + ", GPU=" + cGpu[i]);
+            }
+
             if (diff > EPSILON) {
-                fail(String.format("Divergencia en celda %d. CPU=%.4f, GPU=%.4f, Diff=%.4f",
-                        i, cCpu[i], cGpu[i], diff));
+                // Imprimir contexto para debug
+                log.error("Divergencia Celda {}: CPU={} vs GPU={}", i, cCpu[i], cGpu[i]);
+                // Mostramos vecinos para ver si es un desfase de índice
+                if (i > 0) log.error("  Vecino izq ({}): CPU={} vs GPU={}", i-1, cCpu[i-1], cGpu[i-1]);
+
+                fail(String.format("Divergencia en celda %d. Diff=%.4f", i, diff));
             }
         }
         log.info("Máxima diferencia encontrada: {}", maxDiff);
