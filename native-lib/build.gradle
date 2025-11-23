@@ -37,32 +37,33 @@ def compileCuda = tasks.register('compileCuda', CompileCudaTask) {
 }
 
 // 2. CONECTAR
-// ---
-// Obtenemos un 'Provider' que apuntará al archivo manning_kernel.o
-// Esto asume que tu CompileCudaTask SIEMPRE produce un archivo llamado 'manning_kernel.o'
-// ---
-def manningKernelObjectFile = compileCuda.map { task ->
-    // 'task' es tu CompileCudaTask
-    // 'outputDir' es la DirectoryProperty
-    // Buscamos el archivo .o específico dentro de ese directorio
-    task.outputDir.file("manning_kernel.o").get().asFile
-}
-
 // Configuramos las dependencias de enlace para *ambos* binarios (debug y release)
 library.binaries.configureEach { binary ->
     // Obtenemos la tarea de enlace específica (ej. 'linkDebug')
     def linkTask = binary.linkTask.get()
 
-    // --- LA CONEXIÓN CLAVE ---
-    // Añadimos el PATH ABSOLUTO a nuestro .o como un argumento
-    // directo para el enlazador (g++).
-    linkTask.linkerArgs.add(manningKernelObjectFile.map { it.absolutePath })
+    // Esto incluirá manning_kernel.o, transport_kernel.o y cualquier otro futuro.
+    linkTask.linkerArgs.addAll(compileCuda.map { task ->
+        // Obtenemos el directorio de salida
+        File objDir = task.outputDir.get().asFile
+
+        // Si el directorio existe, listamos los .o. Si no (ej. durante clean), devolvemos lista vacía.
+        if (objDir.exists()) {
+            return objDir.listFiles(new FilenameFilter() {
+                @Override
+                boolean accept(File dir, String name) {
+                    return name.endsWith(".o")
+                }
+            }).collect { it.absolutePath }
+        }
+        return []
+    })
     // --- FIN DE LA CONEXIÓN ---
 
-    // Añadimos las librerías de runtime de CUDA (como antes)
+    // Añadimos las librerías de runtime de CUDA
     linkTask.linkerArgs.add("-L${cudaHome}/lib64")
     linkTask.linkerArgs.add('-lcudart')
 
-    // Mantenemos la dependencia explícita
+    // Mantenemos la dependencia explícita para asegurar el orden: Compilar CUDA -> Enlazar C++
     linkTask.dependsOn(compileCuda)
 }
