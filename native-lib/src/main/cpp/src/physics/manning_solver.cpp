@@ -1,107 +1,96 @@
-// manning_solver.cpp
-
 #include "projectstalker/physics/manning_solver.h"
 #include "projectstalker/physics/manning_kernel.h"
 #include <cuda_runtime.h>
+#include <vector>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <sstream>
-// --- Macro de Comprobación de Errores de CUDA ---
-// Envuelve cada llamada a la API de CUDA para una depuración robusta.
-#define CUDA_CHECK(call) { \
+
+// Macro de Chequeo
+#define CUDA_CHECK_M(call) { \
     cudaError_t err_code = call; \
     if (err_code != cudaSuccess) { \
         std::stringstream ss; \
-        ss << "CUDA Error en " << __FILE__ << ":" << __LINE__ \
+        ss << "CUDA Error en Manning Solver " << __FILE__ << ":" << __LINE__ \
            << " | Código: " << err_code \
-           << " (" << cudaGetErrorName(err_code) << ") " \
            << " | Mensaje: " << cudaGetErrorString(err_code); \
         std::cerr << ss.str() << std::endl; \
         throw std::runtime_error(ss.str()); \
     } \
 }
 
+// --- RAII WRAPPER (Reutilizado para seguridad y limpieza automática) ---
+struct CudaBufferM {
+    float* ptr = nullptr;
+
+    CudaBufferM() = default;
+    ~CudaBufferM() { if (ptr) cudaFree(ptr); }
+
+    // No-Copy
+    CudaBufferM(const CudaBufferM&) = delete;
+    CudaBufferM& operator=(const CudaBufferM&) = delete;
+
+    // Helpers
+    float** addr() { return &ptr; }
+    operator float*() const { return ptr; }
+};
+
 std::vector<float> solve_manning_batch_cpp(
-    const std::vector<float>& initialGuess,
-    const std::vector<float>& flatDischarges,
+    const float* h_initialGuess,
+    const float* h_flatDischarges,
     int batchSize,
     int cellCount,
-    const std::vector<float>& bottomWidths,
-    const std::vector<float>& sideSlopes,
-    const std::vector<float>& manningCoeffs,
-    const std::vector<float>& bedSlopes
+    const float* h_bottomWidths,
+    const float* h_sideSlopes,
+    const float* h_manningCoeffs,
+    const float* h_bedSlopes
 ) {
-    // 1. Calcular tamaños
-    const int totalThreads = batchSize * cellCount;
-    if (totalThreads == 0) {
-        return {}; // No hay nada que procesar
-    }
+    int totalThreads = batchSize * cellCount;
+    if (totalThreads == 0) return {};
 
-    const size_t total_threads_bytes = totalThreads * sizeof(float);
-    const size_t cell_count_bytes = cellCount * sizeof(float);
-    const size_t results_bytes = totalThreads * 2 * sizeof(float); // 2 por [Depth, Velocity]
+    size_t threadBytes = totalThreads * sizeof(float);
+    size_t cellBytes = cellCount * sizeof(float);
+    size_t resultBytes = totalThreads * 2 * sizeof(float);
 
-    // 2. Declarar punteros de dispositivo (GPU)
-    float *d_initialGuess = nullptr, *d_flatDischarges = nullptr, *d_results = nullptr;
-    float *d_bottomWidths = nullptr, *d_sideSlopes = nullptr, *d_manningCoeffs = nullptr, *d_bedSlopes = nullptr;
+    // 1. Declaración RAII (Se limpian solas al salir)
+    CudaBufferM d_guess, d_discharge;
+    CudaBufferM d_width, d_slope, d_manning, d_bed;
+    CudaBufferM d_results;
 
-    try {
-        // 3. Reservar memoria en la GPU
-        CUDA_CHECK(cudaMalloc(&d_initialGuess, total_threads_bytes));
-        CUDA_CHECK(cudaMalloc(&d_flatDischarges, total_threads_bytes));
-        CUDA_CHECK(cudaMalloc(&d_bottomWidths, cell_count_bytes));
-        CUDA_CHECK(cudaMalloc(&d_sideSlopes, cell_count_bytes));
-        CUDA_CHECK(cudaMalloc(&d_manningCoeffs, cell_count_bytes));
-        CUDA_CHECK(cudaMalloc(&d_bedSlopes, cell_count_bytes));
-        CUDA_CHECK(cudaMalloc(&d_results, results_bytes));
+    // 2. Reserva VRAM
+    CUDA_CHECK_M(cudaMalloc(d_guess.addr(), threadBytes));
+    CUDA_CHECK_M(cudaMalloc(d_discharge.addr(), threadBytes));
 
-        // 4. Copiar datos desde el Host (CPU) al Device (GPU)
-        CUDA_CHECK(cudaMemcpy(d_initialGuess, initialGuess.data(), total_threads_bytes, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_flatDischarges, flatDischarges.data(), total_threads_bytes, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_bottomWidths, bottomWidths.data(), cell_count_bytes, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_sideSlopes, sideSlopes.data(), cell_count_bytes, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_manningCoeffs, manningCoeffs.data(), cell_count_bytes, cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_bedSlopes, bedSlopes.data(), cell_count_bytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK_M(cudaMalloc(d_width.addr(), cellBytes));
+    CUDA_CHECK_M(cudaMalloc(d_slope.addr(), cellBytes));
+    CUDA_CHECK_M(cudaMalloc(d_manning.addr(), cellBytes));
+    CUDA_CHECK_M(cudaMalloc(d_bed.addr(), cellBytes));
 
-        // 5. Lanzar el kernel de CUDA
-        launchManningKernel(
-            d_results, d_initialGuess, d_flatDischarges,
-            d_bottomWidths, d_sideSlopes, d_manningCoeffs, d_bedSlopes,
-            batchSize, cellCount
-        );
+    CUDA_CHECK_M(cudaMalloc(d_results.addr(), resultBytes));
 
-        // Comprobar si hubo algún error durante el lanzamiento del kernel
-        CUDA_CHECK(cudaGetLastError());
+    // 3. Copia Host -> Device (Usando los punteros crudos directos)
+    CUDA_CHECK_M(cudaMemcpy(d_guess, h_initialGuess, threadBytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK_M(cudaMemcpy(d_discharge, h_flatDischarges, threadBytes, cudaMemcpyHostToDevice));
 
-        // 6. Esperar a que todos los hilos de la GPU terminen
-        CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK_M(cudaMemcpy(d_width, h_bottomWidths, cellBytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK_M(cudaMemcpy(d_slope, h_sideSlopes, cellBytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK_M(cudaMemcpy(d_manning, h_manningCoeffs, cellBytes, cudaMemcpyHostToDevice));
+    CUDA_CHECK_M(cudaMemcpy(d_bed, h_bedSlopes, cellBytes, cudaMemcpyHostToDevice));
 
-        // 7. Copiar resultados desde el Device (GPU) de vuelta al Host (CPU)
-        std::vector<float> host_results(totalThreads * 2);
-        CUDA_CHECK(cudaMemcpy(host_results.data(), d_results, results_bytes, cudaMemcpyDeviceToHost));
+    // 4. Ejecución Kernel
+    launchManningKernel(
+        d_results, d_guess, d_discharge,
+        d_width, d_slope, d_manning, d_bed,
+        batchSize, cellCount
+    );
 
-        // 8. Liberar la memoria de la GPU
-        cudaFree(d_initialGuess);
-        cudaFree(d_flatDischarges);
-        cudaFree(d_results);
-        cudaFree(d_bottomWidths);
-        cudaFree(d_sideSlopes);
-        cudaFree(d_manningCoeffs);
-        cudaFree(d_bedSlopes);
+    CUDA_CHECK_M(cudaGetLastError());
+    CUDA_CHECK_M(cudaDeviceSynchronize());
 
-        return host_results;
+    // 5. Copia Vuelta
+    std::vector<float> host_results(totalThreads * 2);
+    CUDA_CHECK_M(cudaMemcpy(host_results.data(), d_results, resultBytes, cudaMemcpyDeviceToHost));
 
-    } catch (const std::exception& e) {
-        // En caso de error, asegurarse de liberar toda la memoria que se haya podido reservar
-        cudaFree(d_initialGuess);
-        cudaFree(d_flatDischarges);
-        cudaFree(d_results);
-        cudaFree(d_bottomWidths);
-        cudaFree(d_sideSlopes);
-        cudaFree(d_manningCoeffs);
-        cudaFree(d_bedSlopes);
-        // Re-lanzar la excepción para que JNI pueda manejarla
-        throw;
-    }
+    return host_results;
 }
