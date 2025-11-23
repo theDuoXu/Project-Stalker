@@ -59,6 +59,7 @@ class TransportGpuAccuracyTest {
 
     @Test
     @DisplayName("Paridad: Advección Pura de Onda Cuadrada (CPU vs GPU)")
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
     void compare_advection_squareWave() {
         log.info(">>> INICIO TEST PARIDAD <<<");
 
