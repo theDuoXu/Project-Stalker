@@ -28,7 +28,7 @@ public class CentralDiffusionSolver implements IDiffusionSolver {
     public float[] solveDiffusion(float[] concentration, float[] velocity, float[] depth, RiverGeometry geometry, float dt) {
         int n = concentration.length;
         float[] result = new float[n];
-        double dx = geometry.getSpatial_resolution();
+        double dx = geometry.getSpatialResolution();
         double dx2 = dx * dx;
 
         for (int i = 1; i < n - 1; i++) {

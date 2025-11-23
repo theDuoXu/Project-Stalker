@@ -34,7 +34,7 @@ class ManningGpuSolverTest {
 
         mockGeometry = mock(RiverGeometry.class);
         when(mockGeometry.getCellCount()).thenReturn(CELL_COUNT);
-        when(mockGeometry.getSpatial_resolution()).thenReturn(100.0f);
+        when(mockGeometry.getSpatialResolution()).thenReturn(100.0f);
 
         // Mockear datos de geometría (Arrays float[])
         // Nota: Asegúrate de que estos métodos coinciden con tu RiverGeometry refactorizada

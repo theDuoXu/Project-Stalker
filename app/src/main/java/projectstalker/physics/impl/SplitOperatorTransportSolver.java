@@ -64,7 +64,7 @@ public class SplitOperatorTransportSolver implements ITransportSolver {
 
         // 2. Calcular variables geométricas necesarias
         int n = geometry.getCellCount();
-        double dx = geometry.getSpatial_resolution();
+        double dx = geometry.getSpatialResolution();
 
         // Pre-calculamos áreas mojadas para la advección
         float[] areas = new float[n];

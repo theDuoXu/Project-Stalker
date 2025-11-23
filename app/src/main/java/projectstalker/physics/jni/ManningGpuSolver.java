@@ -247,7 +247,7 @@ public final class ManningGpuSolver {
 
     private float[] calculateAndSanitizeBedSlopes(RiverGeometry geometry) {
         float[] elevations = geometry.cloneElevationProfile();
-        float dx = geometry.getSpatial_resolution();
+        float dx = geometry.getSpatialResolution();
         int cellCount = geometry.getCellCount();
         float[] sanitizedSlopes = new float[cellCount];
 

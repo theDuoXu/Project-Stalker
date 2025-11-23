@@ -75,7 +75,7 @@ class RiverGeometryFactoryTest {
         // --- 3. Assert (Verificar) ---
         assertNotNull(river, "El objeto RiverGeometry no debería ser nulo.");
         assertEquals(expectedCellCount, river.getCellCount(), "El número de celdas no es el esperado.");
-        assertEquals(config.spatialResolution(), river.getSpatial_resolution(), "La resolución espacial (dx) no coincide.");
+        assertEquals(config.spatialResolution(), river.getSpatialResolution(), "La resolución espacial (dx) no coincide.");
         assertEquals(config.initialElevation(), river.cloneElevationProfile()[0], 1e-6, "La elevación inicial no coincide.");
 
         log.info("Test de aserciones superado. El objeto RiverGeometry es estructuralmente válido.");

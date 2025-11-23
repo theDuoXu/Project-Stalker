@@ -30,7 +30,7 @@ public final class RiverGeometry {
     @Getter
     private final int cellCount;
     @Getter
-    private final float spatial_resolution;
+    private final float spatialResolution;
     private final float[] elevationProfile;
     @Getter
     private final float[] bottomWidth;
@@ -54,7 +54,7 @@ public final class RiverGeometry {
      * que el objeto RiverGeometry siempre se encuentre en un estado consistente y válido.
      *
      * @param cellCount          El número total de celdas del río (> 1).
-     * @param spatial_resolution                 La longitud de cada celda en metros (> 0).
+     * @param spatialResolution                 La longitud de cada celda en metros (> 0).
      * @param elevationProfile   Array con la altitud del fondo del cauce para cada celda.
      * @param bottomWidth        Array con el ancho del fondo del cauce para cada celda (valores >= 0).
      * @param sideSlope          Array con la pendiente de los taludes laterales (valores >= 0).
@@ -65,7 +65,7 @@ public final class RiverGeometry {
      */
     @JsonCreator
     public RiverGeometry(@JsonProperty("cellCount") int cellCount,
-                         @JsonProperty("dx") float spatial_resolution,
+                         @JsonProperty("dx") float spatialResolution,
                          @JsonProperty("elevationProfile") float[] elevationProfile,
                          @JsonProperty("bottomWidth") float[] bottomWidth,
                          @JsonProperty("sideSlope") float[] sideSlope,
@@ -78,7 +78,7 @@ public final class RiverGeometry {
         if (cellCount <= 1) {
             throw new IllegalArgumentException("El número de celdas debe ser mayor que 1.");
         }
-        if (spatial_resolution <= 0) {
+        if (spatialResolution <= 0) {
             throw new IllegalArgumentException("La resolución espacial (dx) debe ser positiva.");
         }
 
@@ -117,7 +117,7 @@ public final class RiverGeometry {
         // Esto previene que el código externo modifique el estado interno de esta clase
         // si mantiene una referencia a los arrays originales.
         this.cellCount = cellCount;
-        this.spatial_resolution = spatial_resolution;
+        this.spatialResolution = spatialResolution;
         this.elevationProfile = elevationProfile.clone();
         this.bottomWidth = bottomWidth.clone();
         this.sideSlope = sideSlope.clone();
@@ -143,7 +143,7 @@ public final class RiverGeometry {
     public float getBedSlopeAt(int cellIndex) {
         validateCellIndex(cellIndex);
         int nextIndex = (cellIndex == cellCount - 1) ? cellIndex - 1 : cellIndex;
-        return (elevationProfile[nextIndex] - elevationProfile[nextIndex + 1]) / spatial_resolution;
+        return (elevationProfile[nextIndex] - elevationProfile[nextIndex + 1]) / spatialResolution;
     }
 
     public float getManningAt(int cellIndex) {
@@ -311,8 +311,8 @@ public final class RiverGeometry {
      */
     @Override
     public String toString() {
-        double totalLengthKm = (cellCount * spatial_resolution) / 1000.0;
-        return String.format("RiverGeometry {\n" + "  cellCount=%d,\n" + "  dx=%.2f m,\n" + "  totalLength=%.2f km,\n" + "  elevationProfile=[%.2f m ... %.2f m],\n" + "  bottomWidth=[%.2f m ... %.2f m],\n" + "  sideSlope=[%.2f ... %.2f],\n" + "  manningCoefficient=[%.3f ... %.3f]\n" + "  decayCoefficient=[%.3f ... %.3f]\n" + "  this river has %d types of cells\n" + "}", cellCount, spatial_resolution, totalLengthKm, elevationProfile[0], elevationProfile[cellCount - 1], bottomWidth[0], bottomWidth[cellCount - 1], sideSlope[0], sideSlope[cellCount - 1], manningCoefficient[0], manningCoefficient[cellCount - 1], baseDecayCoefficientAt20C[0], baseDecayCoefficientAt20C[cellCount - 1], Arrays.stream(sectionTypes).distinct().count());
+        double totalLengthKm = (cellCount * spatialResolution) / 1000.0;
+        return String.format("RiverGeometry {\n" + "  cellCount=%d,\n" + "  dx=%.2f m,\n" + "  totalLength=%.2f km,\n" + "  elevationProfile=[%.2f m ... %.2f m],\n" + "  bottomWidth=[%.2f m ... %.2f m],\n" + "  sideSlope=[%.2f ... %.2f],\n" + "  manningCoefficient=[%.3f ... %.3f]\n" + "  decayCoefficient=[%.3f ... %.3f]\n" + "  this river has %d types of cells\n" + "}", cellCount, spatialResolution, totalLengthKm, elevationProfile[0], elevationProfile[cellCount - 1], bottomWidth[0], bottomWidth[cellCount - 1], sideSlope[0], sideSlope[cellCount - 1], manningCoefficient[0], manningCoefficient[cellCount - 1], baseDecayCoefficientAt20C[0], baseDecayCoefficientAt20C[cellCount - 1], Arrays.stream(sectionTypes).distinct().count());
     }
 
 
@@ -321,14 +321,14 @@ public final class RiverGeometry {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         RiverGeometry that = (RiverGeometry) o;
-        return cellCount == that.cellCount && Double.compare(that.spatial_resolution, spatial_resolution) == 0 && Arrays.equals(elevationProfile, that.elevationProfile) && Arrays.equals(bottomWidth, that.bottomWidth) && Arrays.equals(sideSlope, that.sideSlope) && Arrays.equals(manningCoefficient, that.manningCoefficient) && Arrays.equals(baseDecayCoefficientAt20C, that.baseDecayCoefficientAt20C) && Arrays.equals(phProfile, that.phProfile) && Arrays.equals(sectionTypes, that.sectionTypes);
+        return cellCount == that.cellCount && Double.compare(that.spatialResolution, spatialResolution) == 0 && Arrays.equals(elevationProfile, that.elevationProfile) && Arrays.equals(bottomWidth, that.bottomWidth) && Arrays.equals(sideSlope, that.sideSlope) && Arrays.equals(manningCoefficient, that.manningCoefficient) && Arrays.equals(baseDecayCoefficientAt20C, that.baseDecayCoefficientAt20C) && Arrays.equals(phProfile, that.phProfile) && Arrays.equals(sectionTypes, that.sectionTypes);
     }
 
     @Override
     /**
      * Implementación para evitar colisiones y respetar orden de los atributos
      */ public int hashCode() {
-        int result = Objects.hash(cellCount, spatial_resolution);
+        int result = Objects.hash(cellCount, spatialResolution);
         result = 31 * result + Arrays.hashCode(elevationProfile);
         result = 31 * result + Arrays.hashCode(bottomWidth);
         result = 31 * result + Arrays.hashCode(sideSlope);

@@ -74,7 +74,7 @@ public class GpuMusclTransportSolver implements ITransportSolver {
         for (float v : currentState.velocity()) maxVelocity = Math.max(maxVelocity, Math.abs(v));
         if (maxVelocity < 1e-5f) maxVelocity = 1e-5f;
 
-        double dx = geometry.getSpatial_resolution();
+        double dx = geometry.getSpatialResolution();
         double dtMaxAdvection = (dx / (double)maxVelocity) * cflSafetyFactor;
 
         int numSteps = (int) Math.ceil(dtGlobal / dtMaxAdvection);

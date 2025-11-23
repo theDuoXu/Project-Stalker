@@ -162,7 +162,7 @@ public class RiverGeometryFactory {
         // 4. Instanciar y devolver el objeto RiverGeometry final y validado
         return RiverGeometry.builder()
                 .cellCount(cellCount)
-                .spatial_resolution(config.spatialResolution())
+                .spatialResolution(config.spatialResolution())
                 .elevationProfile(elevationProfile)
                 .bottomWidth(bottomWidth)
                 .sideSlope(sideSlope)
@@ -195,7 +195,7 @@ public class RiverGeometryFactory {
         }
 
         // --- 2. Validar la separación entre eventos ---
-        validateEventSeparation(baseRiver.getSpatial_resolution(), events);
+        validateEventSeparation(baseRiver.getSpatialResolution(), events);
 
         // --- 3. Preparar datos mutables (clonación para inmutabilidad) ---
         // Obtenemos los arrays del río base. La clase RiverGeometry ya los devuelve clonados,
@@ -209,7 +209,7 @@ public class RiverGeometryFactory {
         // El polimorfismo se encarga de ejecutar la lógica correcta para cada tipo de evento.
         for (GeologicalEvent event : events) {
             event.apply(
-                    baseRiver.getSpatial_resolution(),
+                    baseRiver.getSpatialResolution(),
                     newElevationProfile,
                     newBottomWidth,
                     newManningCoefficient,
