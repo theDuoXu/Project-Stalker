@@ -122,7 +122,7 @@ test {
 tasks.register('gpuTest', Test) {
     description = 'Ejecuta los tests de integración que requieren hardware de GPU.'
     group = 'verification'
-
+    events "passed", "skipped", "failed", "standardOut", "standardError"
     // Asegura que la librería nativa esté copiada antes de ejecutar
     dependsOn copyNativeLib
 
