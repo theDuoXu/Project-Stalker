@@ -45,6 +45,9 @@ class TransportGpuAccuracyTest {
         this.cellCount = geometry.getCellCount();
         log.info("Geometría creada. Celdas: {}", cellCount);
 
+        if (this.geometry.getSpatial_resolution() <= 0.001) {
+            throw new IllegalStateException("¡ERROR CRÍTICO! La geometría se creó con resolución 0. Revisa RiverConfig/Factory.");
+        }
         this.cpuSolver = new SplitOperatorTransportSolver();
         log.info("Solver CPU instanciado.");
 
