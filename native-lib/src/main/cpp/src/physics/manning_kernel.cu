@@ -1,19 +1,26 @@
-// manning_kernel.cu
+// src/main/cpp/src/physics/manning_kernel.cu
 #include "projectstalker/physics/manning_kernel.h"
 #include <cuda_runtime.h>
-#include <cmath> // para fmaxf, sqrtf, powf, copysignf
+#include <cmath>
 
-// --- Constantes del Kernel ---
+// --- Constantes ---
 #define MAX_ITERATIONS 20
 #define SAFE_EPSILON 1e-7f
 #define MIN_DEPTH 0.001f
 
-// --- 1. Helpers Geométricos (Restaurados para legibilidad) ---
+// Constantes pre-calculadas para evitar divisiones en tiempo de ejecución
+#define ONE_THIRD 0.33333333f
+#define FIVE_THIRDS 1.66666667f
+#define FOUR_THIRDS 1.33333333f
+#define TWO_THIRDS 0.66666667f
+
+// --- Helpers ---
 
 __device__ inline float device_calculateA(float H, float b, float m) {
     return (b + m * H) * H;
 }
 
+// Recibe pythagoras = sqrt(1 + m^2) pre-calculado
 __device__ inline float device_calculateP_optimized(float H, float b, float pythagoras) {
     return b + 2.0f * H * pythagoras;
 }
@@ -22,50 +29,37 @@ __device__ inline float device_calculateTopWidth(float H, float b, float m) {
     return b + 2.0f * m * H;
 }
 
-// --- 2. Helpers Hidráulicos (Optimizados) ---
-
 /**
- * Calcula Q recibiendo A y P ya calculados (evita recálculo).
+ * Calcula Q.
+ * R^(2/3) es la operación costosa (SFU).
  */
-__device__ inline float device_calculateQ_from_state(
-    float A,
-    float P,
-    float inv_n,
-    float sqrt_slope
-) {
-    // R = A / P
-    // Q = (1/n) * A * R^(2/3) * sqrt(S)
-    // Optimización: powf es costoso, pero R^(2/3) es inevitable.
-    float R = A / P;
-    return inv_n * A * powf(R, 0.6666667f) * sqrt_slope;
+__device__ inline float device_calculateQ_opt(float A, float P, float inv_n, float sqrt_slope) {
+    // Evitamos división por cero con fmaxf en P (aunque H saneado lo evita, es un seguro barato)
+    float R = A / fmaxf(P, SAFE_EPSILON);
+    return inv_n * A * powf(R, TWO_THIRDS) * sqrt_slope;
 }
 
 /**
- * Calcula dQ/dH recibiendo el estado geométrico completo.
+ * Calcula dQ/dH factorizado.
+ * Derivada analítica optimizada para reducir instrucciones.
  */
-__device__ inline float device_calculate_dQ_dH_from_state(
-    float A,
-    float P,
-    float topWidth,
-    float pythagoras,
-    float currentQ
+__device__ inline float device_calculate_dQ_dH_opt(
+    float A, float P, float T, float pythagoras, float Q
 ) {
-    // Término A: (5/3) * (T / A)
-    float term_A = (1.6666667f * topWidth) / A;
+    // dQ/dH = Q * [ (5/3)*(T/A) - (2/3)*(dP/dH)/P ]
+    // dP/dH = 2 * pythagoras
+    // Termino P = (2/3) * (2 * pyth) / P = (4/3) * pyth / P
 
-    // Término P: (4/3) * (FactorPitágoras / P)
-    // Nota: La derivada del perímetro dP/dH es 2 * pythagoras.
-    // La fórmula es -(2/3)*(1/P)*(dP/dH).
-    // (2/3) * 2 = 4/3.
-    float term_P = (1.3333333f * pythagoras) / P;
+    float term_A = (FIVE_THIRDS * T) / fmaxf(A, SAFE_EPSILON);
+    float term_P = (FOUR_THIRDS * pythagoras) / fmaxf(P, SAFE_EPSILON);
 
-    return currentQ * (term_A - term_P);
+    return Q * (term_A - term_P);
 }
 
-// --- 3. Kernel Principal ---
+// --- Kernel Principal ---
 
 __global__ void manningSolverKernel(
-    float* __restrict__ d_results,
+    float* __restrict__ d_results, // [H, V, H, V...]
     const float* __restrict__ d_initialDepths,
     const float* __restrict__ d_targetDischarges,
     const float* __restrict__ d_bottomWidths,
@@ -75,55 +69,61 @@ __global__ void manningSolverKernel(
     int totalThreads,
     int cellCount
 ) {
+    // 1. ID Global
     int id = blockIdx.x * blockDim.x + threadIdx.x;
     if (id >= totalThreads) return;
 
+    // 2. ID Geometría (Cíclico si batch > 1)
     int geo_id = id % cellCount;
 
-    // Carga de datos (Coalesced access)
+    // 3. Carga de Datos (Coalesced)
     float H = d_initialDepths[id];
     const float Q_target = d_targetDischarges[id];
+
+    // Invariantes Geométricos
     const float b = d_bottomWidths[geo_id];
     const float m = d_sideSlopes[geo_id];
     const float n = d_manningCoeffs[geo_id];
     const float S = d_bedSlopes[geo_id];
 
-    // --- PRE-CÁLCULOS INVARIANTES (Fuera del bucle) ---
+    // 4. Pre-cálculos Matemáticos (Fuera del bucle)
     const float sqrt_slope = sqrtf(S);
     const float pythagoras = sqrtf(1.0f + m * m);
     const float inv_n = 1.0f / n;
 
-    // --- BUCLE DE NEWTON ---
+    // 5. Newton-Raphson (Unrolled)
     #pragma unroll
     for (int i = 0; i < MAX_ITERATIONS; i++) {
-
-        // 1. Calcular Geometría (Una sola vez por iteración usando helpers)
+        // Geometría actual
         float A = device_calculateA(H, b, m);
         float P = device_calculateP_optimized(H, b, pythagoras);
         float T = device_calculateTopWidth(H, b, m);
 
-        // 2. Calcular Hidráulica (Pasando los valores ya calculados)
-        float Q_calc = device_calculateQ_from_state(A, P, inv_n, sqrt_slope);
-        float f_H = Q_calc - Q_target;
+        // Función y Derivada
+        float Q_calc = device_calculateQ_opt(A, P, inv_n, sqrt_slope);
+        float f = Q_calc - Q_target;
+        float df = device_calculate_dQ_dH_opt(A, P, T, pythagoras, Q_calc);
 
-        float dQ_dH = device_calculate_dQ_dH_from_state(A, P, T, pythagoras, Q_calc);
+        // Paso seguro (Branchless safe division)
+        // Si df es 0, usamos epsilon con el signo correcto para empujar H
+        float df_safe = df + copysignf(SAFE_EPSILON, df);
 
-        // 3. Paso de Newton (Branchless safe division)
-        float dQ_dH_safe = dQ_dH + copysignf(SAFE_EPSILON, dQ_dH);
-        float H_next = H - f_H / dQ_dH_safe;
+        float H_next = H - f / df_safe;
 
-        // 4. Saneamiento (Branchless)
+        // Clamp (Branchless)
         H = fmaxf(MIN_DEPTH, H_next);
     }
 
-    // --- CÁLCULO FINAL ---
-    // Reutilizamos el helper para el resultado final de V
+    // 6. Resultado Final
     float A_final = device_calculateA(H, b, m);
-    float V = Q_target / A_final;
+    // Velocidad = Q / A.
+    // Usamos fmaxf en A por seguridad extrema, aunque H >= MIN_DEPTH implica A > 0.
+    float V = Q_target / fmaxf(A_final, SAFE_EPSILON);
 
-    int result_idx = id * 2;
-    d_results[result_idx] = H;
-    d_results[result_idx + 1] = V;
+    // Escritura Intercalada [H, V]
+    int out_idx = id * 2;
+    d_results[out_idx]     = H;
+    d_results[out_idx + 1] = V;
 }
 
 // --- Launcher ---
