@@ -38,8 +38,11 @@ public final class RiverGeometry {
     private final float[] sideSlope;
     @Getter
     private final float[] manningCoefficient;
+    @Getter
     private final float[] baseDecayCoefficientAt20C;
+    @Getter
     private final float[] phProfile;
+    @Getter
     private final float[] dispersionAlpha;
     private final RiverSectionType[] sectionTypes;
 
