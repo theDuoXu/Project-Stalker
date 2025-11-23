@@ -11,7 +11,8 @@ import projectstalker.physics.i.IReactionSolver;
 import projectstalker.physics.i.ITransportSolver;
 
 /**
- * Orquestador principal del transporte de contaminantes.
+ * Orquestador principal del transporte de contaminantes en CPU.
+ * <p>
  * Responsabilidades:
  * 1. Gestionar la estabilidad numérica (CFL Condition) mediante Sub-stepping.
  * 2. Aplicar la técnica de Operator Splitting (Advección -> Difusión -> Reacción).
@@ -29,24 +30,45 @@ public class SplitOperatorTransportSolver implements ITransportSolver {
     // Factor de seguridad CFL (Courant-Friedrichs-Lewy).
     // Para esquemas explícitos, debe ser <= 1.0.
     // Usamos 0.9 para tener un margen de seguridad contra errores de punto flotante.
-    @Builder.Default
-    private double cflSafetyFactor = 0.9;
+    // Eliminamos @Builder.Default aquí para inicializarlo explícitamente en el constructor y evitar problemas.
+    private double cflSafetyFactor;
 
+    /**
+     * Constructor Canónico.
+     * Usado por @Builder (si se configura) o manualmente cuando se especifican todos los parámetros.
+     *
+     * @param advectionSolver Solver de advección.
+     * @param diffusionSolver Solver de difusión.
+     * @param reactionSolver  Solver de reacción.
+     * @param cflSafetyFactor Factor de seguridad CFL (típicamente 0.9). Si es <= 0, se fuerza a 0.9.
+     */
     public SplitOperatorTransportSolver(IAdvectionSolver advectionSolver,
                                         IDiffusionSolver diffusionSolver,
-                                        IReactionSolver reactionSolver) {
+                                        IReactionSolver reactionSolver,
+                                        double cflSafetyFactor) {
         this.advectionSolver = advectionSolver;
         this.diffusionSolver = diffusionSolver;
         this.reactionSolver = reactionSolver;
+        // Validación defensiva: Si entra 0 (por error de builder o inicialización), forzamos 0.9
+        this.cflSafetyFactor = (cflSafetyFactor <= 0.0001) ? 0.9 : cflSafetyFactor;
     }
+
+    /**
+     * Constructor de conveniencia.
+     * Inicializa los solvers dados con el factor CFL por defecto (0.9).
+     */
     public SplitOperatorTransportSolver(IAdvectionSolver advectionSolver,
-                                       IDiffusionSolver diffusionSolver,
-                                       IReactionSolver reactionSolver, double cflSafetyFactor) {
-        this(advectionSolver, diffusionSolver, reactionSolver);
-        this.cflSafetyFactor = cflSafetyFactor;
+                                        IDiffusionSolver diffusionSolver,
+                                        IReactionSolver reactionSolver) {
+        this(advectionSolver, diffusionSolver, reactionSolver, 0.9);
     }
+
+    /**
+     * Constructor por defecto.
+     * Utiliza las implementaciones estándar (MUSCL, Central, 1er Orden) y CFL 0.9.
+     */
     public SplitOperatorTransportSolver() {
-        this(new MusclAdvectionSolver(), new CentralDiffusionSolver(), new FirstOrderReactionSolver());
+        this(new MusclAdvectionSolver(), new CentralDiffusionSolver(), new FirstOrderReactionSolver(), 0.9);
     }
 
     @Override
@@ -56,54 +78,49 @@ public class SplitOperatorTransportSolver implements ITransportSolver {
     }
 
     @Override
-    public RiverState solve(RiverState currentState, RiverGeometry geometry, float targetDeltaTime) {
-        // 1. Extraer variables hidráulicas (asumimos constantes durante este dt)
+    public RiverState solve(RiverState currentState, RiverGeometry geometry, float dt) {
+        // 1. Extraer variables hidráulicas (asumimos constantes durante este paso de tiempo)
         float[] u = currentState.velocity();
         float[] h = currentState.waterDepth();
         float[] c = currentState.contaminantConcentration();
-
-        // 2. Calcular variables geométricas necesarias
         int n = geometry.getCellCount();
-        double dx = geometry.getSpatialResolution();
+        double dx = geometry.getSpatialResolution(); // float -> double implícito
 
-        // Pre-calculamos áreas mojadas para la advección
+        // Pre-cálculo de áreas mojadas para la advección (se mantiene constante en el sub-stepping)
         float[] areas = new float[n];
-        for(int i=0; i<n; i++) {
+        for (int i = 0; i < n; i++) {
             areas[i] = (float) geometry.getCrossSectionalArea(i, h[i]);
         }
 
-        // 3. Determinar paso de tiempo seguro (Sub-stepping)
-        // Necesitamos encontrar la velocidad máxima para el criterio CFL
+        // 2. Determinar Velocidad Máxima para CFL
         float maxVelocity = 0.0f;
         for (float v : u) {
             maxVelocity = Math.max(maxVelocity, Math.abs(v));
         }
-
-        // Evitar división por cero si el agua está quieta
+        // Evitar división por cero si el agua está estancada
         if (maxVelocity < 1e-5f) maxVelocity = 1e-5f;
 
-        // Criterio CFL para Advección: dt < dx / u_max
-        double dtMaxAdvection = (dx / maxVelocity) * cflSafetyFactor;
-        // --- GUARDIA DE SEGURIDAD ---
-        // Si dx es 0 o V es infinita, evitamos el bucle de la muerte.
-        if (dtMaxAdvection < 1e-5) {
-            log.warn("dtMaxAdvection es peligrosamente pequeño ({}). ¿dx=0? Forzando valor mínimo.", dtMaxAdvection);
-            dtMaxAdvection = 1e-5;
-        }
-        // Criterio de Estabilidad para Difusión: dt < dx^2 / (2 * D_max)
-        // (Simplificado: solemos dejar que la advección mande porque es más restrictiva en ríos rápidos)
+        // 3. Cálculo de Sub-stepping (CFL Check)
+        double dtMaxAdvection = (dx / (double) maxVelocity) * this.cflSafetyFactor;
 
-        // Calculamos número de pasos necesarios
-        int numSteps = (int) Math.ceil(targetDeltaTime / dtMaxAdvection);
-        float dtSub = (float) (targetDeltaTime / numSteps);
+        // Protección absoluta contra división por cero o dx inválido
+        if (dtMaxAdvection < 1e-4) {
+            log.warn("dtMaxAdvection muy bajo ({}). DX={}, Vmax={}, CFL={}. Forzando dtMax=0.1s",
+                    dtMaxAdvection, dx, maxVelocity, this.cflSafetyFactor);
+            dtMaxAdvection = 0.1;
+        }
+
+        // Calculamos número de pasos necesarios para cubrir dt sin violar CFL
+        int numSteps = (int) Math.ceil(dt / dtMaxAdvection);
+        float dtSub = (float) (dt / numSteps);
 
         if (numSteps > 1) {
             log.debug("CFL Safety: Sub-stepping activado. {} pasos de {}s (Total: {}s). Vmax={}",
-                    numSteps, dtSub, targetDeltaTime, maxVelocity);
+                    numSteps, dtSub, dt, maxVelocity);
         }
 
         // 4. Bucle de Operator Splitting
-        // Trabajamos sobre una copia local de la concentración
+        // Trabajamos sobre una copia local de la concentración para no mutar el estado original
         float[] currentC = c.clone();
 
         for (int step = 0; step < numSteps; step++) {
@@ -117,8 +134,7 @@ public class SplitOperatorTransportSolver implements ITransportSolver {
             currentC = reactionSolver.solveReaction(currentC, currentState.temperature(), geometry, dtSub);
         }
 
-        // 5. Construir estado final
-        // Mantenemos H, u, T, pH inalterados (solo el transporte mueve C)
+        // 5. Construir y devolver el nuevo estado final
         return currentState.withContaminantConcentration(currentC);
     }
 }
