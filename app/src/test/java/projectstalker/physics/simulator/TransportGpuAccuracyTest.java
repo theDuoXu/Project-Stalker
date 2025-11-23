@@ -9,13 +9,13 @@ import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.factory.RiverGeometryFactory;
-import projectstalker.physics.impl.SplitOperatorTransportSolver;
 import projectstalker.physics.i.ITransportSolver;
+import projectstalker.physics.impl.SplitOperatorTransportSolver;
 import projectstalker.physics.jni.GpuMusclTransportSolver;
 
 import java.util.Arrays;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.fail;
 
 @Tag("GPU")
 @Slf4j
@@ -26,20 +26,20 @@ class TransportGpuAccuracyTest {
     private RiverGeometry geometry;
     private int cellCount;
 
-    // Tolerancia: 1e-3 es razonable para diferencias acumuladas float vs double
+    // Tolerancia para diferencias de precisión (CPU double vs GPU float)
     private final float EPSILON = 1e-3f;
 
     @BeforeEach
     void setUp() {
-        // 1. Geometría Controlada
+        // 1. Geometría "Micro" (Muy rápida para CPU)
         RiverConfig config = RiverConfig.builder()
-                .totalLength(5000) // 5 km
-                .spatialResolution(10.0f) // 10m
+                .totalLength(500)         // 500m (antes 5000m)
+                .spatialResolution(10.0f) // 10m por celda -> TOTAL: 50 Celdas
                 .baseWidth(20.0f)
                 .averageSlope(0.001f)
                 .baseManning(0.03f)
-                .baseDecayRateAt20C(0.0f) // Sin reacción inicial
-                .baseDispersionAlpha(0.0f) // Sin dispersión inicial
+                .baseDecayRateAt20C(0.0f)
+                .baseDispersionAlpha(0.0f)
                 .build();
 
         RiverGeometryFactory factory = new RiverGeometryFactory();
@@ -55,13 +55,13 @@ class TransportGpuAccuracyTest {
             fail("No se pudo cargar la librería GPU. Ejecuta con ./gradlew gpuTest");
         }
 
-        log.info("Setup completo. Celdas: {}", cellCount);
+        log.info("Setup Micro-Test completo. Celdas: {}", cellCount);
     }
 
     @Test
-    @DisplayName("Paridad: Advección Pura de Onda Cuadrada (CPU vs GPU)")
+    @DisplayName("Paridad: Advección de Onda Cuadrada (CPU vs GPU)")
     void compare_advection_squareWave() {
-        log.info(">>> TEST: Comparativa Advección Pura");
+        log.info(">>> TEST: Comparativa Advección Pura (Escenario Pequeño)");
 
         // ARRANGE
         float[] h = new float[cellCount]; Arrays.fill(h, 2.0f);
@@ -70,14 +70,14 @@ class TransportGpuAccuracyTest {
         float[] ph = new float[cellCount]; Arrays.fill(ph, 7.0f);
 
         float[] c = new float[cellCount];
-        // Onda cuadrada de 10 celdas en el medio
-        int start = cellCount / 2;
+
+        // Onda cuadrada pequeña en el centro (aprox índices 20-30)
+        int start = cellCount / 2 - 5;
         for(int i=0; i<10; i++) c[start + i] = 100.0f;
 
         RiverState initialState = new RiverState(h, u, c, t, ph);
 
-        // Paso de tiempo: 5 segundos. (u*dt = 5m = 0.5 celdas).
-        // Esto fuerza al solver MUSCL a interpolar (caso difícil).
+        // Paso de tiempo: 5 segundos (mueve la onda 0.5 celdas)
         float dt = 5.0f;
 
         // ACT
@@ -89,7 +89,9 @@ class TransportGpuAccuracyTest {
         RiverState resGpu = gpuSolver.solve(initialState, geometry, dt);
         long tGpu = System.nanoTime() - t2;
 
-        log.info("Tiempo CPU: {} us | Tiempo GPU: {} us", tCpu/1000, tGpu/1000);
+        // Con 50 celdas, la CPU volará (posiblemente < 1ms), la GPU tardará ~50-100ms por latencia PCI
+        log.info("Tiempo CPU: {} us | Tiempo GPU: {} us (GPU lenta por overhead en tests pequeños)",
+                tCpu/1000, tGpu/1000);
 
         // ASSERT
         compareStates(resCpu, resGpu);
