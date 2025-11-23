@@ -4,7 +4,7 @@
 #include <string>
 #include <iostream>
 #include "projectstalker/physics/manning_solver.h"
-
+#include "projectstalker/physics/transport_solver.h"
 // --- Declaraciones de Funciones JNI ---
 
 extern "C" {
@@ -35,6 +35,22 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_solveManningGpuBatch(
     jobject sideSlopeBuf,           // Estático (Direct Buffer)
     jobject manningBuf,             // Estático (Direct Buffer)
     jobject bedSlopeBuf             // Estático (Direct Buffer)
+);
+
+JNIEXPORT jfloatArray JNICALL
+Java_projectstalker_physics_jni_NativeTransportGpuSingleton_solveTransportEvolution(
+    JNIEnv *env, jobject thiz,
+    jobject cInBuf,      // DirectBuffer (Concentration)
+    jobject uBuf,        // DirectBuffer (Velocity)
+    jobject hBuf,        // DirectBuffer (Depth)
+    jobject areaBuf,     // DirectBuffer (Area)
+    jobject tempBuf,     // DirectBuffer (Temperature)
+    jobject alphaBuf,    // DirectBuffer (Geometry Alpha)
+    jobject decayBuf,    // DirectBuffer (Geometry Decay)
+    jfloat dx,
+    jfloat dtSub,
+    jint numSteps,
+    jint cellCount
 );
 
 } // extern "C"
@@ -160,6 +176,46 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_solveManningGpuBatch(
         return nullptr;
     } catch (...) {
         throw_java_exception(env, "Error desconocido en capa nativa JNI.");
+        return nullptr;
+    }
+}
+
+JNIEXPORT jfloatArray JNICALL
+Java_projectstalker_physics_jni_NativeTransportGpuSingleton_solveTransportEvolution(
+    JNIEnv *env, jobject thiz,
+    jobject cInBuf, jobject uBuf, jobject hBuf, jobject areaBuf,
+    jobject tempBuf, jobject alphaBuf, jobject decayBuf,
+    jfloat dx, jfloat dtSub, jint numSteps, jint cellCount)
+{
+    try {
+        // Zero-Copy: Obtener punteros directos de los buffers de Java
+        float* pC     = (float*)env->GetDirectBufferAddress(cInBuf);
+        float* pU     = (float*)env->GetDirectBufferAddress(uBuf);
+        float* pH     = (float*)env->GetDirectBufferAddress(hBuf);
+        float* pA     = (float*)env->GetDirectBufferAddress(areaBuf);
+        float* pT     = (float*)env->GetDirectBufferAddress(tempBuf);
+        float* pAlpha = (float*)env->GetDirectBufferAddress(alphaBuf);
+        float* pDecay = (float*)env->GetDirectBufferAddress(decayBuf);
+
+        // Validación de seguridad
+        if (!pC || !pU || !pH || !pA || !pT || !pAlpha || !pDecay) {
+            throw_java_exception(env, "JNI Error (Transport): Uno de los buffers Directos es nulo o inválido.");
+            return nullptr;
+        }
+
+        // Llamada al orquestador C++
+        std::vector<float> result = solve_transport_evolution_cpp(
+            pC, pU, pH, pA, pT, pAlpha, pDecay,
+            dx, dtSub, numSteps, cellCount
+        );
+
+        return vector_to_jfloatarray(env, result);
+
+    } catch (const std::exception& e) {
+        throw_java_exception(env, e.what());
+        return nullptr;
+    } catch (...) {
+        throw_java_exception(env, "Error desconocido en capa nativa JNI (Transport).");
         return nullptr;
     }
 }
