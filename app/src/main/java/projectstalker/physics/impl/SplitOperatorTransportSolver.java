@@ -84,7 +84,12 @@ public class SplitOperatorTransportSolver implements ITransportSolver {
 
         // Criterio CFL para Advección: dt < dx / u_max
         double dtMaxAdvection = (dx / maxVelocity) * cflSafetyFactor;
-
+        // --- GUARDIA DE SEGURIDAD ---
+        // Si dx es 0 o V es infinita, evitamos el bucle de la muerte.
+        if (dtMaxAdvection < 1e-5) {
+            log.warn("dtMaxAdvection es peligrosamente pequeño ({}). ¿dx=0? Forzando valor mínimo.", dtMaxAdvection);
+            dtMaxAdvection = 1e-5;
+        }
         // Criterio de Estabilidad para Difusión: dt < dx^2 / (2 * D_max)
         // (Simplificado: solemos dejar que la advección mande porque es más restrictiva en ríos rápidos)
 
