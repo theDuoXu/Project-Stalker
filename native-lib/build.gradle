@@ -24,6 +24,10 @@ tasks.withType(CppCompile) {
         compilerArgs.add "-I${javaHome}/include/linux"
 
     }
+// info de debug en el código C++ host DEBE ELIMINARSE EN PRODUCCIÓN
+    compilerArgs.add "-g"
+    compilerArgs.add "-O2"
+
     compilerArgs.add "-I${cudaHome}/include"
 }
 
