@@ -84,25 +84,15 @@ std::vector<float> solve_transport_evolution_cpp(
     CUDA_CHECK_T(cudaMemset(d_c_B, 0, bytes));
     CUDA_CHECK_T(cudaMemcpy(d_c_A, h_concentration_in, bytes, cudaMemcpyHostToDevice));
 
-    // 2. Buffers de Datos Crudos (Inputs)
-    // Los necesitamos para el proceso de "Baking"
-    CudaBuffer d_u, d_h, d_A, d_T, d_alpha, d_decay;
-    CUDA_CHECK_T(cudaMalloc(d_u.addr(), bytes));
-    CUDA_CHECK_T(cudaMalloc(d_h.addr(), bytes));
-    CUDA_CHECK_T(cudaMalloc(d_A.addr(), bytes)); // Este se queda vivo (volumen)
-    CUDA_CHECK_T(cudaMalloc(d_T.addr(), bytes));
-    CUDA_CHECK_T(cudaMalloc(d_alpha.addr(), bytes));
-    CUDA_CHECK_T(cudaMalloc(d_decay.addr(), bytes));
+    // 2. DECLARACIÓN DE SUPERVIVIENTES
+    // Los declaramos AQUÍ, fuera del scope artificial, para que el bucle step los vea.
 
-    CUDA_CHECK_T(cudaMemcpy(d_u, h_velocity, bytes, cudaMemcpyHostToDevice));
-    CUDA_CHECK_T(cudaMemcpy(d_h, h_depth, bytes, cudaMemcpyHostToDevice));
+    // Área (La necesitamos para el volumen en cada paso)
+    CudaBuffer d_A;
+    CUDA_CHECK_T(cudaMalloc(d_A.addr(), bytes));
     CUDA_CHECK_T(cudaMemcpy(d_A, h_area, bytes, cudaMemcpyHostToDevice));
-    CUDA_CHECK_T(cudaMemcpy(d_T, h_temperature, bytes, cudaMemcpyHostToDevice));
-    CUDA_CHECK_T(cudaMemcpy(d_alpha, h_alpha, bytes, cudaMemcpyHostToDevice));
-    CUDA_CHECK_T(cudaMemcpy(d_decay, h_decay, bytes, cudaMemcpyHostToDevice));
 
-    // 3. Buffers "Horneados" (Optimized Parameters)
-    // Estos son los que usará el bucle principal (lectura rápida)
+    // Buffers "Horneados" (Resultados del Baking)
     CudaBuffer d_baked_flow;  // Q = u * A
     CudaBuffer d_baked_diff;  // DL = alpha * u * h
     CudaBuffer d_baked_react; // K_eff = k20 * Arrhenius
@@ -111,21 +101,39 @@ std::vector<float> solve_transport_evolution_cpp(
     CUDA_CHECK_T(cudaMalloc(d_baked_diff.addr(), bytes));
     CUDA_CHECK_T(cudaMalloc(d_baked_react.addr(), bytes));
 
-    // 4. --- EJECUTAR BAKING (GPU) ---
-    // Calculamos los parámetros fusionados UNA sola vez.
-    launchBakingKernel(
-        d_baked_flow, d_baked_diff, d_baked_react,
-        d_u, d_h, d_A, d_T, d_alpha, d_decay,
-        cellCount
-    );
-    CUDA_CHECK_T(cudaDeviceSynchronize()); // Asegurar que el cocinado terminó
 
-    // Se podría liberar d_u, d_h, d_T, d_alpha, d_decay aquí para ahorrar VRAM,
-    // ya que no se usarán más en el bucle. d_A sí se necesita.
-    // Con tu CudaBuffer actual es difícil liberarlos explícitamente sin salir del scope,
-    // pero para rendimiento no afecta, solo ocupa espacio.
+    // 3. --- SCOPE ARTIFICIAL PARA INGREDIENTES CRUDOS ---
+    {
+        // Estas variables SOLO existen aquí dentro.
+        CudaBuffer d_u, d_h, d_T, d_alpha, d_decay;
 
-    // 5. Bucle de Sub-stepping (Usando parámetros horneados)
+        CUDA_CHECK_T(cudaMalloc(d_u.addr(), bytes));
+        CUDA_CHECK_T(cudaMalloc(d_h.addr(), bytes));
+        // d_A ya está declarado fuera, no lo declaramos aquí
+        CUDA_CHECK_T(cudaMalloc(d_T.addr(), bytes));
+        CUDA_CHECK_T(cudaMalloc(d_alpha.addr(), bytes));
+        CUDA_CHECK_T(cudaMalloc(d_decay.addr(), bytes));
+
+        CUDA_CHECK_T(cudaMemcpy(d_u, h_velocity, bytes, cudaMemcpyHostToDevice));
+        CUDA_CHECK_T(cudaMemcpy(d_h, h_depth, bytes, cudaMemcpyHostToDevice));
+        CUDA_CHECK_T(cudaMemcpy(d_T, h_temperature, bytes, cudaMemcpyHostToDevice));
+        CUDA_CHECK_T(cudaMemcpy(d_alpha, h_alpha, bytes, cudaMemcpyHostToDevice));
+        CUDA_CHECK_T(cudaMemcpy(d_decay, h_decay, bytes, cudaMemcpyHostToDevice));
+
+        // EJECUTAR BAKING
+        // El bloque interno puede "ver" las variables externas (d_baked_*, d_A).
+        launchBakingKernel(
+            d_baked_flow, d_baked_diff, d_baked_react,
+            d_u, d_h, d_A, d_T, d_alpha, d_decay,
+            cellCount
+        );
+        CUDA_CHECK_T(cudaDeviceSynchronize());
+
+    } // <--- AQUÍ MUEREN d_u, d_h, d_T... Liberando su VRAM.
+      // d_baked_* y d_A siguen vivos porque nacieron antes de abrir la llave.
+
+
+    // 4. Bucle de Sub-stepping
     float* d_current = d_c_A;
     float* d_next    = d_c_B;
 
@@ -133,10 +141,10 @@ std::vector<float> solve_transport_evolution_cpp(
         launchTransportKernel(
             d_next,
             d_current,
-            d_baked_flow,  // Le pasamos lo cocinado
-            d_baked_diff,  // Le pasamos lo cocinado
-            d_baked_react, // Le pasamos lo cocinado
-            d_A,           // Necesario para el volumen
+            d_baked_flow,
+            d_baked_diff,
+            d_baked_react,
+            d_A,
             dx, dt_sub, cellCount
         );
 
@@ -146,7 +154,7 @@ std::vector<float> solve_transport_evolution_cpp(
         d_next = temp;
     }
 
-    // 6. Finalizar
+    // 5. Finalizar
     CUDA_CHECK_T(cudaGetLastError());
     CUDA_CHECK_T(cudaDeviceSynchronize());
 
