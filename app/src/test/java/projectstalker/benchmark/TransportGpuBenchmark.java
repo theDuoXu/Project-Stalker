@@ -25,15 +25,19 @@ public class TransportGpuBenchmark {
     private ITransportSolver cpuSolver;
     private ITransportSolver gpuSolver;
 
-    // Constantes para forzar carga de trabajo
-    private final int CELL_COUNT = 10_000; // Un río largo (500km a 50m/celda)
-    private final float VELOCITY = 2.0f;   // Río rápido para forzar dt pequeño (muchos pasos)
+    // --- CONFIGURACIÓN DE CARGA ---
+    // 1 Millón de celdas para saturar la GPU y ver el speedup real
+    private final int CELL_COUNT = 1_000_000;
+    private final float VELOCITY = 2.0f;
+
+    // Umbral para dejar de ejecutar CPU real e interpolar
+    private final int CPU_EXECUTION_THRESHOLD = 50_000;
 
     @BeforeEach
     void setUp() {
-        // 1. Geometría Grande (10k celdas para saturar la GPU)
+        // 1. Geometría Grande
         RiverConfig config = RiverConfig.builder()
-                .totalLength(CELL_COUNT * 50.0f)
+                .totalLength(CELL_COUNT * 50.0f) // 50m * 1M = 50,000 km (Río sintético masivo)
                 .spatialResolution(50.0f)
                 .baseWidth(50.0f)
                 .averageSlope(0.001f)
@@ -46,7 +50,7 @@ public class TransportGpuBenchmark {
         this.geometry = factory.createRealisticRiver(config);
 
         // 2. Solvers
-        // Forzamos CFL 0.9 en ambos para que hagan el mismo número de pasos
+        // Forzamos CFL 0.9 en ambos para garantizar paridad algorítmica
         this.cpuSolver = new SplitOperatorTransportSolver(
                 new projectstalker.physics.impl.MusclAdvectionSolver(),
                 new projectstalker.physics.impl.CentralDiffusionSolver(),
@@ -60,12 +64,15 @@ public class TransportGpuBenchmark {
             log.error("No se pudo cargar GPU Solver. El benchmark fallará.", e);
         }
 
-        // 3. Estado Inicial (Mancha en el centro)
+        // 3. Estado Inicial
         float[] h = new float[geometry.getCellCount()]; Arrays.fill(h, 2.0f);
         float[] u = new float[geometry.getCellCount()]; Arrays.fill(u, VELOCITY);
         float[] c = new float[geometry.getCellCount()];
+
+        // Mancha en el centro
         int mid = geometry.getCellCount() / 2;
-        for(int i=0; i<100; i++) c[mid+i] = 100.0f; // Mancha grande
+        int blobSize = Math.min(1000, geometry.getCellCount() / 10);
+        for(int i=0; i<blobSize; i++) c[mid+i] = 100.0f;
 
         this.initialState = RiverState.builder()
                 .waterDepth(h)
@@ -75,61 +82,84 @@ public class TransportGpuBenchmark {
                 .ph(new float[geometry.getCellCount()])
                 .build();
 
-        log.info("Setup Benchmark: {} celdas. Velocidad={} m/s.", geometry.getCellCount(), VELOCITY);
+        log.info("Setup Benchmark: {} celdas. Velocidad={} m/s. (Límite CPU real: {} celdas)",
+                String.format("%,d", geometry.getCellCount()), VELOCITY, CPU_EXECUTION_THRESHOLD);
     }
 
     @Test
-    @DisplayName("Benchmark: Evolución Temporal (CPU vs GPU)")
+    @DisplayName("Benchmark: Evolución Temporal (CPU Interpolada vs GPU Real)")
     void benchmarkTimeEvolution() {
-        log.info("=== INICIANDO BENCHMARK DE TRANSPORTE ===");
+        log.info("=== INICIANDO BENCHMARK MASIVO (1M Celdas) ===");
 
-        // Duraciones a simular (en segundos)
-        // 1h, 6h, 24h, 1 semana
+        // Duraciones: 1h, 6h, 24h, 1 semana
         float[] durations = {3600f, 21600f, 86400f, 604800f};
 
-        // --- WARM-UP ---
-        log.info(">> Calentando motores...");
-        runIteration(cpuSolver, 100f);
-        runIteration(gpuSolver, 100f);
+        // --- WARM-UP (Corto) ---
+        // Necesario para JIT y Contexto CUDA
+        log.info(">> Calentando motores (100 iteraciones)...");
+        runIteration(cpuSolver, 10.0f); // Muy corto para no esperar
+        runIteration(gpuSolver, 10.0f);
         log.info(">> Calentamiento completado.\n");
 
-        System.out.printf("%-15s | %-15s | %-15s | %-15s%n", "SIM DURATION", "CPU (ms)", "GPU (ms)", "SPEEDUP");
-        System.out.println("---------------------------------------------------------------------");
+        System.out.printf("%-15s | %-20s | %-15s | %-15s%n", "SIM DURATION", "CPU (ms)", "GPU (ms)", "SPEEDUP");
+        System.out.println("----------------------------------------------------------------------------");
 
-        for (float duration : durations) {
-            System.gc(); // Limpieza para no medir GC
+        // Variables para interpolación CPU
+        double cpuBaselineMs = 0;
+        float baselineDuration = durations[0];
 
-            // 1. Medir CPU
-            // Nota: Para duraciones muy largas (1 semana), la CPU podría tardar minutos.
-            // Si ves que tarda demasiado, comenta la línea de CPU para duraciones extremas.
-            double cpuTimeMs = runIteration(cpuSolver, duration);
+        for (int i = 0; i < durations.length; i++) {
+            float duration = durations[i];
+            System.gc();
 
-            // 2. Medir GPU
+            // 1. Lógica CPU: Ejecutar o Estimar
+            double cpuTimeMs;
+            boolean isCpuEstimated = false;
+
+            // Si tenemos muchas celdas, solo ejecutamos la primera duración (la más corta)
+            // y usamos esa velocidad para proyectar el resto.
+            if (CELL_COUNT > CPU_EXECUTION_THRESHOLD && i > 0) {
+                // Interpolación lineal: T = T_base * (Duration / Duration_base)
+                cpuTimeMs = cpuBaselineMs * (duration / baselineDuration);
+                isCpuEstimated = true;
+            } else {
+                // Ejecución Real
+                if (CELL_COUNT > CPU_EXECUTION_THRESHOLD) {
+                    log.info("Ejecutando CPU real para base line ({}s)... esto puede tardar un poco.", duration);
+                }
+                cpuTimeMs = runIteration(cpuSolver, duration);
+
+                // Guardamos la base si es la primera iteración
+                if (i == 0) {
+                    cpuBaselineMs = cpuTimeMs;
+                    baselineDuration = duration;
+                }
+            }
+
+            // 2. Medir GPU (Siempre Real)
+            // La GPU debe aguantar el millón de celdas sin interpolar
             double gpuTimeMs = runIteration(gpuSolver, duration);
 
             // 3. Reportar
             double speedup = cpuTimeMs / gpuTimeMs;
             String label = formatDuration(duration);
+            String cpuLabel = String.format("%,.2f %s", cpuTimeMs, isCpuEstimated ? "(Est.)" : "");
 
-            System.out.printf("%-15s | %-15.2f | %-15.2f | %-15.2fx %s%n",
-                    label, cpuTimeMs, gpuTimeMs, speedup,
-                    (speedup > 5.0 ? "🚀" : ""));
+            System.out.printf("%-15s | %-20s | %-15.2f | %-15.2fx %s%n",
+                    label, cpuLabel, gpuTimeMs, speedup,
+                    (speedup > 10.0 ? "🚀🚀" : (speedup > 5.0 ? "🚀" : "")));
         }
     }
 
     private double runIteration(ITransportSolver solver, float duration) {
         long start = System.nanoTime();
-
-        // La magia ocurre aquí:
-        // El solver dividirá 'duration' en miles de micro-pasos (sub-stepping).
-        // La CPU hará un bucle Java. La GPU hará un bucle C++ lanzando kernels.
         solver.solve(initialState, geometry, duration);
-
         long end = System.nanoTime();
         return (end - start) / 1_000_000.0;
     }
 
     private String formatDuration(float seconds) {
+        if (seconds >= 604800) return String.format("%.0f Week", seconds / 604800);
         if (seconds >= 86400) return String.format("%.1f Days", seconds / 86400);
         if (seconds >= 3600) return String.format("%.1f Hours", seconds / 3600);
         return String.format("%.0f Secs", seconds);
