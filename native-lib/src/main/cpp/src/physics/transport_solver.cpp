@@ -74,32 +74,25 @@ std::vector<float> solve_transport_evolution_cpp(
     int num_steps,
     int cellCount
 ) {
-    // 1. Validaciones
     if (cellCount <= 0 || num_steps <= 0) return {};
-
     const size_t bytes = cellCount * sizeof(float);
 
-    // 2. Declaración RAII (Gestión automática de memoria)
+    // 1. Buffers de Estado (Ping-Pong)
     CudaBuffer d_c_A, d_c_B;
-    CudaBuffer d_u, d_h, d_A, d_T, d_alpha, d_decay;
-
-    // 3. Reserva de Memoria
     CUDA_CHECK_T(cudaMalloc(d_c_A.addr(), bytes));
-    CUDA_CHECK_T(cudaMalloc(d_c_B.addr(), bytes)); // Buffer secundario (Pong)
+    CUDA_CHECK_T(cudaMalloc(d_c_B.addr(), bytes));
+    CUDA_CHECK_T(cudaMemset(d_c_B, 0, bytes));
+    CUDA_CHECK_T(cudaMemcpy(d_c_A, h_concentration_in, bytes, cudaMemcpyHostToDevice));
 
+    // 2. Buffers de Datos Crudos (Inputs)
+    // Los necesitamos para el proceso de "Baking"
+    CudaBuffer d_u, d_h, d_A, d_T, d_alpha, d_decay;
     CUDA_CHECK_T(cudaMalloc(d_u.addr(), bytes));
     CUDA_CHECK_T(cudaMalloc(d_h.addr(), bytes));
-    CUDA_CHECK_T(cudaMalloc(d_A.addr(), bytes));
+    CUDA_CHECK_T(cudaMalloc(d_A.addr(), bytes)); // Este se queda vivo (volumen)
     CUDA_CHECK_T(cudaMalloc(d_T.addr(), bytes));
     CUDA_CHECK_T(cudaMalloc(d_alpha.addr(), bytes));
     CUDA_CHECK_T(cudaMalloc(d_decay.addr(), bytes));
-
-    // --- LIMPIEZA PREVENTIVA ---
-    // Inicializamos d_c_B a cero para evitar basura en memoria
-    CUDA_CHECK_T(cudaMemset(d_c_B, 0, bytes));
-
-    // 4. Copia de Datos (Host -> Device)
-    CUDA_CHECK_T(cudaMemcpy(d_c_A, h_concentration_in, bytes, cudaMemcpyHostToDevice));
 
     CUDA_CHECK_T(cudaMemcpy(d_u, h_velocity, bytes, cudaMemcpyHostToDevice));
     CUDA_CHECK_T(cudaMemcpy(d_h, h_depth, bytes, cudaMemcpyHostToDevice));
@@ -108,36 +101,57 @@ std::vector<float> solve_transport_evolution_cpp(
     CUDA_CHECK_T(cudaMemcpy(d_alpha, h_alpha, bytes, cudaMemcpyHostToDevice));
     CUDA_CHECK_T(cudaMemcpy(d_decay, h_decay, bytes, cudaMemcpyHostToDevice));
 
-    // 5. Bucle de Sub-stepping (Ping-Pong)
-    // Usamos punteros raw para el intercambio, los objetos CudaBuffer retienen la propiedad
+    // 3. Buffers "Horneados" (Optimized Parameters)
+    // Estos son los que usará el bucle principal (lectura rápida)
+    CudaBuffer d_baked_flow;  // Q = u * A
+    CudaBuffer d_baked_diff;  // DL = alpha * u * h
+    CudaBuffer d_baked_react; // K_eff = k20 * Arrhenius
+
+    CUDA_CHECK_T(cudaMalloc(d_baked_flow.addr(), bytes));
+    CUDA_CHECK_T(cudaMalloc(d_baked_diff.addr(), bytes));
+    CUDA_CHECK_T(cudaMalloc(d_baked_react.addr(), bytes));
+
+    // 4. --- EJECUTAR BAKING (GPU) ---
+    // Calculamos los parámetros fusionados UNA sola vez.
+    launchBakingKernel(
+        d_baked_flow, d_baked_diff, d_baked_react,
+        d_u, d_h, d_A, d_T, d_alpha, d_decay,
+        cellCount
+    );
+    CUDA_CHECK_T(cudaDeviceSynchronize()); // Asegurar que el cocinado terminó
+
+    // Se podría liberar d_u, d_h, d_T, d_alpha, d_decay aquí para ahorrar VRAM,
+    // ya que no se usarán más en el bucle. d_A sí se necesita.
+    // Con tu CudaBuffer actual es difícil liberarlos explícitamente sin salir del scope,
+    // pero para rendimiento no afecta, solo ocupa espacio.
+
+    // 5. Bucle de Sub-stepping (Usando parámetros horneados)
     float* d_current = d_c_A;
     float* d_next    = d_c_B;
 
     for (int step = 0; step < num_steps; step++) {
-        // Lanzar Kernel
         launchTransportKernel(
-            d_next,    // Output (Futuro)
-            d_current, // Input (Pasado)
-            d_u, d_h, d_A, d_T, d_alpha, d_decay,
+            d_next,
+            d_current,
+            d_baked_flow,  // Le pasamos lo cocinado
+            d_baked_diff,  // Le pasamos lo cocinado
+            d_baked_react, // Le pasamos lo cocinado
+            d_A,           // Necesario para el volumen
             dx, dt_sub, cellCount
         );
 
-        // Swap de punteros (El futuro ahora es el pasado)
+        // Swap
         float* temp = d_current;
         d_current = d_next;
         d_next = temp;
     }
 
-    // Sincronización y chequeo de errores
+    // 6. Finalizar
     CUDA_CHECK_T(cudaGetLastError());
     CUDA_CHECK_T(cudaDeviceSynchronize());
 
-    // 6. Copiar Resultados
     std::vector<float> result(cellCount);
-    // Copiamos desde d_current, que contiene el último paso válido tras el swap final
     CUDA_CHECK_T(cudaMemcpy(result.data(), d_current, bytes, cudaMemcpyDeviceToHost));
 
     return result;
-
-    // Al salir, los destructores ~CudaBuffer() liberan toda la VRAM automáticamente.
 }
