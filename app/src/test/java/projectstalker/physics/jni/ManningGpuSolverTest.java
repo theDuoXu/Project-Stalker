@@ -47,10 +47,20 @@ class ManningGpuSolverTest {
         float[] manning = {0.03f, 0.03f, 0.03f};
         float[] elevation = {10.0f, 9.5f, 9.0f}; // Necesario para calcular bedSlope
 
-        // Mockeamos los getters (o clones si mantuviste el nombre anterior)
+        // Mockeamos los getters
+        when(mockGeometry.getBottomWidth()).thenReturn(width);
         when(mockGeometry.cloneBottomWidth()).thenReturn(width);
+
+        // Side Slope
+        when(mockGeometry.getSideSlope()).thenReturn(slope);
         when(mockGeometry.cloneSideSlope()).thenReturn(slope);
+
+        // Manning
+        when(mockGeometry.getManningCoefficient()).thenReturn(manning);
         when(mockGeometry.cloneManningCoefficient()).thenReturn(manning);
+
+        // Elevation
+        when(mockGeometry.getElevationProfile()).thenReturn(elevation);
         when(mockGeometry.cloneElevationProfile()).thenReturn(elevation);
     }
 
@@ -127,8 +137,8 @@ class ManningGpuSolverTest {
         // --- ASSERT ---
         // Verificamos que los métodos de acceso a datos de la geometría solo se llamaron UNA VEZ
         // (porque la segunda vez se usó la caché)
-        verify(mockGeometry, times(1)).cloneBottomWidth();
-        verify(mockGeometry, times(1)).cloneManningCoefficient();
+        verify(mockGeometry, times(1)).getBottomWidth();
+        verify(mockGeometry, times(1)).getManningCoefficient();
         // verify(mockGeometry, times(1)).cloneElevationProfile(); // Este se llama para calcular pendiente
     }
 }

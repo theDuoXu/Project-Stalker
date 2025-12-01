@@ -31,6 +31,7 @@ public final class RiverGeometry {
     private final int cellCount;
     @Getter
     private final float spatialResolution;
+    @Getter
     private final float[] elevationProfile;
     @Getter
     private final float[] bottomWidth;
@@ -366,6 +367,8 @@ public final class RiverGeometry {
     public RiverSectionType[] cloneSectionTypes() {
         return sectionTypes.clone();
     }
+
+
 
 
     public record GpuGeometryBuffers(
