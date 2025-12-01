@@ -164,6 +164,9 @@ tasks.register('benchmark', Test){
     minHeapSize = "16G"
     maxHeapSize = "16G"
 
+    // Forzar ejecución siempre
+    outputs.upToDateWhen { false }
+
     useJUnitPlatform {
         includeTags 'Benchmark'
     }
