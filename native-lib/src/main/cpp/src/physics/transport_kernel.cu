@@ -29,7 +29,9 @@ __device__ inline float device_minmod(float a, float b) {
 
 // --- KERNEL PRINCIPAL ---
 
-__global__ void transportMusclKernel(
+__global__ void
+__launch_bounds__(BLOCK_SIZE) // Ayuda al compilador a gestionar registros para maximizar ocupación
+transportMusclKernel(
     float* __restrict__ d_c_new,       // Salida
     const float* __restrict__ d_c_old, // Entrada (Solo lectura)
     const float* __restrict__ d_velocity,
@@ -92,15 +94,25 @@ __global__ void transportMusclKernel(
         s_A[s_halo_idx] = d_area[src_gid];
     }
 
-    // Barrera: Esperar a que todo el bloque haya cargado la memoria
+    // Barrera: Esperar a que el bloque haya cargado la memoria compartida
     __syncthreads();
 
     // 4. CÁLCULO FÍSICO (Solo hilos válidos)
     if (inside) {
 
+        // --- LATENCY HIDING (PRE-FETCHING) ---
+        // Solicitamos los datos de memoria global AHORA.
+        // Mientras viajan desde la RAM (lento), la GPU procesará la sección de Advección.
+        // Esto elimina los "L1TEX Stalls".
+        const float l_depth = d_depth[gid];
+        const float l_alpha = d_alpha[gid];
+        const float l_decay = d_decay[gid];
+        const float l_temp  = d_temperature[gid];
+
         // --- A. ADVECCIÓN (MUSCL de 2º Orden) ---
-        // Leemos vecinos desde la Shared Memory (muy rápido)
-        float c_LL = s_C[s_idx - 2]; // Left-Left (necesario para pendiente previa)
+        // (Este bloque se ejecuta mientras llegan los datos de arriba)
+
+        float c_LL = s_C[s_idx - 2]; // Left-Left
         float c_L  = s_C[s_idx - 1]; // Left
         float c_C  = s_C[s_idx];     // Center
         float c_R  = s_C[s_idx + 1]; // Right
@@ -110,12 +122,11 @@ __global__ void transportMusclKernel(
         float slope_C = device_minmod(c_C - c_L, c_R - c_C);
 
         // Reconstrucción de valores en las caras de la celda
-        float c_face_L = c_L + 0.5f * slope_L;
-        float c_face_R = c_C + 0.5f * slope_C;
+        // Uso de FMA (Fused Multiply-Add) -> fmaf(a,b,c) = a*b+c
+        float c_face_L = fmaf(0.5f, slope_L, c_L);
+        float c_face_R = fmaf(0.5f, slope_C, c_C);
 
         // Cálculo de Flujos (Q = v * A * C)
-        // Nota: Usamos Upwind implícito asumiendo velocidad positiva hacia derecha.
-        // Si la velocidad fuera negativa, habría que elegir c_face opuesto.
         float flux_out = s_U[s_idx]     * s_A[s_idx]     * c_face_R;
         float flux_in  = s_U[s_idx - 1] * s_A[s_idx - 1] * c_face_L;
 
@@ -124,10 +135,11 @@ __global__ void transportMusclKernel(
 
 
         // --- B. DIFUSIÓN (Diferencias Centradas) ---
-        float h = d_depth[gid];
-        float alpha = d_alpha[gid];
+        // Aquí usamos las variables locales (l_*) que solicitamos al principio.
+        // A estas alturas, los datos ya deberían estar disponibles sin espera.
+
         // Evitamos DL=0 para no tener problemas numéricos
-        float DL = fmaxf(alpha * fabsf(r_u) * h, EPSILON);
+        float DL = fmaxf(l_alpha * fabsf(r_u) * l_depth, EPSILON);
 
         float laplacian = (c_R - 2.0f * c_C + c_L);
         float diffusion_term = (DL * laplacian) / (dx * dx);
@@ -138,27 +150,18 @@ __global__ void transportMusclKernel(
         float advection_term = (flux_in - flux_out) / fmaxf(vol, EPSILON);
 
         // C_star es la concentración después de moverse, pero antes de reaccionar
-        float c_star = c_C + dt * (advection_term + diffusion_term);
-
-        // Saneamiento: No permitimos masa negativa por errores numéricos de advección
-        c_star = fmaxf(0.0f, c_star);
+        // Usamos FMA para el paso de tiempo: c + dt * term
+        float c_star = fmaxf(0.0f, fmaf(dt, (advection_term + diffusion_term), c_C));
 
 
         // --- C. REACCIÓN (Solución Analítica Exacta) ---
         // Resolvemos dC/dt = -kC  =>  C(t+dt) = C(t) * exp(-k*dt)
 
-        float k20 = d_decay[gid];
-        float temp = d_temperature[gid];
-
         // 1. Corrección de Arrhenius optimizada con base 2
-        // k_real = k20 * theta^(T-20)
-        // theta^(X) = 2^(X * log2(theta))
-        float arrhenius_factor = exp2f((temp - ARRHENIUS_REF_T) * LOG2_THETA);
-        float k_real = k20 * arrhenius_factor;
+        float arrhenius_factor = exp2f((l_temp - ARRHENIUS_REF_T) * LOG2_THETA);
+        float k_real = l_decay * arrhenius_factor;
 
         // 2. Decaimiento Exponencial
-        // exp(-k * dt) = 2^(-k * dt * log2(e))
-        // Usamos exp2f porque las GPUs tienen hardware dedicado para potencias de 2
         float decay_factor = exp2f(-k_real * dt * LOG2_E);
 
         // Aplicamos el decaimiento al estado transportado
