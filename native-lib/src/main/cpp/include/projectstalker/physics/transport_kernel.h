@@ -4,19 +4,21 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-// Launcher del Kernel de baking (Pre-cálculo)
-void launchBakingKernel(
-    float *d_flow_out, // Salida: u * A
-    float *d_diff_out, // Salida: alpha * |u| * h
-    float *d_react_out, // Salida: k20 * theta^(T-20)
-    const float *d_u,
-    const float *d_h,
-    const float *d_A,
-    const float *d_T,
-    const float *d_alpha,
-    const float *d_decay,
-    int cellCount
-);
+    // Launcher del Kernel de Baking
+    void launchBakingKernel(
+        float* d_flow_out,      // u * A
+        float* d_diff_out,      // alpha * |u| * h
+        float* d_react_out,     // k20 * Arrhenius
+        float* d_inv_vol_out,   // 1.0 / (A * dx)
+        const float* d_u,
+        const float* d_h,
+        const float* d_A,
+        const float* d_T,
+        const float* d_alpha,
+        const float* d_decay,
+        float dx,
+        int cellCount
+    );
 
 /**
  * Lanza el kernel de transporte (Advección + Difusión + Reacción con Arrhenius).

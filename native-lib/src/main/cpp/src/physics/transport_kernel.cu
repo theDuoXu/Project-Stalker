@@ -33,31 +33,39 @@ __device__ inline float device_minmod(float a, float b) {
 // Se ejecuta UNA VEZ al principio. Prepara los coeficientes para no recalcularlos
 // millones de veces en el bucle temporal.
 __global__ void bakePhysicsKernel(
-    float* __restrict__ d_flow,      // Salida: Caudal (u * A)
-    float* __restrict__ d_diff,      // Salida: Coef Difusión (alpha * |u| * h)
-    float* __restrict__ d_react,     // Salida: Tasa Reacción (k20 * Arrhenius)
+    float* __restrict__ d_flow,
+    float* __restrict__ d_diff,
+    float* __restrict__ d_react,
+    float* __restrict__ d_inv_vol, // <-- SALIDA: Inverso del Volumen
     const float* __restrict__ u,
     const float* __restrict__ h,
     const float* __restrict__ A,
     const float* __restrict__ T,
     const float* __restrict__ alpha,
     const float* __restrict__ k20,
+    float dx,                      // <-- INPUT: Delta X
     int cellCount
 ) {
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
     if (gid < cellCount) {
-        // 1. Pre-cálculo de Flujo (Q = u * A)
-        // Esto ahorra multiplicaciones en la advección
+        // 1. Flujo (Q = u * A)
         d_flow[gid] = u[gid] * A[gid];
 
-        // 2. Pre-cálculo de Difusión (DL = alpha * |u| * h)
-        // Fusiona 3 lecturas de memoria en 1 sola variable para el Solver
+        // 2. Difusión (DL = alpha * |u| * h)
         d_diff[gid] = alpha[gid] * fabsf(u[gid]) * h[gid];
 
-        // 3. Pre-cálculo de Reacción (Arrhenius)
-        // Elimina el cálculo costoso de pow/exp dentro del bucle temporal
+        // 3. Reacción (Arrhenius)
         float arrhenius = exp2f((T[gid] - ARRHENIUS_REF_T) * LOG2_THETA);
         d_react[gid] = k20[gid] * arrhenius;
+
+        // 4. Volumen Inverso (1 / (A * dx))
+        float vol = A[gid] * dx;
+
+        // OPTIMIZACIÓN: Pre-calculamos la división para convertirla en multiplicación.
+        // NOTA DE RENDIMIENTO: Aunque usamos un operador ternario, esto NO causa divergencia de Warps.
+        // El compilador NVCC optimiza esta estructura simple usando instrucciones predicadas (SEL/CMOV).
+        // No hay salto de instrucción (branch), sino selección de resultado por hardware.
+        d_inv_vol[gid] = (vol > EPSILON) ? (1.0f / vol) : 0.0f;
     }
 }
 
@@ -73,7 +81,7 @@ transportMusclKernel(
     const float* __restrict__ d_flow,       // <-- INPUT PRE-COCINADO (Q = u*A)
     const float* __restrict__ d_diff_coeff, // <-- INPUT PRE-COCINADO (DL)
     const float* __restrict__ d_react_rate, // <-- INPUT PRE-COCINADO (K_eff)
-    const float* __restrict__ d_area,       // Necesario para volumen
+    const float* __restrict__ d_inv_vol,    // <-- INPUT PRE-COCINADO (1/Vol)
     float dx,
     float dt,
     int cellCount
@@ -136,7 +144,7 @@ transportMusclKernel(
         // Menos tráfico en el bus VRAM -> Menos "L1TEX Stalls".
         const float l_diff = d_diff_coeff[gid];
         const float l_k    = d_react_rate[gid];
-        const float l_area = d_area[gid]; // Necesario para vol = A * dx
+        const float l_inv_vol = d_inv_vol[gid]; // Inverso del volumen
 
         // --- A. ADVECCIÓN (MUSCL de 2º Orden) ---
         // (Este bloque se ejecuta mientras llegan los datos de arriba)
@@ -176,8 +184,8 @@ transportMusclKernel(
 
 
         // --- INTEGRACIÓN PARCIAL (Transporte) ---
-        float vol = l_area * dx;
-        float advection_term = (flux_in - flux_out) / fmaxf(vol, EPSILON);
+        // OPTIMIZACIÓN: Reemplazamos la división lenta ( / vol ) por multiplicación rápida
+        float advection_term = (flux_in - flux_out) * l_inv_vol;
 
         // C_star es la concentración después de moverse, pero antes de reaccionar
         // Usamos FMA para el paso de tiempo: c + dt * term
@@ -202,22 +210,22 @@ transportMusclKernel(
 // --- LAUNCHERS (Host) ---
 
 void launchBakingKernel(
-    float* d_flow, float* d_diff, float* d_react,
+    float* d_flow, float* d_diff, float* d_react, float* d_inv_vol,
     const float* u, const float* h, const float* A,
     const float* T, const float* alpha, const float* k20,
-    int cellCount
+    float dx, int cellCount
 ) {
     int grid = (cellCount + BLOCK_SIZE - 1) / BLOCK_SIZE;
     bakePhysicsKernel<<<grid, BLOCK_SIZE>>>(
-        d_flow, d_diff, d_react,
+        d_flow, d_diff, d_react, d_inv_vol,
         u, h, A, T, alpha, k20,
-        cellCount
+        dx, cellCount
     );
 }
 
 void launchTransportKernel(
     float* d_c_new, const float* d_c_old,
-    const float* d_flow, const float* d_diff, const float* d_react, const float* d_area,
+    const float* d_flow, const float* d_diff, const float* d_react, const float* d_inv_vol,
     float dx, float dt, int cellCount
 ) {
     int threadsPerBlock = BLOCK_SIZE;
@@ -226,7 +234,7 @@ void launchTransportKernel(
 
     transportMusclKernel<<<blocksPerGrid, threadsPerBlock>>>(
         d_c_new, d_c_old,
-        d_flow, d_diff, d_react, d_area,
+        d_flow, d_diff, d_react, d_inv_vol,
         dx, dt, cellCount
     );
 }
