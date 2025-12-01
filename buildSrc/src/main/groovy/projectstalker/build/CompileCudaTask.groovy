@@ -45,7 +45,8 @@ abstract class CompileCudaTask extends DefaultTask {
                         '-I' + project.file('src/main/cpp/include').absolutePath,
                         '--compiler-options', '-fPIC',
 
-                        // Genera código para tu GTX 1050 Ti (Pascal)
+                        '-lineinfo', // DEBE SER ELIMINADO EN PRODUCCIÓN, ESTO ES PARA PROFILING
+                        // Genera código para GTX 1050 Ti (Pascal)
 //                        '-gencode=arch=compute_61,code=sm_61',
 
                         // Genera código para tu objetivo de producción (Blackwell)
