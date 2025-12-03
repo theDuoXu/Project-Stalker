@@ -83,38 +83,68 @@ public class ManningBatchProcessor implements AutoCloseable {
 
     /**
      * Realiza el cómputo del batch delegando al solver nativo de GPU.
+     * Incluye instrumentación de tiempos para perfilado.
      */
     private ManningSimulationResult gpuComputeBatch(int batchSize, RiverState initialRiverState,
                                                     float[] newInflows, float[][][] phTmp) {
-        // Guardia de seguridad: Si intentamos usar GPU pero no se inicializó en el constructor
         if (this.gpuSolver == null) {
-            throw new IllegalStateException("Se solicitó ejecución GPU, pero ManningBatchProcessor fue inicializado en modo solo CPU (ver SimulationConfig).");
+            throw new IllegalStateException("Se solicitó ejecución GPU, pero ManningBatchProcessor fue inicializado en modo solo CPU.");
         }
 
         try {
-            // 1. Extraer estado inicial
-            float[] initialQ = initialRiverState.discharge(this.geometry); // <-- USANDO EL NUEVO MÉTODO
+            // T0: Inicio preparación
+            long t0 = System.nanoTime();
+
+            float[] initialQ = initialRiverState.discharge(this.geometry);
             float[] initialDepths = initialRiverState.waterDepth();
 
-            // 2. Llamada Stateful
+            // T1: Inicio JNI/GPU
+            long t1 = System.nanoTime();
+
             float[][][] results = gpuSolver.solveBatch(initialDepths, newInflows, initialQ);
 
-            // 3. Validación
+            // T2: Fin JNI/GPU (Aquí ya tenemos los datos en RAM Java, pero en formato crudo del Solver)
+            long t2 = System.nanoTime();
+
             if (results == null || results.length != batchSize) {
                 log.error("Error crítico GPU: BatchSize incorrecto en retorno.");
                 return ManningSimulationResult.builder().geometry(this.geometry).states(Collections.emptyList()).build();
             }
 
-            // 4. Re-ensamblar
+            // T3: Inicio Desempaquetado (El cuello de botella de objetos)
+            long t3 = System.nanoTime();
+
             float[][] resultingDepths = new float[batchSize][cellCount];
             float[][] resultingVelocities = new float[batchSize][cellCount];
 
+            // Desempaquetado estructura Solver [Batch][Var][Cell] -> Arrays locales
             for (int i = 0; i < batchSize; i++) {
                 resultingDepths[i] = results[i][0];
                 resultingVelocities[i] = results[i][1];
             }
 
+            // Creación de objetos RiverState (Costoso)
             List<RiverState> states = assembleRiverStateResults(batchSize, phTmp, resultingDepths, resultingVelocities);
+
+            // T4: Fin total
+            long t4 = System.nanoTime();
+
+            // LOG DE PERFILADO (Solo si tarda un poco para no ensuciar logs de tests unitarios rápidos)
+            double totalMs = (t4 - t0) / 1e6;
+            if (totalMs > 5.0) {
+                double prepMs = (t1 - t0) / 1e6;
+                double gpuMs = (t2 - t1) / 1e6;   // <--- VELOCIDAD REAL DE TU CÓDIGO C++/CUDA
+                double javaMs = (t4 - t3) / 1e6;  // <--- TIEMPO PERDIDO EN OBJETOS JAVA
+
+                log.info(">>> GPU BATCH ({} steps): Total={}ms | Prep={}ms | Native+GPU={}ms | Java Objects={}ms <<<",
+                        batchSize,
+                        String.format("%.1f", totalMs),
+                        String.format("%.1f", prepMs),
+                        String.format("%.1f", gpuMs),
+                        String.format("%.1f", javaMs)
+                );
+            }
+
             return ManningSimulationResult.builder().geometry(this.geometry).states(states).build();
 
         } catch (Exception e) {
