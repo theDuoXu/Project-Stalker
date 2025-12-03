@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.nio.FloatBuffer;
 
 @Slf4j
-public class NativeManningGpuSingleton implements INativeManningSolver{
+public class NativeManningGpuSingleton implements INativeManningSolver {
     private static volatile NativeManningGpuSingleton INSTANCE = null;
 
     // --- Carga de la librería nativa (JNI) ---
@@ -27,13 +27,6 @@ public class NativeManningGpuSingleton implements INativeManningSolver{
     private NativeManningGpuSingleton() {
     }
 
-    /**
-     * Declaración del JNI nativo que se comunica con la librería C++/CUDA.
-     */
-    public native float[] solveManningGpu(float[] targetDischarges, float[] initialDepthGuesses, FloatBuffer bottomWidths, FloatBuffer sideSlopes, FloatBuffer manningCoefficients, FloatBuffer bedSlopes);
-
-    public native float[] solveManningGpuBatch(float[] gpuInitialGuess, float[] flatDischargeProfiles, int batchSize, int cellCount, FloatBuffer bottomWidths, FloatBuffer sideSlopesFP32, FloatBuffer manningCoefficientsFP32, FloatBuffer bedSlopesFP32);
-
     public static NativeManningGpuSingleton getInstance() {
         if (INSTANCE == null) {
             synchronized (NativeManningGpuSingleton.class) {
@@ -44,4 +37,15 @@ public class NativeManningGpuSingleton implements INativeManningSolver{
         }
         return INSTANCE;
     }
+
+    // --- MÉTODOS NATIVOS (Stateful Lifecycle) ---
+
+    @Override
+    public native long initSession(FloatBuffer bottomWidths, FloatBuffer sideSlopes, FloatBuffer manningCoefficients, FloatBuffer bedSlopes, int cellCount);
+
+    @Override
+    public native float[] runBatch(long sessionHandle, float[] newInflows, float[] initialDepths, float[] initialQ);
+
+    @Override
+    public native void destroySession(long sessionHandle);
 }

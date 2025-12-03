@@ -14,7 +14,7 @@
 #define FOUR_THIRDS 1.33333333f
 #define TWO_THIRDS 0.66666667f
 
-// --- Helpers ---
+// --- Helpers Matemáticos (Inalterados) ---
 
 __device__ inline float device_calculateA(float H, float b, float m) {
     return (b + m * H) * H;
@@ -34,7 +34,7 @@ __device__ inline float device_calculateTopWidth(float H, float b, float m) {
  * R^(2/3) es la operación costosa (SFU).
  */
 __device__ inline float device_calculateQ_opt(float A, float P, float inv_n, float sqrt_slope) {
-    // Evitamos división por cero con fmaxf en P (aunque H saneado lo evita, es un seguro barato)
+    // Evitamos división por cero con fmaxf en P
     float R = A / fmaxf(P, SAFE_EPSILON);
     return inv_n * A * powf(R, TWO_THIRDS) * sqrt_slope;
 }
@@ -48,93 +48,153 @@ __device__ inline float device_calculate_dQ_dH_opt(
 ) {
     // dQ/dH = Q * [ (5/3)*(T/A) - (2/3)*(dP/dH)/P ]
     // dP/dH = 2 * pythagoras
-    // Termino P = (2/3) * (2 * pyth) / P = (4/3) * pyth / P
-
     float term_A = (FIVE_THIRDS * T) / fmaxf(A, SAFE_EPSILON);
     float term_P = (FOUR_THIRDS * pythagoras) / fmaxf(P, SAFE_EPSILON);
 
     return Q * (term_A - term_P);
 }
 
-// --- Kernel Principal ---
+// -----------------------------------------------------------------------------
+// KERNEL 1: BAKING (Pre-cálculo de Geometría)
+// -----------------------------------------------------------------------------
+__global__ void manningBakingKernel(
+    float* __restrict__ d_inv_n,
+    float* __restrict__ d_sqrt_slope,
+    float* __restrict__ d_pythagoras,
+    const float* __restrict__ d_manning,
+    const float* __restrict__ d_bedSlope,
+    const float* __restrict__ d_sideSlope,
+    int cellCount
+) {
+    int id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (id >= cellCount) return;
 
-__global__ void manningSolverKernel(
-    float* __restrict__ d_results, // [H, V, H, V...]
-    const float* __restrict__ d_initialDepths,
-    const float* __restrict__ d_targetDischarges,
+    // 1. Inverso de Manning (para multiplicar en vez de dividir)
+    // Nota: Asumimos n > 0 validado en Java
+    d_inv_n[id] = 1.0f / d_manning[id];
+
+    // 2. Raíz de la pendiente (sqrt(S))
+    d_sqrt_slope[id] = sqrtf(d_bedSlope[id]);
+
+    // 3. Constante de Pitágoras (sqrt(1 + m^2)) para el perímetro
+    float m = d_sideSlope[id];
+    d_pythagoras[id] = sqrtf(1.0f + m * m);
+}
+
+// -----------------------------------------------------------------------------
+// KERNEL 2: SMART SOLVER (Stateful + Smart Fetch)
+// -----------------------------------------------------------------------------
+
+__global__ void manningSmartKernel(
+    float* __restrict__ d_results,        // [H0, V0, H1, V1...] BatchSize * CellCount * 2
+    const float* __restrict__ d_newInflows, // Input comprimido [BatchSize]
+    const float* __restrict__ d_initialQ,   // Estado base [CellCount]
+    const float* __restrict__ d_initialDepths, // Semilla estática [CellCount]
     const float* __restrict__ d_bottomWidths,
     const float* __restrict__ d_sideSlopes,
-    const float* __restrict__ d_manningCoeffs,
-    const float* __restrict__ d_bedSlopes,
+    const float* __restrict__ d_inv_n,      // BAKED
+    const float* __restrict__ d_sqrt_slope, // BAKED
+    const float* __restrict__ d_pythagoras, // BAKED
     int totalThreads,
     int cellCount
 ) {
-    // 1. ID Global
+    // 1. ID Global (Hilo único por celda por paso de tiempo)
     int id = blockIdx.x * blockDim.x + threadIdx.x;
     if (id >= totalThreads) return;
 
-    // 2. ID Geometría (Cíclico si batch > 1)
-    int geo_id = id % cellCount;
+    // 2. Coordenadas Espacio-Temporales
+    // id = step * cellCount + cell
+    int cell_idx = id % cellCount;
+    int step_idx = id / cellCount; // División entera (rápida en GPU moderna)
 
-    // 3. Carga de Datos (Coalesced)
-    float H = d_initialDepths[id];
-    const float Q_target = d_targetDischarges[id];
+    // 3. Carga de Geometría Pre-cocinada (Coalesced reading)
+    // Leemos usando cell_idx porque la geometría es invariante en el tiempo
+    const float b = d_bottomWidths[cell_idx];
+    const float m = d_sideSlopes[cell_idx];
+    const float inv_n = d_inv_n[cell_idx];
+    const float sqrt_slope = d_sqrt_slope[cell_idx];
+    const float pythagoras = d_pythagoras[cell_idx];
 
-    // Invariantes Geométricos
-    const float b = d_bottomWidths[geo_id];
-    const float m = d_sideSlopes[geo_id];
-    const float n = d_manningCoeffs[geo_id];
-    const float S = d_bedSlopes[geo_id];
+    // 4. SMART FETCH: Lógica de Propagación de Onda
+    // Determinamos qué caudal (Q_target) toca resolver en este punto (t, x)
+    float Q_target;
 
-    // 4. Pre-cálculos Matemáticos (Fuera del bucle)
-    const float sqrt_slope = sqrtf(S);
-    const float pythagoras = sqrtf(1.0f + m * m);
-    const float inv_n = 1.0f / n;
+    if (cell_idx <= step_idx) {
+        // Región 1: Onda Nueva (Inflow)
+        // La onda ha viajado (step - cell) pasos desde la entrada
+        Q_target = d_newInflows[step_idx - cell_idx];
+    } else {
+        // Región 2: Río Viejo (Initial State)
+        // El agua se ha desplazado río abajo
+        Q_target = d_initialQ[cell_idx - (step_idx + 1)];
+    }
 
-    // 5. Newton-Raphson (Unrolled)
+    // 5. STATIC SEEDING
+    // Usamos siempre la profundidad del estado t=0 como semilla inicial.
+    // Esto rompe la dependencia de datos y permite paralelismo total.
+    float H = d_initialDepths[cell_idx];
+
+    // 6. Newton-Raphson (Unrolled)
+    // Resolvemos f(H) = Q_calc(H) - Q_target = 0
     #pragma unroll
     for (int i = 0; i < MAX_ITERATIONS; i++) {
-        // Geometría actual
         float A = device_calculateA(H, b, m);
         float P = device_calculateP_optimized(H, b, pythagoras);
         float T = device_calculateTopWidth(H, b, m);
 
-        // Función y Derivada
         float Q_calc = device_calculateQ_opt(A, P, inv_n, sqrt_slope);
         float f = Q_calc - Q_target;
         float df = device_calculate_dQ_dH_opt(A, P, T, pythagoras, Q_calc);
 
-        // Paso seguro (Branchless safe division)
-        // Si df es 0, usamos epsilon con el signo correcto para empujar H
         float df_safe = df + copysignf(SAFE_EPSILON, df);
-
         float H_next = H - f / df_safe;
 
-        // Clamp (Branchless)
         H = fmaxf(MIN_DEPTH, H_next);
     }
 
-    // 6. Resultado Final
+    // 7. Resultado Final
     float A_final = device_calculateA(H, b, m);
-    // Velocidad = Q / A.
-    // Usamos fmaxf en A por seguridad extrema, aunque H >= MIN_DEPTH implica A > 0.
+    // Velocidad V = Q / A
     float V = Q_target / fmaxf(A_final, SAFE_EPSILON);
 
-    // Escritura Intercalada [H, V]
+    // 8. Escritura (Expandida)
+    // El buffer de resultados contiene toda la historia [BatchSize * CellCount * 2]
     int out_idx = id * 2;
     d_results[out_idx]     = H;
     d_results[out_idx + 1] = V;
 }
 
-// --- Launcher ---
-void launchManningKernel(
+// --- Launchers (Implementación de manning_kernel.h) ---
+
+void launchManningBakingKernel(
+    float* d_inv_n,
+    float* d_sqrt_slope,
+    float* d_pythagoras,
+    const float* d_manning,
+    const float* d_bedSlope,
+    const float* d_sideSlope,
+    int cellCount
+) {
+    const int threadsPerBlock = 256;
+    const int blocksPerGrid = (cellCount + threadsPerBlock - 1) / threadsPerBlock;
+
+    manningBakingKernel<<<blocksPerGrid, threadsPerBlock>>>(
+        d_inv_n, d_sqrt_slope, d_pythagoras,
+        d_manning, d_bedSlope, d_sideSlope,
+        cellCount
+    );
+}
+
+void launchManningSmartKernel(
     float* d_results,
+    const float* d_newInflows,
+    const float* d_initialQ,
     const float* d_initialDepths,
-    const float* d_targetDischarges,
     const float* d_bottomWidths,
     const float* d_sideSlopes,
-    const float* d_manningCoeffs,
-    const float* d_bedSlopes,
+    const float* d_inv_n,
+    const float* d_sqrt_slope,
+    const float* d_pythagoras,
     int batchSize,
     int cellCount
 ) {
@@ -144,14 +204,16 @@ void launchManningKernel(
     const int threadsPerBlock = 256;
     const int blocksPerGrid = (totalThreads + threadsPerBlock - 1) / threadsPerBlock;
 
-    manningSolverKernel<<<blocksPerGrid, threadsPerBlock>>>(
+    manningSmartKernel<<<blocksPerGrid, threadsPerBlock>>>(
         d_results,
+        d_newInflows,
+        d_initialQ,
         d_initialDepths,
-        d_targetDischarges,
         d_bottomWidths,
         d_sideSlopes,
-        d_manningCoeffs,
-        d_bedSlopes,
+        d_inv_n,
+        d_sqrt_slope,
+        d_pythagoras,
         totalThreads,
         cellCount
     );

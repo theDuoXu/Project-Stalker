@@ -1,52 +1,17 @@
+// src/main/cpp/src/jni/jni_interface.cpp
 #include <jni.h>
 #include <vector>
-#include <stdexcept>
 #include <string>
+#include <stdexcept>
 #include <iostream>
+
+// Incluimos ambos headers: el nuevo refactorizado y el viejo de transporte
 #include "projectstalker/physics/manning_solver.h"
 #include "projectstalker/physics/transport_solver.h"
 
-// --- Declaraciones de Funciones JNI ---
+// --- Helpers JNI ---
 
-extern "C" {
-
-// (Antigua firma single-step, se mantiene igual)
-JNIEXPORT jfloatArray JNICALL
-Java_projectstalker_physics_jni_NativeManningGpuSingleton_solveManningGpu(
-    JNIEnv *env, jobject thiz,
-    jfloatArray targetDischarges, jfloatArray initialDepthGuesses,
-    jfloatArray bottomWidths, jfloatArray sideSlopes,
-    jfloatArray manningCoefficients, jfloatArray bedSlopes
-);
-
-// Firma Batch Manning
-JNIEXPORT jfloatArray JNICALL
-Java_projectstalker_physics_jni_NativeManningGpuSingleton_solveManningGpuBatch(
-    JNIEnv *env, jobject thiz,
-    jfloatArray gpuInitialGuess,
-    jfloatArray flatDischargeProfiles,
-    jint batchSize,
-    jint cellCount,
-    jobject bottomWidthBuf,
-    jobject sideSlopeBuf,
-    jobject manningBuf,
-    jobject bedSlopeBuf
-);
-
-// Firma Transporte
-JNIEXPORT jfloatArray JNICALL
-Java_projectstalker_physics_jni_NativeTransportGpuSingleton_solveTransportEvolution(
-    JNIEnv *env, jobject thiz,
-    jobject cInBuf, jobject uBuf, jobject hBuf, jobject areaBuf,
-    jobject tempBuf, jobject alphaBuf, jobject decayBuf,
-    jfloat dx, jfloat dtSub, jint numSteps, jint cellCount
-);
-
-} // extern "C"
-
-
-// --- Funciones Auxiliares (Helpers) ---
-
+// Lanza una RuntimeException en Java de forma segura
 static void throw_java_exception(JNIEnv *env, const char* message) {
     jclass exClass = env->FindClass("java/lang/RuntimeException");
     if (exClass != nullptr) {
@@ -54,18 +19,154 @@ static void throw_java_exception(JNIEnv *env, const char* message) {
     }
 }
 
-// (Helper jfloatarray_to_vector eliminado porque ya no lo usamos para inputs!)
-// Mantenemos vector_to_jfloatarray para el output.
+// Convierte std::vector<float> a jfloatArray para devolver resultados
 static jfloatArray vector_to_jfloatarray(JNIEnv *env, const std::vector<float>& vec) {
     if (vec.empty()) return env->NewFloatArray(0);
-    jfloatArray javaArray = env->NewFloatArray(static_cast<jsize>(vec.size()));
-    if (javaArray == nullptr) return nullptr;
-    env->SetFloatArrayRegion(javaArray, 0, static_cast<jsize>(vec.size()), vec.data());
-    return javaArray;
+    
+    // Check de seguridad por si el vector es monstruoso
+    if (vec.size() > (size_t)2147483647) { 
+        throw_java_exception(env, "El resultado de la GPU excede el tamaño máximo de array en Java.");
+        return nullptr;
+    }
+
+    jsize size = static_cast<jsize>(vec.size());
+    jfloatArray result = env->NewFloatArray(size);
+    if (result == nullptr) return nullptr; // OutOfMemoryError ya lanzado por JVM
+    
+    env->SetFloatArrayRegion(result, 0, size, vec.data());
+    return result;
+}
+
+extern "C" {
+
+// =============================================================================
+// SECCIÓN 1: NUEVA API MANNING (Stateful + Zero Copy Híbrido)
+// =============================================================================
+
+/*
+ * Inicializa la sesión GPU.
+ * Usa DirectBuffers para la geometría estática (Zero-Copy ideal para datos invariantes).
+ */
+JNIEXPORT jlong JNICALL
+Java_projectstalker_physics_jni_NativeManningGpuSingleton_initSession(
+    JNIEnv *env, jobject thiz,
+    jobject widthBuf, jobject slopeBuf, jobject manningBuf, jobject bedBuf,
+    jint cellCount
+) {
+    try {
+        // Obtener punteros directos (Zero-Copy desde DirectBuffers)
+        float* pWidth   = (float*)env->GetDirectBufferAddress(widthBuf);
+        float* pSlope   = (float*)env->GetDirectBufferAddress(slopeBuf);
+        float* pManning = (float*)env->GetDirectBufferAddress(manningBuf);
+        float* pBed     = (float*)env->GetDirectBufferAddress(bedBuf);
+
+        // Validación básica de punteros
+        if (!pWidth || !pSlope || !pManning || !pBed) {
+            throw_java_exception(env, "Error JNI Init: Buffers de geometría inválidos (deben ser DirectBuffers).");
+            return 0;
+        }
+
+        // Llamada al constructor C++ (Baking)
+        ManningSession* session = init_manning_session(pWidth, pSlope, pManning, pBed, (int)cellCount);
+        
+        // Retornar puntero opaco
+        return (jlong)session;
+
+    } catch (const std::exception& e) {
+        throw_java_exception(env, e.what());
+        return 0;
+    }
+}
+
+/*
+ * Ejecuta el batch.
+ * Usa GetPrimitiveArrayCritical para arrays dinámicos (Critical Pinning).
+ * Esto evita copias Java -> Native para los datos que cambian frame a frame.
+ */
+JNIEXPORT jfloatArray JNICALL
+Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
+    JNIEnv *env, jobject thiz,
+    jlong handle,
+    jfloatArray newInflowsArr,
+    jfloatArray initialDepthsArr,
+    jfloatArray initialQArr
+) {
+    // 1. Validar Sesión
+    ManningSession* session = (ManningSession*)handle;
+    if (!session) {
+        throw_java_exception(env, "Error JNI Run: La sesión de Manning es nula o ha sido cerrada.");
+        return nullptr;
+    }
+
+    // 2. Acceso Crítico a Arrays Java (Pinning)
+    // ADVERTENCIA: Entre Get y Release NO se pueden hacer llamadas JNI ni bloquear el hilo.
+    void* pNewInflows   = env->GetPrimitiveArrayCritical(newInflowsArr, nullptr);
+    void* pInitialDepth = env->GetPrimitiveArrayCritical(initialDepthsArr, nullptr);
+    void* pInitialQ     = env->GetPrimitiveArrayCritical(initialQArr, nullptr);
+
+    if (!pNewInflows || !pInitialDepth || !pInitialQ) {
+        // Liberación segura en caso de fallo parcial
+        if (pNewInflows) env->ReleasePrimitiveArrayCritical(newInflowsArr, pNewInflows, JNI_ABORT);
+        if (pInitialDepth) env->ReleasePrimitiveArrayCritical(initialDepthsArr, pInitialDepth, JNI_ABORT);
+        if (pInitialQ) env->ReleasePrimitiveArrayCritical(initialQArr, pInitialQ, JNI_ABORT);
+        
+        throw_java_exception(env, "Error JNI Run: Fallo crítico al acceder a arrays de memoria.");
+        return nullptr;
+    }
+
+    jsize batchSize = env->GetArrayLength(newInflowsArr);
+    std::vector<float> results;
+    std::string errorMsg;
+
+    // 3. Ejecución C++ (Protegida)
+    try {
+        results = run_manning_batch_stateful(
+            session,
+            (float*)pNewInflows,
+            (float*)pInitialDepth,
+            (float*)pInitialQ,
+            (int)batchSize
+        );
+    } catch (const std::exception& e) {
+        // Guardamos el error pero NO lanzamos excepción todavía (estamos en sección crítica)
+        errorMsg = e.what();
+    } catch (...) {
+        errorMsg = "Error desconocido nativo en Manning Run.";
+    }
+
+    // 4. Liberar Pinning (JNI_ABORT = No copiar de vuelta, solo leímos inputs)
+    env->ReleasePrimitiveArrayCritical(newInflowsArr, pNewInflows, JNI_ABORT);
+    env->ReleasePrimitiveArrayCritical(initialDepthsArr, pInitialDepth, JNI_ABORT);
+    env->ReleasePrimitiveArrayCritical(initialQArr, pInitialQ, JNI_ABORT);
+
+    // 5. Manejo de Errores Diferido
+    if (!errorMsg.empty()) {
+        throw_java_exception(env, errorMsg.c_str());
+        return nullptr;
+    }
+
+    // 6. Convertir y retornar resultados
+    return vector_to_jfloatarray(env, results);
+}
+
+/*
+ * Destruye la sesión y libera VRAM.
+ */
+JNIEXPORT void JNICALL
+Java_projectstalker_physics_jni_NativeManningGpuSingleton_destroySession(
+    JNIEnv *env, jobject thiz,
+    jlong handle
+) {
+    ManningSession* session = (ManningSession*)handle;
+    if (session) {
+        destroy_manning_session(session);
+    }
 }
 
 
-// --- Implementaciones ---
+// =============================================================================
+// SECCIÓN 2: API LEGACY (Deprecated / Disabled)
+// =============================================================================
 
 JNIEXPORT jfloatArray JNICALL
 Java_projectstalker_physics_jni_NativeManningGpuSingleton_solveManningGpu(
@@ -74,7 +175,7 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_solveManningGpu(
     jfloatArray bottomWidths, jfloatArray sideSlopes,
     jfloatArray manningCoefficients, jfloatArray bedSlopes)
 {
-    throw_java_exception(env, "solveManningGpu (single step) obsoleto. Use solveBatch.");
+    throw_java_exception(env, "MÉTODO OBSOLETO: solveManningGpu. Use la nueva API Stateful (initSession/runBatch).");
     return nullptr;
 }
 
@@ -85,65 +186,15 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_solveManningGpuBatch(
     jint batchSize, jint cellCount,
     jobject bottomWidthBuf, jobject sideSlopeBuf, jobject manningBuf, jobject bedSlopeBuf)
 {
-    // MANNING: DATOS DINÁMICOS (Arrays) -> Pinning
-    jfloat* initialGuess = nullptr;
-    jfloat* discharges = nullptr;
-
-    try {
-        // 1. OBTENER PUNTEROS DIRECTOS (Zero-Copy) para geometría
-        float* rawBottom  = (float*)env->GetDirectBufferAddress(bottomWidthBuf);
-        float* rawSlope   = (float*)env->GetDirectBufferAddress(sideSlopeBuf);
-        float* rawManning = (float*)env->GetDirectBufferAddress(manningBuf);
-        float* rawBed     = (float*)env->GetDirectBufferAddress(bedSlopeBuf);
-
-        if (!rawBottom || !rawSlope || !rawManning || !rawBed) {
-            throw_java_exception(env, "Error JNI Manning: Buffers de geometría inválidos.");
-            return nullptr;
-        }
-
-        // 2. OBTENER PUNTEROS DE ARRAYS DINÁMICOS (GetPrimitiveArrayCritical es más rápido)
-        // Usamos GetFloatArrayElements estándar por seguridad
-        initialGuess = env->GetFloatArrayElements(gpuInitialGuess, NULL);
-        discharges   = env->GetFloatArrayElements(flatDischargeProfiles, NULL);
-
-        if (!initialGuess || !discharges) {
-            // Si falla (OutOfMemory), liberar lo que se haya pillado
-            if (initialGuess) env->ReleaseFloatArrayElements(gpuInitialGuess, initialGuess, JNI_ABORT);
-            throw_java_exception(env, "Error JNI Manning: Fallo al obtener arrays dinámicos.");
-            return nullptr;
-        }
-
-        // 3. LLAMADA DIRECTA (Sin copias a std::vector)
-        std::vector<float> results = solve_manning_batch_cpp(
-            initialGuess, discharges,
-            (int)batchSize, (int)cellCount,
-            rawBottom, rawSlope, rawManning, rawBed
-        );
-
-        // 4. Liberar arrays Java (JNI_ABORT porque solo leímos)
-        env->ReleaseFloatArrayElements(gpuInitialGuess, initialGuess, JNI_ABORT);
-        env->ReleaseFloatArrayElements(flatDischargeProfiles, discharges, JNI_ABORT);
-
-        return vector_to_jfloatarray(env, results);
-
-    } catch (const std::exception& e) {
-        // Limpieza segura en caso de excepción C++
-        if (initialGuess) env->ReleaseFloatArrayElements(gpuInitialGuess, initialGuess, JNI_ABORT);
-        if (discharges) env->ReleaseFloatArrayElements(flatDischargeProfiles, discharges, JNI_ABORT);
-
-        throw_java_exception(env, e.what());
-        return nullptr;
-    } catch (...) {
-        if (initialGuess) env->ReleaseFloatArrayElements(gpuInitialGuess, initialGuess, JNI_ABORT);
-        if (discharges) env->ReleaseFloatArrayElements(flatDischargeProfiles, discharges, JNI_ABORT);
-
-        throw_java_exception(env, "Error desconocido en capa nativa Manning.");
-        return nullptr;
-    }
+    throw_java_exception(env, "MÉTODO OBSOLETO: solveManningGpuBatch. Use la nueva API Stateful (initSession/runBatch).");
+    return nullptr;
 }
 
-// --- Implementación Transporte (Zero-Copy Total) ---
-// Se mantiene igual que la versión anterior, ya era óptima.
+
+// =============================================================================
+// SECCIÓN 3: API TRANSPORTE
+// =============================================================================
+
 JNIEXPORT jfloatArray JNICALL
 Java_projectstalker_physics_jni_NativeTransportGpuSingleton_solveTransportEvolution(
     JNIEnv *env, jobject thiz,
@@ -180,3 +231,5 @@ Java_projectstalker_physics_jni_NativeTransportGpuSingleton_solveTransportEvolut
         return nullptr;
     }
 }
+
+} // extern "C"
