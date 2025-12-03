@@ -29,36 +29,39 @@ public class ManningBatchProcessor implements AutoCloseable {
     private final ExecutorService threadPool;
     private final int cellCount;
 
-    // CAMBIO 1: Stateful Solver (Mantiene la sesión C++ activa)
+    // Stateful Solver: Puede ser null si la configuración deshabilita la GPU
     private final ManningGpuSolver gpuSolver;
 
     /**
      * Constructor.
-     * Inicializa tanto el Pool de CPU como la Sesión de GPU.
+     * Inicializa el Pool de CPU y, OPCIONALMENTE, la Sesión de GPU.
+     *
+     * @param geometry         La geometría estática del río.
+     * @param simulationConfig La configuración para decidir si inicializar la GPU.
      */
     public ManningBatchProcessor(RiverGeometry geometry, SimulationConfig simulationConfig) {
         this.geometry = geometry;
         this.cellCount = geometry.getCellCount();
 
-        // 1. Inicializar CPU Pool (Se mantiene siempre disponible como fallback/validación)
+        // 1. Inicializar CPU Pool (Siempre disponible)
         int processorCount = simulationConfig.getCpuProcessorCount();
         this.threadPool = Executors.newFixedThreadPool(Math.max(processorCount, 1));
 
-        // CAMBIO 2: Inicializar GPU Session (Alloc + Baking)
-        // Se pasa la geometría aquí para que C++ haga el 'initSession' una sola vez.
-        this.gpuSolver = new ManningGpuSolver(geometry);
+        // 2. Inicializar GPU Session (Solo si está habilitado en config)
+        // ESTO ARREGLA LOS TESTS UNITARIOS: Evita llamar a JNI si solo queremos testear CPU.
+        if (simulationConfig.isUseGpuAccelerationOnManning()) {
+            log.info("Inicializando sesión GPU...");
+            this.gpuSolver = new ManningGpuSolver(geometry);
+        } else {
+            log.info("Modo solo CPU: No se inicializará la sesión GPU.");
+            this.gpuSolver = null;
+        }
 
-        log.info("ManningBatchProcessor inicializado. (CPU Threads: {}, GPU Session Active)", processorCount);
+        log.info("ManningBatchProcessor inicializado. (CPU Threads: {})", processorCount);
     }
 
     /**
      * Procesa un batch completo de simulación.
-     *
-     * @param batchSize         El número de pasos a simular.
-     * @param initialRiverState El estado del río al inicio del batch (t=0).
-     * @param newInflows        CAMBIO 3: Recibe array 1D [BatchSize] (Raw Input) en lugar de la matriz expandida.
-     * @param phTmp             Arrays pre-calculados de [Temperatura, pH].
-     * @param isGpuAccelerated  Indica si se debe usar el solver de GPU o CPU.
      */
     public ManningSimulationResult processBatch(int batchSize,
                                                 RiverState initialRiverState,
@@ -70,10 +73,8 @@ public class ManningBatchProcessor implements AutoCloseable {
         ManningSimulationResult result;
 
         if (isGpuAccelerated) {
-            // CAMINO RÁPIDO (GPU): Pasamos datos comprimidos (Smart Fetch)
             result = gpuComputeBatch(batchSize, initialRiverState, newInflows, phTmp);
         } else {
-            // CAMINO LEGACY (CPU): Expandimos la matriz en RAM internamente
             result = cpuComputeBatch(batchSize, initialRiverState, newInflows, phTmp);
         }
 
@@ -85,29 +86,32 @@ public class ManningBatchProcessor implements AutoCloseable {
      */
     private ManningSimulationResult gpuComputeBatch(int batchSize, RiverState initialRiverState,
                                                     float[] newInflows, float[][][] phTmp) {
+        // Guardia de seguridad: Si intentamos usar GPU pero no se inicializó en el constructor
+        if (this.gpuSolver == null) {
+            throw new IllegalStateException("Se solicitó ejecución GPU, pero ManningBatchProcessor fue inicializado en modo solo CPU (ver SimulationConfig).");
+        }
+
         try {
-            // 1. Extraer estado inicial necesario para la GPU (t=0)
-            float[] initialQ = initialRiverState.discharge(this.geometry);
+            // 1. Extraer estado inicial
+            float[] initialQ = initialRiverState.discharge(this.geometry); // <-- USANDO EL NUEVO MÉTODO
             float[] initialDepths = initialRiverState.waterDepth();
 
-            // 2. Llamada Stateful (Zero-Copy Pinning en JNI)
-            // Devuelve [Batch][Variable][Cell] usando la nueva firma del Solver
+            // 2. Llamada Stateful
             float[][][] results = gpuSolver.solveBatch(initialDepths, newInflows, initialQ);
 
-            // 3. Validación básica
+            // 3. Validación
             if (results == null || results.length != batchSize) {
                 log.error("Error crítico GPU: BatchSize incorrecto en retorno.");
                 return ManningSimulationResult.builder().geometry(this.geometry).states(Collections.emptyList()).build();
             }
 
-            // 4. Re-ensamblar para formato interno
-            // GPU devuelve [Step][0=H, 1=V][Cell]. Necesitamos separar H y V para el ensamblador.
+            // 4. Re-ensamblar
             float[][] resultingDepths = new float[batchSize][cellCount];
             float[][] resultingVelocities = new float[batchSize][cellCount];
 
             for (int i = 0; i < batchSize; i++) {
-                resultingDepths[i] = results[i][0];     // Profundidad
-                resultingVelocities[i] = results[i][1]; // Velocidad
+                resultingDepths[i] = results[i][0];
+                resultingVelocities[i] = results[i][1];
             }
 
             List<RiverState> states = assembleRiverStateResults(batchSize, phTmp, resultingDepths, resultingVelocities);
@@ -119,30 +123,23 @@ public class ManningBatchProcessor implements AutoCloseable {
         }
     }
 
-    /**
-     * Realiza el cómputo del batch utilizando la CPU (Legacy / Integrity Check).
-     * Mantiene la lógica original de expansión de matrices y ThreadPool.
-     */
+    // --- CPU Compute Batch ---
     private ManningSimulationResult cpuComputeBatch(int batchSize, RiverState initialRiverState,
                                                     float[] newInflows, float[][][] phTmp) {
 
-        // 1. Expandir matriz de caudales (Lógica original MOVIDA aquí dentro)
-        // Solo pagamos este coste si usamos CPU.
         float[][] allDischargeProfiles = createDischargeProfiles(batchSize, newInflows, initialRiverState.discharge(this.geometry));
 
         List<ManningProfileCalculatorTask> tasks = new ArrayList<>(batchSize);
         float[] initialWaterDepth = initialRiverState.waterDepth();
 
-        // 2. Crear las tareas (Una por paso de tiempo)
         for (int i = 0; i < batchSize; i++) {
             tasks.add(new ManningProfileCalculatorTask(
-                    allDischargeProfiles[i], // Usamos la matriz expandida
+                    allDischargeProfiles[i],
                     initialWaterDepth,
                     geometry
             ));
         }
 
-        // 3. Ejecutar y esperar (Sin cambios)
         List<Future<ManningProfileCalculatorTask>> futures;
         try {
             futures = threadPool.invokeAll(tasks);
@@ -151,7 +148,6 @@ public class ManningBatchProcessor implements AutoCloseable {
             throw new RuntimeException("Interrupción en CPU batch.", e);
         }
 
-        // 4. Recoger resultados (Sin cambios)
         float[][] resultingDepths = new float[batchSize][cellCount];
         float[][] resultingVelocities = new float[batchSize][cellCount];
         for (int i = 0; i < batchSize; i++) {
@@ -168,24 +164,18 @@ public class ManningBatchProcessor implements AutoCloseable {
         return ManningSimulationResult.builder().geometry(this.geometry).states(states).build();
     }
 
-    /**
-     * Construye la matriz de perfiles de caudal simulando la propagación de ondas (Lógica CPU Legacy).
-     * Se mantiene estrictamente para validación de integridad.
-     */
+    // Método Legacy privado (Solo para CPU)
     private float[][] createDischargeProfiles(int batchSize, float[] newDischarges, float[] initialDischarges) {
         float[][] dischargeProfiles = new float[batchSize][cellCount];
         for (int j = 0; j < batchSize; j++) {
             for (int k = 0; k < cellCount; k++) {
                 if (k <= j) {
-                    // Onda nueva: Viene del array de inputs
                     dischargeProfiles[j][k] = newDischarges[j - k];
                 } else {
-                    // Onda vieja: Viene del estado inicial del río
                     int sourceIndex = k - (j + 1);
                     if (sourceIndex >= 0) {
                         dischargeProfiles[j][k] = initialDischarges[sourceIndex];
                     } else {
-                        // Edge case lógico, fallback seguro
                         dischargeProfiles[j][k] = initialDischarges[0];
                     }
                 }
@@ -194,9 +184,6 @@ public class ManningBatchProcessor implements AutoCloseable {
         return dischargeProfiles;
     }
 
-    /**
-     * Ensambla los resultados físicos (H, V) con los químicos (T, pH).
-     */
     private static List<RiverState> assembleRiverStateResults(int batchSize, float[][][] phTmp, float[][] resultingDepths, float[][] resultingVelocities) {
         List<RiverState> states = new ArrayList<>(batchSize);
         for (int i = 0; i < batchSize; i++) {
@@ -211,19 +198,14 @@ public class ManningBatchProcessor implements AutoCloseable {
         return states;
     }
 
-    /**
-     * Cierre limpio de recursos (Threads CPU + Memoria GPU).
-     */
     @Override
     public void close() {
-        // 1. Cerrar Sesión GPU
         if (gpuSolver != null) {
             gpuSolver.close();
         }
-        // 2. Apagar Pool CPU
         if (threadPool != null && !threadPool.isShutdown()) {
             threadPool.shutdown();
         }
-        log.info("ManningBatchProcessor cerrado y recursos liberados.");
+        log.info("ManningBatchProcessor cerrado.");
     }
 }
