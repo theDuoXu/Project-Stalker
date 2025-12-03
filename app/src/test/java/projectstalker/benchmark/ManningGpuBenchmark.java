@@ -143,37 +143,33 @@ public class ManningGpuBenchmark {
 
     /**
      * Ejecuta una iteración de benchmark midiendo el tiempo de procesamiento.
-     * Utiliza la nueva API Stateful/Smart Fetch.
      */
     private double runBatchIteration(int batchSize, boolean useGpu) {
-        // 1. Preparación de Inputs (Chorizo 1D comprimido)
+        // 1. Preparación de Inputs
         float[] newInflows = new float[batchSize];
         Arrays.fill(newInflows, 150.0f);
 
-        // Hack de memoria para phTmp: Usamos arrays vacíos compartidos
-        // para no desperdiciar Heap Java en datos que no afectan a la hidráulica
-        float[][][] phTmp = new float[batchSize][2][0];
-        float[] dummyArray = new float[0];
+        // --- CORRECCIÓN: Hack de memoria seguro ---
+        // Creamos UN SOLO array de ceros del tamaño correcto (100k celdas)
+        // y lo reutilizamos para todos los pasos de tiempo.
+        // Coste de memoria: ~400KB (vs GBs si creamos nuevos)
+        float[] sharedDummyData = new float[CELL_COUNT];
+
+        float[][][] phTmp = new float[batchSize][2][]; // Array de punteros
         for(int k=0; k<batchSize; k++) {
-            phTmp[k][0] = dummyArray;
-            phTmp[k][1] = dummyArray;
+            phTmp[k][0] = sharedDummyData; // Reutilizamos referencia
+            phTmp[k][1] = sharedDummyData; // Reutilizamos referencia
         }
 
         SimulationConfig config = useGpu ? gpuConfig : cpuConfig;
 
-        // 2. Ejecución Controlada (Try-with-resources para liberar GPU)
+        // 2. Ejecución Controlada
         long start = System.nanoTime();
 
-        // Incluimos la creación del Processor en el tiempo para ser honestos con el overhead de init
         try (ManningBatchProcessor processor = new ManningBatchProcessor(geometry, config)) {
-
-            // En caso GPU: Medimos Init + Kernel + Transferencias
-            // En caso CPU: Medimos Expansión Matriz + Cálculo Concurrent
             processor.processBatch(batchSize, initialState, newInflows, phTmp, useGpu);
-
             long end = System.nanoTime();
             return (end - start) / 1_000_000.0;
         }
-        // Al salir, processor.close() -> native.destroySession() libera VRAM
     }
 }
