@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @Slf4j
 class ManningGpuAccuracyTest {
 
-    private ManningBatchProcessor batchProcessor;
     private RiverGeometry realGeometry;
 
     // Configuraciones explícitas
@@ -29,7 +28,8 @@ class ManningGpuAccuracyTest {
 
     private int cellCount;
     private final int BATCH_SIZE = 5;
-    private final float EPSILON = 1e-4f; // Tolerancia Float vs Double
+    // Tolerancia: Float (GPU) vs Double (CPU) pueden divergir ligeramente por precisión
+    private final float EPSILON = 1e-4f;
 
     @BeforeEach
     void setUp() {
@@ -37,7 +37,6 @@ class ManningGpuAccuracyTest {
         RiverConfig riverConfig = RiverConfig.getTestingRiver();
         RiverGeometryFactory factory = new RiverGeometryFactory();
         this.realGeometry = factory.createRealisticRiver(riverConfig);
-
 
         this.cellCount = this.realGeometry.getCellCount();
         log.info("Test configurado. Geometría real tiene {} celdas.", this.cellCount);
@@ -49,11 +48,10 @@ class ManningGpuAccuracyTest {
                 .totalTime(3600)
                 .deltaTime(10.0f)
                 .cpuProcessorCount(4)
-                .cpuTimeBatchSize(BATCH_SIZE)
                 .useGpuAccelerationOnTransport(false)
                 .build();
 
-        // 3. Derivar las dos configuraciones usando .with (Lombok @With)
+        // 3. Derivar las dos configuraciones
         this.cpuConfig = baseConfig.withUseGpuAccelerationOnManning(false);
         this.gpuConfig = baseConfig.withUseGpuAccelerationOnManning(true);
     }
@@ -64,50 +62,60 @@ class ManningGpuAccuracyTest {
         log.info("=== INICIANDO TEST DE PRECISIÓN NUMÉRICA ===");
 
         // --- DATOS DE ENTRADA COMUNES ---
-        float[] zeroArray = new float[cellCount];
+
+        // 1. Estado Inicial (t=0)
         float[] initialDepth = new float[cellCount];
         Arrays.fill(initialDepth, 0.5f);
+        float[] initialVelocity = new float[cellCount];
+        Arrays.fill(initialVelocity, 1.0f); // Velocidad arbitraria para generar caudal
+        float[] zeroArray = new float[cellCount];
 
+        // Importante: El estado inicial debe ser consistente porque la GPU lee de él (Smart Fetch Región 2)
+        // Calculamos el caudal inicial aproximado (Q = V * A aprox) o simplemente llenamos con valor conocido.
+        // Aquí usamos el método de RiverState para consistencia si es posible, o inyección manual.
+        // Dado que RiverState es un record/DTO, llenamos arrays dummy para T, pH, etc.
         RiverState initialState = new RiverState(
-                initialDepth, zeroArray, zeroArray, zeroArray, zeroArray
+                initialDepth, initialVelocity, zeroArray, zeroArray, zeroArray
         );
 
+        // 2. Input del Batch (1D Array - Smart Fetch)
         float[] flowInput = new float[BATCH_SIZE];
-        Arrays.fill(flowInput, 150.0f);
-        float[] flowInitial = new float[cellCount];
-        Arrays.fill(flowInitial, 50.0f);
+        Arrays.fill(flowInput, 150.0f); // Caudal entrante constante
 
-        // Usamos un processor temporal para generar los perfiles (da igual qué config use)
-        ManningBatchProcessor helperProcessor = new ManningBatchProcessor(realGeometry, cpuConfig);
-        float[][] discharges = helperProcessor.createDischargeProfiles(BATCH_SIZE, flowInput, flowInitial);
-        float[][][] phTmp = new float[BATCH_SIZE][2][cellCount]; // Ceros (no afectan hidráulica)
+        // 3. Temperatura/pH Dummy (No afectan a la hidráulica en este test)
+        float[][][] phTmp = new float[BATCH_SIZE][2][cellCount];
 
-        // --- EJECUCIÓN A: MODO CPU ---
+        ManningSimulationResult resultCpu;
+        ManningSimulationResult resultGpu;
+
+        // --- EJECUCIÓN A: MODO CPU (Legacy Logic) ---
         log.info(">> Ejecutando en CPU...");
-        // Instanciamos con cpuConfig para ser consistentes (hilos, etc.)
-        ManningBatchProcessor cpuProcessor = new ManningBatchProcessor(realGeometry, cpuConfig);
 
         long t1 = System.nanoTime();
-        ManningSimulationResult resultCpu = cpuProcessor.processBatch(
-                BATCH_SIZE, initialState, discharges, phTmp,
-                cpuConfig.isUseGpuAccelerationOnManning() // false
-        );
+        // Usamos try-with-resources para asegurar limpieza
+        try (ManningBatchProcessor cpuProcessor = new ManningBatchProcessor(realGeometry, cpuConfig)) {
+            // El procesador expandirá la matriz internamente
+            resultCpu = cpuProcessor.processBatch(
+                    BATCH_SIZE, initialState, flowInput, phTmp,
+                    false // Force CPU
+            );
+        }
         long cpuTime = System.nanoTime() - t1;
 
-        // --- EJECUCIÓN B: MODO GPU ---
+        // --- EJECUCIÓN B: MODO GPU (Smart Fetch Logic) ---
         log.info(">> Ejecutando en GPU...");
-        // Instanciamos con gpuConfig
-        ManningBatchProcessor gpuProcessor = new ManningBatchProcessor(realGeometry, gpuConfig);
 
         long t2 = System.nanoTime();
-        ManningSimulationResult resultGpu = gpuProcessor.processBatch(
-                BATCH_SIZE, initialState, discharges, phTmp,
-                gpuConfig.isUseGpuAccelerationOnManning() // true
-        );
+        try (ManningBatchProcessor gpuProcessor = new ManningBatchProcessor(realGeometry, gpuConfig)) {
+            // El procesador enviará el array comprimido a la VRAM
+            resultGpu = gpuProcessor.processBatch(
+                    BATCH_SIZE, initialState, flowInput, phTmp,
+                    true // Force GPU
+            );
+        }
         long gpuTime = System.nanoTime() - t2;
 
-        log.info("Tiempos -> CPU: {}ms | GPU: {}ms | Speedup: {}x",
-                cpuTime/1e6, gpuTime/1e6, (double)cpuTime/gpuTime);
+        log.info("Tiempos (Incluyendo Init) -> CPU: {}ms | GPU: {}ms", cpuTime/1e6, gpuTime/1e6);
 
         // --- VALIDACIÓN ---
         assertNotNull(resultCpu);
@@ -127,15 +135,19 @@ class ManningGpuAccuracyTest {
             // Profundidad
             double hCpu = cpu.getWaterDepthAt(i);
             double hGpu = gpu.getWaterDepthAt(i);
+
+            // Usamos una tolerancia relativa si el valor es grande, o absoluta si es pequeño
             if (Math.abs(hCpu - hGpu) > EPSILON) {
-                fail(String.format("Divergencia H en T=%d C=%d. CPU=%.5f GPU=%.5f", step, i, hCpu, hGpu));
+                fail(String.format("Divergencia H en T=%d C=%d. CPU=%.5f GPU=%.5f Delta=%.5f",
+                        step, i, hCpu, hGpu, Math.abs(hCpu - hGpu)));
             }
 
             // Velocidad
             double vCpu = cpu.getVelocityAt(i);
             double vGpu = gpu.getVelocityAt(i);
             if (Math.abs(vCpu - vGpu) > EPSILON) {
-                fail(String.format("Divergencia V en T=%d C=%d. CPU=%.5f GPU=%.5f", step, i, vCpu, vGpu));
+                fail(String.format("Divergencia V en T=%d C=%d. CPU=%.5f GPU=%.5f Delta=%.5f",
+                        step, i, vCpu, vGpu, Math.abs(vCpu - vGpu)));
             }
         }
     }

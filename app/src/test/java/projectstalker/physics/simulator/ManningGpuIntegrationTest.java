@@ -1,6 +1,7 @@
 package projectstalker.physics.simulator;
 
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterEach; // Nuevo
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -21,12 +22,9 @@ import static org.mockito.Mockito.mock;
 
 /**
  * Test de Integración End-to-End para el solver de GPU.
- * Este test carga la librería nativa real (.so) y ejecuta una simulación
- * a través del stack JNI -> C++ -> CUDA.
- * Requiere la tarea 'gpuTest' de Gradle para ejecutarse, ya que necesita
- * que 'projectstalker.native.enabled' y 'java.library.path' estén configurados.
+ * Verifica la carga de librería nativa y la ejecución del ciclo completo (Init->Run->Destroy).
  */
-@Tag("GPU") // Etiqueta para que solo la tarea 'gpuTest' lo ejecute
+@Tag("GPU")
 @Slf4j
 class ManningGpuIntegrationTest {
 
@@ -36,7 +34,6 @@ class ManningGpuIntegrationTest {
     private RiverPhModel realPhModel;
     private SimulationConfig simConfig;
 
-    // Dimensiones (igual que en el test de CPU)
     private int cellCount;
     private final int BATCH_SIZE = 3;
     private final double DELTA_TIME = 10.0;
@@ -44,29 +41,35 @@ class ManningGpuIntegrationTest {
     @BeforeEach
     void setUp() {
         log.info("Configurando entorno para Test de Integración GPU...");
-        // --- 1. Inicializar INSTANCIA REAL de Geometría y Configuración ---
+
         RiverConfig riverConfig = RiverConfig.getTestingRiver();
         RiverGeometryFactory factory = new RiverGeometryFactory();
         this.realGeometry = factory.createRealisticRiver(riverConfig);
         this.cellCount = this.realGeometry.getCellCount();
-        // --- 2. Inicializar INSTANCIAS REALES de Modelos Fisicoquímicos ---
+
         this.realTempModel = new RiverTemperatureModel(riverConfig, this.realGeometry);
         this.realPhModel = new RiverPhModel(this.realGeometry);
 
-        // --- 3. Inicializar Mocks de Configuración ---
-        simConfig = mock(SimulationConfig.class);
         this.simConfig = SimulationConfig.builder()
                 .riverConfig(riverConfig)
                 .seed(12345L)
-                .totalTime(3600) // 1 hora
+                .totalTime(3600)
                 .deltaTime((float) DELTA_TIME)
-                .cpuProcessorCount(Runtime.getRuntime().availableProcessors())
-                .cpuTimeBatchSize(BATCH_SIZE) // Sincronizado con la constante del test
-                .useGpuAccelerationOnManning(true) // Intención explícita
-                .useGpuAccelerationOnTransport(false) // Por ahora false
+                .cpuProcessorCount(2)
+                .cpuTimeBatchSize(BATCH_SIZE)
+                .useGpuAccelerationOnManning(true) // Activar GPU
+                .useGpuAccelerationOnTransport(false)
                 .build();
 
         log.info("Entorno configurado. Geometría con {} celdas.", this.realGeometry.getCellCount());
+    }
+
+    @AfterEach
+    void tearDown() {
+        // Crucial: Liberar la GPU al terminar el test
+        if (batchProcessor != null) {
+            batchProcessor.close();
+        }
     }
 
     @Test
@@ -74,35 +77,27 @@ class ManningGpuIntegrationTest {
     void processBatch_gpuMode_shouldRunOnNativeLibraryWithoutCrashing() {
         log.info("Iniciando test de integración de GPU. BATCH_SIZE={}", BATCH_SIZE);
 
-        // --- ARRANGE: Preparación de Datos ---
         double currentTime = 300.0 * 3600.0;
 
         // 1. Estado Inicial
-        float initialUniformDepth = 0.5f;
-        float[] initialData = new float[this.cellCount];
-        Arrays.fill(initialData, initialUniformDepth);
+        float[] initialDepth = new float[this.cellCount]; Arrays.fill(initialDepth, 0.5f);
+        float[] initialVel = new float[this.cellCount]; Arrays.fill(initialVel, 1.0f);
+        float[] zeros = new float[this.cellCount];
+
         RiverState initialRiverState = new RiverState(
-                initialData, initialData, initialData, initialData, initialData
+                initialDepth, initialVel, zeros, zeros, zeros
         );
 
-        // 2. Perfiles de Caudal
+        // 2. Inputs (1D - Smart Fetch)
         float[] newDischarges = new float[BATCH_SIZE];
-        Arrays.fill(newDischarges, 200.0f);
-        float[] initialDischarges = new float[this.cellCount];
-        Arrays.fill(initialDischarges, 50);
+        Arrays.fill(newDischarges, 200.0f); // Caudal entrante
 
-        // 3. Instanciar el SUT (Subject Under Test) REAL
-        // Esta línea es la que disparará la carga de la librería nativa
-        // (porque 'gpuTest' define 'projectstalker.native.enabled=true')
-        log.info("Instanciando ManningBatchProcessor (esto debería cargar la librería nativa)...");
+        // 3. Instanciar el SUT (Carga nativa + Init Session)
+        log.info("Instanciando ManningBatchProcessor (Carga librería + Init GPU)...");
         batchProcessor = assertDoesNotThrow(
                 () -> new ManningBatchProcessor(this.realGeometry, simConfig),
-                "Falló la instanciación de ManningBatchProcessor. ¿Error al cargar la librería nativa?"
+                "Falló la instanciación. ¿Librería nativa faltante o error en initSession?"
         );
-        log.info("ManningBatchProcessor instanciado. Librería nativa cargada.");
-
-        // (Re-usamos el método del SUT para crear los perfiles)
-        float[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(BATCH_SIZE, newDischarges, initialDischarges);
 
         // 4. Resultados Fisicoquímicos (Pre-cálculo)
         float[][][] phTmp = new float[BATCH_SIZE][2][this.cellCount];
@@ -114,39 +109,37 @@ class ManningGpuIntegrationTest {
             timeStep += DELTA_TIME;
         }
 
-        // --- ACT & ASSERT (Prueba de Supervivencia) ---
+        // --- ACT & ASSERT (Ejecución Nativa) ---
         log.warn(">>> EJECUTANDO STACK NATIVO (GPU) <<<");
 
-        // Esta es la prueba principal:
-        // Verificamos que la llamada a processBatch (con GPU=true)
-        // se completa sin lanzar ninguna excepción de JNI, C++, o CUDA.
         ManningSimulationResult result = assertDoesNotThrow(() ->
                         batchProcessor.processBatch(
-                                BATCH_SIZE, initialRiverState,
-                                allDischargeProfiles, phTmp, true // <-- ¡GPU HABILITADA!
+                                BATCH_SIZE,
+                                initialRiverState,
+                                newDischarges, // Input 1D
+                                phTmp,
+                                true // GPU Habilitada
                         ),
-                "La ejecución nativa de la GPU falló (lanzó una excepción)"
+                "La ejecución nativa de la GPU falló (Crashes o Excepciones JNI/CUDA)"
         );
 
         log.warn(">>> STACK NATIVO EJECUTADO EXITOSAMENTE <<<");
 
-        // --- ASSERT (Verificaciones de Cordura) ---
-        // Si llegamos aquí, el stack nativo funcionó.
-        // Ahora solo verificamos que los datos de vuelta no son basura.
-        assertNotNull(result, "El resultado de la GPU no debe ser nulo.");
-        assertEquals(BATCH_SIZE, result.getStates().size(), "El resultado debe tener el tamaño de batch correcto.");
+        // --- ASSERT (Sanity Checks) ---
+        assertNotNull(result, "Resultado nulo.");
+        assertEquals(BATCH_SIZE, result.getStates().size());
 
         RiverState finalState = result.getStates().get(BATCH_SIZE - 1);
-        assertNotNull(finalState, "El estado final es nulo.");
 
-        // Verificamos que no hay NaNs
-        assertFalse(Double.isNaN(finalState.getWaterDepthAt(10)), "El resultado de profundidad de la GPU es NaN.");
-        assertFalse(Double.isNaN(finalState.getVelocityAt(10)), "El resultado de velocidad de la GPU es NaN.");
+        // Verificación de integridad numérica
+        float sampleH = finalState.getWaterDepthAt(10);
+        float sampleV = finalState.getVelocityAt(10);
 
-        // Verificamos que la GPU realmente hizo un cálculo (no devolvió ceros)
-        assertTrue(finalState.getWaterDepthAt(10) > 0.0, "La GPU no calculó una profundidad positiva.");
-        assertTrue(finalState.getVelocityAt(10) > 0.0, "La GPU no calculó una velocidad positiva.");
+        assertFalse(Float.isNaN(sampleH), "Profundidad NaN detectada.");
+        assertFalse(Float.isNaN(sampleV), "Velocidad NaN detectada.");
+        assertTrue(sampleH > 0.0f, "Profundidad debe ser positiva.");
+        assertTrue(sampleV > 0.0f, "Velocidad debe ser positiva.");
 
-        log.info("Verificaciones de cordura (Sanity Checks) superadas. Test de GPU exitoso.");
+        log.info("Test de Integración GPU superado.");
     }
 }
