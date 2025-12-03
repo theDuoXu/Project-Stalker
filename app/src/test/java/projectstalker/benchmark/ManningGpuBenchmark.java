@@ -24,8 +24,8 @@ public class ManningGpuBenchmark {
     private SimulationConfig gpuConfig;
 
     // --- CONFIGURACIÓN DE CARGA ---
-    // 100k celdas para saturar la GPU y ver el speedup real vs CPU
-    private final int CELL_COUNT = 100_000;
+    // 50k celdas para saturar la GPU y ver el speedup real vs CPU
+    private final int CELL_COUNT = 50_000;
 
     // Umbral de Batch Size para dejar de ejecutar CPU real e interpolar.
     // Ejecutar 100k celdas por 1000 pasos en CPU tardaría demasiado para un test.
@@ -84,8 +84,8 @@ public class ManningGpuBenchmark {
         log.info("=== INICIANDO BENCHMARK MANNING MASIVO (100k Celdas) ===");
 
         // Tamaños de lote a probar (Variable independiente)
-        // Nota: 20k batches * 100k celdas * 8 bytes output = ~16 GB VRAM. Seguro en 3090/4090.
-        int[] batchSizes = {10, 100, 1_000, 5_000, 10_000};
+        // Nota: 20k batches * 100k celdas * 8 bytes output = ~16 GB VRAM. Seguro en 5090.
+        int[] batchSizes = {10, 100, 1_000, 5_000};
 
         // --- WARM-UP ---
         log.info(">> Calentando motores (JIT y Contexto CUDA)...");
