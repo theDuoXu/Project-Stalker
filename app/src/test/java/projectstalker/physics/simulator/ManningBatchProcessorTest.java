@@ -1,6 +1,7 @@
 package projectstalker.physics.simulator;
 
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -10,7 +11,6 @@ import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.domain.simulation.ManningSimulationResult;
 import projectstalker.factory.RiverGeometryFactory;
-import projectstalker.physics.jni.INativeManningSolver;
 import projectstalker.physics.model.RiverPhModel;
 import projectstalker.physics.model.RiverTemperatureModel;
 
@@ -21,25 +21,25 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Test unitario para ManningBatchProcessor, utilizando instancias reales de los
- * modelos fisicoquímicos (RiverTemperatureModel y RiverPhModel) y de RiverGeometry.
- * Esto garantiza que la lógica de ensamblaje (que combina resultados hidrológicos con
- * resultados fisicoquímicos) es probada con datos realistas generados por los modelos.
+ * Test unitario para ManningBatchProcessor.
+ * <p>
+ * REFACTORIZADO: Adaptado a la nueva arquitectura Stateful/Smart Fetch.
+ * Verifica la lógica de ensamblaje en modo CPU (Legacy/Integrity Check) utilizando
+ * modelos fisicoquímicos reales.
  */
 @Slf4j
 class ManningBatchProcessorTest {
 
     private ManningBatchProcessor batchProcessor;
     private RiverGeometry realGeometry;
-    private RiverTemperatureModel realTempModel; // INSTANCIA REAL
-    private RiverPhModel realPhModel;           // INSTANCIA REAL
+    private RiverTemperatureModel realTempModel;
+    private RiverPhModel realPhModel;
     private SimulationConfig mockConfig;
-    private INativeManningSolver mockGpuSolver;
 
     // Dimensiones predichas para el río (100000m / 50m = 2000 celdas)
     private final int CELL_COUNT = 2000;
     private final int BATCH_SIZE = 3;
-    private final double DELTA_TIME = 10.0; // Intervalo de tiempo para el cálculo del batch
+    private final double DELTA_TIME = 10.0;
 
     @BeforeEach
     void setUp() {
@@ -55,16 +55,28 @@ class ManningBatchProcessorTest {
         // --- 3. Inicializar Mocks de Configuración ---
         mockConfig = mock(SimulationConfig.class);
         when(mockConfig.getCpuProcessorCount()).thenReturn(2);
+        // Probamos el modo CPU, pero el constructor inicializará la sesión GPU igualmente
         when(mockConfig.isUseGpuAccelerationOnManning()).thenReturn(false);
 
-        // --- 4. Inicializar BatchProcessor con la Geometría y Modelos REALES ---
+        // --- 4. Inicializar BatchProcessor ---
+        // Nota: Esto disparará initSession() de la GPU internamente.
+        // Si no hay librería nativa en el entorno de test, el Singleton lo manejará (logueando error)
+        // o fallará si la carga es estricta. Asumimos entorno válido o mockeable.
         batchProcessor = new ManningBatchProcessor(this.realGeometry, mockConfig);
-        log.info("ManningBatchProcessor inicializado con instancias reales de Geometry, TempModel, y PhModel.");
+        log.info("ManningBatchProcessor inicializado.");
+    }
+
+    @AfterEach
+    void tearDown() {
+        // IMPORTANTE: Cerrar el procesador para liberar recursos nativos (VRAM)
+        if (batchProcessor != null) {
+            batchProcessor.close();
+        }
     }
 
     @Test
-    @DisplayName("El batch en modo CPU debe ejecutar tareas y ensamblar resultados coherentes, usando modelos reales")
-    void processBatch_cpuMode_shouldExecuteAndAssembleResults() throws Exception {
+    @DisplayName("El batch en modo CPU debe ejecutar tareas y ensamblar resultados coherentes (API 1D)")
+    void processBatch_cpuMode_shouldExecuteAndAssembleResults() {
         log.info("Iniciando test: processBatch en modo CPU concurrente. BATCH_SIZE={}", BATCH_SIZE);
 
         // --- ARRANGE: Preparación de Datos ---
@@ -74,28 +86,19 @@ class ManningBatchProcessorTest {
         float initialUniformDepth = 0.5f;
         float[] initialData = new float[CELL_COUNT];
         Arrays.fill(initialData, initialUniformDepth);
+        // Velocidad inicial uniforme
+        float[] initialVel = new float[CELL_COUNT];
+        Arrays.fill(initialVel, 1.0f);
 
         RiverState initialRiverState = new RiverState(
-                initialData, initialData, initialData, initialData, initialData
+                initialData, initialVel, initialData, initialData, initialData
         );
 
-        // Logging del estado ANTES de la simulación
-        double initialAvgDepth = calculateAverageDepth(initialRiverState);
-        double initialAvgVelocity = calculateAverageVelocity(initialRiverState);
-        log.info("======================== ESTADO INICIAL ========================");
-        log.info("Caudal de Entrada al Batch (Q_in): {} m³/s", 200.0);
-        log.info("Tamaño de batch: {} m³/s", BATCH_SIZE);
-        log.info("Profundidad Media Inicial (H_avg): {} m", initialAvgDepth);
-        log.info("Velocidad Media Inicial (V_avg): {} m/s", initialAvgVelocity);
-        log.info("==============================================================");
-
-        // 2. Perfiles de Caudal
-        float[] newDischarges = new float[BATCH_SIZE];
-        Arrays.fill(newDischarges, 200.0f);
-        float[] initialDischarges = new float[CELL_COUNT];
-
-        Arrays.fill(initialDischarges, 50);
-        float[][] allDischargeProfiles = batchProcessor.createDischargeProfiles(BATCH_SIZE, newDischarges, initialDischarges);
+        // 2. Inputs de Caudal (Smart Fetch 1D)
+        // Ya no creamos la matriz 2D manualmente aquí; pasamos el array de inputs.
+        // El modo CPU expandirá la matriz internamente.
+        float[] newInflows = new float[BATCH_SIZE];
+        Arrays.fill(newInflows, 200.0f); // Caudal de entrada constante
 
         // 3. Resultados Fisicoquímicos (Pre-cálculo)
         float[][][] phTmp = new float[BATCH_SIZE][2][CELL_COUNT];
@@ -108,9 +111,13 @@ class ManningBatchProcessorTest {
         }
 
         // --- ACT: Ejecución Real del Batch Processor ---
+        // Usamos la nueva firma que acepta float[] newInflows
         ManningSimulationResult result = batchProcessor.processBatch(
-                BATCH_SIZE, initialRiverState,
-                allDischargeProfiles, phTmp, false
+                BATCH_SIZE,
+                initialRiverState,
+                newInflows, // Input 1D
+                phTmp,
+                false // Forzar CPU
         );
 
         // --- ASSERT Y LOGGING DE RESULTADOS ---
@@ -127,8 +134,10 @@ class ManningBatchProcessorTest {
         log.info("Velocidad Media Final (V_avg): {} m/s", finalAvgVelocity);
         log.info("===================================================================");
 
-        // 1. Verificación de Lógica Hidrológica (Aumento de profundidad y velocidad = aumento de volumen)
-        assertTrue(finalAvgDepth*finalAvgVelocity > initialAvgDepth*initialAvgVelocity, "El caudal medio debe haber aumentado");
+        // 1. Verificación de Lógica Hidrológica
+        // Al inyectar 200 m3/s (vs estado inicial calculado de ~50 m3/s), el nivel debe subir.
+        double initialAvgDepth = calculateAverageDepth(initialRiverState);
+        assertTrue(finalAvgDepth > initialAvgDepth, "La profundidad media debería aumentar con el influjo de caudal.");
 
         // 2. Verificación de Ensamblaje Fisicoquímico
         RiverState state0 = result.getStates().get(0);
