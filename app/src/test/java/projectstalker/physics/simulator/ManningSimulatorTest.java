@@ -143,6 +143,9 @@ class ManningSimulatorTest {
         when(mockBatchProcessor.processBatch(eq(batchSize), any(), any(), any(), anyBoolean()))
                 .thenReturn(mockResult);
 
+        // Guardar el estado ANTES de ejecutar ---
+        RiverState stateBeforeExecution = simulator.getCurrentState();
+
         // ACT
         ManningSimulationResult result = simulator.advanceBatchTimeStep(DELTA_TIME, batchSize);
 
@@ -152,7 +155,7 @@ class ManningSimulatorTest {
         // 1. Verificar Delegación con nueva firma
         verify(mockBatchProcessor, times(1)).processBatch(
                 eq(batchSize),
-                eq(simulator.getCurrentState()), // Estado inicial
+                eq(stateBeforeExecution),        // <-- USAR LA REFERENCIA GUARDADA (Inicial)
                 inflowCaptor.capture(),          // Inputs 1D capturados
                 any(float[][][].class),          // phTmp
                 eq(false)                        // isGpuAccelerated
@@ -165,6 +168,7 @@ class ManningSimulatorTest {
         assertEquals(10.0f, capturedInflows[0], 0.1f);
 
         // 3. Verificar Actualización de Estado Final
+        // Aquí SÍ queremos verificar que el simulador tiene el estado NUEVO
         assertEquals(finalState, simulator.getCurrentState());
         assertEquals(initialTime + (batchSize * DELTA_TIME), simulator.getCurrentTimeInSeconds(), 0.001);
     }
