@@ -161,9 +161,11 @@ tasks.register('benchmark', Test){
     systemProperty 'projectstalker.native.enabled', 'true'
 
     // para evitar pausas de Garbage Collection durante la medición.
-    minHeapSize = "16G"
-    maxHeapSize = "16G"
-
+    minHeapSize = "4G"
+    maxHeapSize = "24G"
+    jvmArgs "-XX:+UseG1GC"          // GC estándar y robusto
+    jvmArgs "-XX:+AlwaysPreTouch"   // Reserva la RAM real al inicio (evita lag al asignar)
+    jvmArgs "-XX:MaxGCPauseMillis=500" // Permite pausas largas (es un benchmark) para limpiar mejor
     // Forzar ejecución siempre
     outputs.upToDateWhen { false }
 
