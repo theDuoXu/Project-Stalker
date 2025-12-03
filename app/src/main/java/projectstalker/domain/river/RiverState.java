@@ -113,6 +113,25 @@ public record RiverState(
         return this.ph[cellIndex];
     }
 
+    /**
+     * Calcula y devuelve el caudal (Q) en cada celda del río basándose en el estado actual (H y v)
+     * y la geometría proporcionada.
+     * <p>
+     * Q = Velocidad * Área(Profundidad)
+     *
+     * @param geometry La geometría del río necesaria para calcular el área transversal.
+     * @return Array de floats con el caudal en metros cúbicos por segundo [m³/s].
+     */
+    public float[] discharge(RiverGeometry geometry) {
+        float[] q = new float[waterDepth.length];
+        for (int i = 0; i < waterDepth.length; i++) {
+            // El área depende de H y de la forma de la sección
+            double area = geometry.getCrossSectionalArea(i, waterDepth[i]);
+            q[i] = (float) (velocity[i] * area);
+        }
+        return q;
+    }
+
     // Métodos equals y hashCode estándar para records con arrays.
     @Override
     public boolean equals(Object o) {
