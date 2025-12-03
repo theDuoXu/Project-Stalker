@@ -1,0 +1,21 @@
+Nuevo Flujo de Datos (Stateful + Smart Fetch):
+
+    Init (Java -> C++):
+
+        Subimos Geometría (b, m, n, S).
+
+        Pre-cocinamos constantes físicas (inv_n, etc.).
+
+    Antes del Batch (Java -> C++):
+
+        Subimos el initialDischarges (el estado del río justo antes de empezar el batch). Esto se queda en VRAM accesible para todos los pasos del batch.
+
+        Nota: Si el initialDischarges es el resultado del batch anterior, ¡quizás ni siquiera tengamos que subirlo si ya está ahí! (Zero-Copy inter-batch), pero vamos paso a paso.
+
+    Ejecución Batch (Java -> C++):
+
+        Solo enviamos float[] newInflows (el "chorizo" pequeño).
+
+        El kernel usa la lógica condicional que has descrito para decidir si lee del "chorizo nuevo" o del "río inicial".
+
+Le vamos a ganar muchísimo rendimiento al pcie pasando de un problema trasnfer bound a seguramente un problema memory bound
