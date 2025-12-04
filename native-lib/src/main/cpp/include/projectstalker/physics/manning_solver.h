@@ -1,6 +1,7 @@
 // src/main/cpp/include/projectstalker/physics/manning_solver.h
 #pragma once
-
+#include <vector>
+#include <cstddef>
 /**
  * Estructura de Sesión para Manning (Stateful).
  * Mantiene la geometría residente en VRAM y gestiona buffers adaptativos
