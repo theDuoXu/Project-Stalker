@@ -19,10 +19,11 @@ import java.util.concurrent.*;
  * Procesa un lote (batch) de pasos de tiempo de simulación de Manning.
  * <p>
  * Implementa un enfoque híbrido y actúa como Factoría de Resultados:
- * 1. GPU (Stateful): Usa "Smart Fetch" y devuelve un {@link FlyweightManningResult} virtualizado.
- * 2. CPU (Concurrent): Usa expansión de matrices en RAM y devuelve un {@link DenseManningResult} materializado.
+ * 1. GPU (Stateful + DMA): Delega al {@link ManningGpuSolver} que gestiona memoria Pinned
+ * para transferencias Zero-Copy. Devuelve un {@link FlyweightManningResult}.
+ * 2. CPU (Concurrent): Fallback a threads de Java con matrices densas.
  * <p>
- * Implementa AutoCloseable para garantizar la liberación de recursos (Threads y GPU Session).
+ * Implementa AutoCloseable para garantizar la liberación de la sesión JNI.
  */
 @Slf4j
 public class ManningBatchProcessor implements AutoCloseable {
@@ -31,7 +32,7 @@ public class ManningBatchProcessor implements AutoCloseable {
     private final ExecutorService threadPool;
     private final int cellCount;
 
-    // Stateful Solver: Puede ser null si la configuración deshabilita la GPU
+    // Stateful Solver: Encapsula la sesión GPU y los buffers DMA persistentes.
     private final ManningGpuSolver gpuSolver;
 
     /**
@@ -45,14 +46,14 @@ public class ManningBatchProcessor implements AutoCloseable {
         this.geometry = geometry;
         this.cellCount = geometry.getCellCount();
 
-        // 1. Inicializar CPU Pool (Siempre disponible)
+        // 1. Inicializar CPU Pool (Siempre disponible como fallback)
         int processorCount = simulationConfig.getCpuProcessorCount();
         this.threadPool = Executors.newFixedThreadPool(Math.max(processorCount, 1));
 
         // 2. Inicializar GPU Session (Solo si está habilitado en config)
-        // Evita llamar a JNI si solo queremos testear CPU.
         if (simulationConfig.isUseGpuAccelerationOnManning()) {
-            log.info("Inicializando sesión GPU...");
+            log.info("Inicializando sesión GPU (Stateful DMA mode)...");
+            // El solver no reserva buffers pesados hasta el primer batch (Lazy Init)
             this.gpuSolver = new ManningGpuSolver(geometry);
         } else {
             log.info("Modo solo CPU: No se inicializará la sesión GPU.");
@@ -64,57 +65,59 @@ public class ManningBatchProcessor implements AutoCloseable {
 
     /**
      * Procesa un batch completo de simulación.
-     * Devuelve una interfaz común para desacoplar el almacenamiento de datos.
+     * Selecciona dinámicamente la estrategia de cómputo.
      */
     public ISimulationResult processBatch(int batchSize,
                                           RiverState initialRiverState,
                                           float[] newInflows,
                                           float[][][] phTmp,
                                           boolean isGpuAccelerated) {
-        long startTimeInMilis = System.currentTimeMillis();
-
-        ISimulationResult result;
 
         if (isGpuAccelerated) {
-            result = gpuComputeBatch(batchSize, initialRiverState, newInflows, phTmp);
+            return gpuComputeBatch(batchSize, initialRiverState, newInflows, phTmp);
         } else {
-            result = cpuComputeBatch(batchSize, initialRiverState, newInflows, phTmp);
+            return cpuComputeBatch(batchSize, initialRiverState, newInflows, phTmp);
         }
-
-        return result; // El tiempo de simulación se encapsula dentro de la implementación específica si es necesario
     }
 
     /**
-     * Realiza el cómputo del batch delegando al solver nativo de GPU.
+     * Realiza el cómputo del batch delegando al solver nativo de GPU con soporte DMA.
      * Devuelve un resultado ligero (Flyweight) para evitar saturar la RAM de Java.
      */
     private ISimulationResult gpuComputeBatch(int batchSize, RiverState initialRiverState,
                                               float[] newInflows, float[][][] phTmp) {
         if (this.gpuSolver == null) {
-            throw new IllegalStateException("Se solicitó ejecución GPU, pero ManningBatchProcessor fue inicializado en modo solo CPU.");
+            throw new IllegalStateException("Se solicitó ejecución GPU, pero el procesador se inicializó en modo CPU.");
         }
 
         try {
-            // T0: Inicio preparación
+            // T0: Inicio preparación de datos Java
             long t0 = System.nanoTime();
 
-            // Extraemos arrays primitivos para pasar al JNI (Zero-copy friendly)
+            // Extraemos arrays primitivos del dominio.
+            // NOTA: 'initialDepths' y 'initialQ' son críticos para el "Init Lazy" de la sesión GPU (primer batch).
+            // En batches subsiguientes, el solver los ignora porque ya tiene el estado cargado,
+            // pero debemos pasarlos para satisfacer la API.
             float[] initialQ = initialRiverState.discharge(this.geometry);
             float[] initialDepths = initialRiverState.waterDepth();
 
-            // T1: Inicio JNI/GPU
+            // T1: Inicio Frontera Nativa
             long t1 = System.nanoTime();
 
-            // EJECUCIÓN NATIVA
+            // EJECUCIÓN NATIVA (DMA / Zero-Copy)
+            // 1. Java escribe en DirectBuffer (Input).
+            // 2. GPU lee vía PCIe (DMA).
+            // 3. GPU escribe en DirectBuffer (Output).
+            // 4. Java lee de DirectBuffer.
             // Devuelve la matriz compacta [Batch][Var][ActiveWidth]
             float[][][] packedResults = gpuSolver.solveBatch(initialDepths, newInflows, initialQ);
 
-            // T2: Fin JNI/GPU
+            // T2: Fin Frontera Nativa
             long t2 = System.nanoTime();
 
             if (packedResults == null || packedResults.length != batchSize) {
                 log.error("Error crítico GPU: BatchSize incorrecto en retorno.");
-                // Retorno seguro vacío usando implementación densa
+                // Fallback de emergencia: Retornar resultado vacío seguro
                 return DenseManningResult.builder()
                         .geometry(this.geometry)
                         .states(Collections.emptyList())
@@ -123,46 +126,45 @@ public class ManningBatchProcessor implements AutoCloseable {
             }
 
             // T3: Construcción del Flyweight (Virtualización)
-            // Ya NO desempaquetamos los arrays en un bucle. Pasamos los datos crudos al wrapper.
-            // Esto reduce el tiempo de "Java Objects" de ms a ns.
-
-            long simulationTimeMs = (t2 - t0) / 1_000_000; // Aproximado para el record
+            // Encapsulamos los arrays crudos sin procesarlos. El desempaquetado ocurre bajo demanda (Lazy).
+            long simulationTimeMs = (t2 - t0) / 1_000_000;
 
             ISimulationResult result = new FlyweightManningResult(
                     this.geometry,
                     simulationTimeMs,
-                    initialRiverState, // Intrinsic State (Base)
-                    packedResults,     // Extrinsic State (Delta GPU)
-                    phTmp              // Aux Data
+                    initialRiverState, // Intrinsic State (Base del río)
+                    packedResults,     // Extrinsic State (Delta calculado por GPU)
+                    phTmp              // Datos auxiliares (Temp/Ph) passthrough
             );
 
             // T4: Fin total
             long t4 = System.nanoTime();
 
-            // LOG DE PERFILADO
+            // LOG DE PERFILADO (Solo si es lento, > 5ms)
             double totalMs = (t4 - t0) / 1e6;
             if (totalMs > 5.0) {
-                double prepMs = (t1 - t0) / 1e6;
-                double gpuMs = (t2 - t1) / 1e6;
-                double javaMs = (t4 - t2) / 1e6;
+                double prepMs = (t1 - t0) / 1e6; // Extracción de datos Java
+                double gpuMs = (t2 - t1) / 1e6;  // Cómputo + Transferencia DMA
+                double wrapMs = (t4 - t2) / 1e6; // Creación del objeto Result
 
-                log.info(">>> GPU BATCH (Flyweight): Total={}ms | Prep={}ms | Native={}ms | Wrapper={}ms <<<",
-                        String.format("%.1f", totalMs),
-                        String.format("%.1f", prepMs),
-                        String.format("%.1f", gpuMs),
-                        String.format("%.1f", javaMs)
+                log.debug(">>> GPU DMA BATCH: Total={}ms | Prep={}ms | GPU+DMA={}ms | Wrap={}ms <<<",
+                        String.format("%.2f", totalMs),
+                        String.format("%.2f", prepMs),
+                        String.format("%.2f", gpuMs),
+                        String.format("%.2f", wrapMs)
                 );
             }
 
             return result;
 
         } catch (Exception e) {
-            log.error("Fallo en ejecución GPU", e);
-            throw new RuntimeException("Error en simulación GPU", e);
+            log.error("Fallo crítico en ejecución GPU (BatchSize: {})", batchSize, e);
+            throw new RuntimeException("Error en simulación GPU Manning", e);
         }
     }
 
     // --- CPU Compute Batch (Legacy / Dense Implementation) ---
+    // Se mantiene inalterado para compatibilidad y validación cruzada.
     private ISimulationResult cpuComputeBatch(int batchSize, RiverState initialRiverState,
                                               float[] newInflows, float[][][] phTmp) {
         long tStart = System.currentTimeMillis();
@@ -200,7 +202,6 @@ public class ManningBatchProcessor implements AutoCloseable {
             }
         }
 
-        // En CPU seguimos materializando la lista completa (Dense)
         List<RiverState> states = assembleRiverStateResults(batchSize, phTmp, resultingDepths, resultingVelocities);
 
         long tEnd = System.currentTimeMillis();
@@ -212,7 +213,6 @@ public class ManningBatchProcessor implements AutoCloseable {
                 .build();
     }
 
-    // Método Legacy privado (Solo para CPU)
     private float[][] createDischargeProfiles(int batchSize, float[] newDischarges, float[] initialDischarges) {
         float[][] dischargeProfiles = new float[batchSize][cellCount];
         for (int j = 0; j < batchSize; j++) {

@@ -1,3 +1,4 @@
+// src/main/java/projectstalker/physics/jni/NativeManningGpuSingleton.java
 package projectstalker.physics.jni;
 
 import lombok.extern.slf4j.Slf4j;
@@ -41,11 +42,11 @@ public class NativeManningGpuSingleton implements INativeManningSolver {
         return INSTANCE;
     }
 
-    // --- MÉTODOS NATIVOS (Stateful Lifecycle Actualizado) ---
+    // --- MÉTODOS NATIVOS (Stateful Lifecycle DMA) ---
 
     /**
-     * Inicializa la sesión.
-     * Firma actualizada: Ahora acepta 6 Buffers (4 geometría + 2 estado inicial).
+     * Inicializa la sesión GPU.
+     * Los buffers pasados deben ser DirectBuffers (AllocateDirect).
      */
     @Override
     public native long initSession(
@@ -53,17 +54,32 @@ public class NativeManningGpuSingleton implements INativeManningSolver {
             FloatBuffer sideSlopes,
             FloatBuffer manningCoefficients,
             FloatBuffer bedSlopes,
-            FloatBuffer initialDepths, // Nuevo
-            FloatBuffer initialQ,      // Nuevo
+            FloatBuffer initialDepths, // Estado Intrinsic
+            FloatBuffer initialQ,      // Estado Intrinsic
             int cellCount
     );
 
     /**
-     * Ejecuta el batch.
-     * Firma actualizada: Solo recibe el handle y los nuevos inflows (Flyweight).
+     * Ejecuta el batch utilizando DMA (Zero-Copy).
+     * <p>
+     * Modificado para DMA:
+     * 1. No devuelve datos, escribe directamente en {@code outputBuffer}.
+     * 2. No realiza copias de Java a C++, lee directamente de {@code inputBuffer}.
+     * 3. Ambos buffers deben ser DirectBuffers.
+     *
+     * @param sessionHandle Handle de la sesión C++.
+     * @param inputBuffer   Buffer con los nuevos inflows (Input).
+     * @param outputBuffer  Buffer donde la GPU escribirá los resultados H y V (Output).
+     * @param batchSize     Tamaño del batch a procesar.
+     * @return 0 si éxito, código de error negativo si falla.
      */
     @Override
-    public native float[] runBatch(long sessionHandle, float[] newInflows);
+    public native int runBatch(
+            long sessionHandle,
+            FloatBuffer inputBuffer,
+            FloatBuffer outputBuffer,
+            int batchSize
+    );
 
     @Override
     public native void destroySession(long sessionHandle);

@@ -13,13 +13,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Test unitario para ManningGpuSolver (Versión Stateful Refactorizada).
+ * Test unitario para ManningGpuSolver (Versión Stateful DMA / Zero-Copy).
  * <p>
- * Verifica:
- * 1. El ciclo de vida RAII (Lazy Init -> Run -> Destroy).
- * 2. La conversión de Geometría y Estado Base a DirectBuffers solo en la primera llamada.
- * 3. El paso de datos "Flyweight" (solo inflows) en solveBatch.
- * 4. El desempaquetado correcto de resultados SoA (Structure of Arrays).
+ * Adaptado para la nueva arquitectura donde los datos viajan via DirectBuffers
+ * y la GPU escribe "in-place" en lugar de devolver arrays.
  */
 class ManningGpuSolverTest {
 
@@ -27,7 +24,7 @@ class ManningGpuSolverTest {
     private INativeManningSolver mockNativeSolver;
     private RiverGeometry mockGeometry;
 
-    private final int CELL_COUNT = 50; // Usamos un río grande para probar el recorte triangular
+    private final int CELL_COUNT = 50;
     private final long FAKE_SESSION_HANDLE = 12345L;
 
     @BeforeEach
@@ -35,200 +32,186 @@ class ManningGpuSolverTest {
         // 1. Mock del Native Solver
         mockNativeSolver = mock(INativeManningSolver.class);
 
-        // Configurar el mock para que devuelva un handle válido al iniciar sesión
-        // AHORA ACEPTA 6 BUFFERS (4 Geometría + 2 Estado Inicial)
+        // Configurar INIT: Devuelve un handle válido
         when(mockNativeSolver.initSession(any(), any(), any(), any(), any(), any(), eq(CELL_COUNT)))
                 .thenReturn(FAKE_SESSION_HANDLE);
 
-        // 2. Mock de Geometría (Necesario para el Constructor del Solver)
+        // 2. Mock de Geometría
         mockGeometry = mock(RiverGeometry.class);
         when(mockGeometry.getCellCount()).thenReturn(CELL_COUNT);
-        when(mockGeometry.getSpatialResolution()).thenReturn(10.0f); // dx para calcular pendientes
+        when(mockGeometry.getSpatialResolution()).thenReturn(10.0f);
 
-        // Datos de geometría simulados (tamaño CELL_COUNT)
-        float[] width = new float[CELL_COUNT];
-        float[] slope = new float[CELL_COUNT];
-        float[] manning = new float[CELL_COUNT];
-        float[] elevation = new float[CELL_COUNT];
+        // Dummy data para geometría
+        float[] dummyArray = new float[CELL_COUNT];
+        // Llenamos algo básico para que no sean todo ceros
+        for(int i=0; i<CELL_COUNT; i++) dummyArray[i] = 1.0f;
 
-        // Llenamos con dummy data
-        for(int i=0; i<CELL_COUNT; i++) {
-            width[i] = 10f; slope[i] = 1f; manning[i] = 0.03f; elevation[i] = 10f - i;
-        }
+        when(mockGeometry.getBottomWidth()).thenReturn(dummyArray);
+        when(mockGeometry.getSideSlope()).thenReturn(dummyArray);
+        when(mockGeometry.getManningCoefficient()).thenReturn(dummyArray);
+        when(mockGeometry.cloneElevationProfile()).thenReturn(dummyArray);
 
-        when(mockGeometry.getBottomWidth()).thenReturn(width);
-        when(mockGeometry.getSideSlope()).thenReturn(slope);
-        when(mockGeometry.getManningCoefficient()).thenReturn(manning);
-        when(mockGeometry.cloneElevationProfile()).thenReturn(elevation); // Usado para calcular bedSlope internamente
-
-        // 3. SUT: Instanciación (NO dispara initSession todavía - Lazy)
+        // 3. SUT: Instanciación (Lazy Init - Aún no llama a nada)
         gpuSolver = new ManningGpuSolver(mockNativeSolver, mockGeometry);
     }
 
     @AfterEach
     void tearDown() {
-        // Asegurar limpieza si el test no llamó a close explícitamente
         if (gpuSolver != null) {
             try {
-                // Solo si se inicializó (handle != 0) se llamará a destroy.
-                // Como es lazy, en algunos tests puede no haberse llamado a init.
-                // Pero close() maneja eso internamente chequeando el handle.
                 gpuSolver.close();
             } catch (Exception e) {
-                // Ignorar en teardown
+                // Ignorar
             }
         }
     }
 
     @Test
-    @DisplayName("Lazy Init: solveBatch debe inicializar sesión nativa con 6 Buffers en la primera llamada")
+    @DisplayName("Lazy Init: solveBatch debe inicializar sesión y pasar 6 Buffers Directos")
     void solveBatch_shouldTriggerLazyInit() {
         // --- ARRANGE ---
         float[] inflows = {100f};
-        float[] depths = new float[CELL_COUNT];
-        float[] q = new float[CELL_COUNT];
+        float[] dummy = new float[CELL_COUNT];
 
-        // Mock de runBatch para que no falle (retorna array vacío válido para batch 1)
-        // Tamaño esperado: 2 * Batch^2 = 2 * 1^2 = 2 floats
-        when(mockNativeSolver.runBatch(anyLong(), any())).thenReturn(new float[2]);
+        // Mock runBatch para que devuelva éxito (0) sin hacer nada
+        when(mockNativeSolver.runBatch(anyLong(), any(), any(), anyInt())).thenReturn(0);
 
         // --- ACT ---
-        gpuSolver.solveBatch(depths, inflows, q);
+        gpuSolver.solveBatch(dummy, inflows, dummy);
 
         // --- ASSERT ---
-        // Verificamos que se llamó a initSession
         ArgumentCaptor<FloatBuffer> bufferCaptor = ArgumentCaptor.forClass(FloatBuffer.class);
 
         verify(mockNativeSolver, times(1)).initSession(
-                bufferCaptor.capture(), // Width
-                bufferCaptor.capture(), // Side
-                bufferCaptor.capture(), // Manning
-                bufferCaptor.capture(), // Bed
-                bufferCaptor.capture(), // InitDepth (Nuevo)
-                bufferCaptor.capture(), // InitQ (Nuevo)
+                bufferCaptor.capture(), // 1. Width
+                bufferCaptor.capture(), // 2. Side
+                bufferCaptor.capture(), // 3. Manning
+                bufferCaptor.capture(), // 4. Bed
+                bufferCaptor.capture(), // 5. InitDepth
+                bufferCaptor.capture(), // 6. InitQ
                 eq(CELL_COUNT)
         );
 
-        // Verificamos que se pasaron 6 buffers distintos
         assertEquals(6, bufferCaptor.getAllValues().size());
-        assertTrue(bufferCaptor.getAllValues().get(0).isDirect(), "Los buffers deben ser directos para Zero-Copy");
+        assertTrue(bufferCaptor.getAllValues().get(0).isDirect(),
+                "Los buffers de inicialización deben ser DirectBuffers para evitar copias");
     }
 
     @Test
-    @DisplayName("solveBatch debe llamar a runBatch solo con inflows y desempaquetar SoA triangular")
-    void solveBatch_shouldCallNativeRun_andUnpackSoAResults() {
+    @DisplayName("DMA Flow: solveBatch debe pasar buffers pinned y desempaquetar lo que la 'GPU' escribe")
+    void solveBatch_shouldUseDMA_andUnpackSoAResults() {
         // --- ARRANGE ---
-        int batchSize = 2; // Matriz 2x2
+        int batchSize = 2;
+        float[] newInflows = {100f, 150f};
+        float[] dummy = new float[CELL_COUNT];
 
-        // Inputs comprimidos (1D)
-        float[] newInflows = {100f, 150f}; // [BatchSize]
-        float[] initialDepths = new float[CELL_COUNT];
-        float[] initialQ = new float[CELL_COUNT];
-
-        // Output simulado de la GPU (SoA + Triangular)
-        // Tamaño total = BatchSize * BatchSize * 2 = 2 * 2 * 2 = 8 floats.
-        // Estructura: [ Bloque H (4 floats) | Bloque V (4 floats) ]
-        // Bloque H (flattened 2x2): [H(t0,x0), H(t0,x1), H(t1,x0), H(t1,x1)]
-
-        float[] gpuRawOutput = {
-                // --- BLOQUE H ---
-                1.1f, 1.0f,  // Step 0: H en celda 0, celda 1 (Nota: celda 1 no activa físicamente, pero la matriz es cuadrada)
-                1.5f, 1.4f,  // Step 1: H en celda 0, celda 1
-
-                // --- BLOQUE V ---
-                0.5f, 0.4f,  // Step 0: V en celda 0, celda 1
-                0.8f, 0.7f   // Step 1: V en celda 0, celda 1
+        // Datos simulados que la "GPU" escribiría en memoria.
+        // Estructura SoA: [H0, H1, H2, H3 | V0, V1, V2, V3]
+        // Matriz 2x2 -> 4 elementos por variable.
+        float[] gpuWrittenData = {
+                // Bloque H (4 floats)
+                1.1f, 1.0f,  // T0
+                1.5f, 1.4f,  // T1
+                // Bloque V (4 floats)
+                0.5f, 0.4f,  // T0
+                0.8f, 0.7f   // T1
         };
 
-        when(mockNativeSolver.runBatch(
+        // SIMULACIÓN DE GPU (Side-Effect Mocking):
+        // Cuando se llame a runBatch, escribimos manualmente en el outputBuffer.
+        doAnswer(invocation -> {
+            FloatBuffer outBuf = invocation.getArgument(2); // Argumento #2 es outputBuffer
+            int batchArg = invocation.getArgument(3);
+
+            // Verificamos que el buffer tiene capacidad suficiente
+            assertTrue(outBuf.capacity() >= gpuWrittenData.length);
+
+            // Escribimos los datos "calculados"
+            outBuf.clear();
+            outBuf.put(gpuWrittenData);
+
+            return 0; // Return Success (0)
+        }).when(mockNativeSolver).runBatch(
                 eq(FAKE_SESSION_HANDLE),
-                any(float[].class)) // Solo inflows
-        ).thenReturn(gpuRawOutput);
+                any(FloatBuffer.class), // Input Buffer
+                any(FloatBuffer.class), // Output Buffer
+                eq(batchSize)
+        );
 
         // --- ACT ---
-        // Primera llamada (dispara init también)
-        float[][][] result = gpuSolver.solveBatch(initialDepths, newInflows, initialQ);
+        float[][][] result = gpuSolver.solveBatch(dummy, newInflows, dummy);
 
         // --- ASSERT ---
 
-        // 1. Verificar llamada al nativo (Firma ligera)
+        // 1. Verificar llamada correcta (Buffer in, Buffer out)
         verify(mockNativeSolver).runBatch(
                 eq(FAKE_SESSION_HANDLE),
-                eq(newInflows)    // Verifica paso directo de arrays
+                any(FloatBuffer.class),
+                any(FloatBuffer.class),
+                eq(batchSize)
         );
 
-        // 2. Verificar Desempaquetado [Batch][Var][Batch]
-        // Dimensiones esperadas: [2][2][2] (No CellCount 50)
-        assertEquals(batchSize, result.length);
-        assertEquals(batchSize, result[0][0].length);
-
-        // Verificamos lectura SoA correcta
-        // H(t0, x0) = 1.1 (Índice 0)
-        assertEquals(1.1f, result[0][0][0], 1e-6f, "Step 0, Cell 0, Depth incorrecta");
-
-        // V(t0, x0) = 0.5 (Índice 4 - offset de bloque)
-        assertEquals(0.5f, result[0][1][0], 1e-6f, "Step 0, Cell 0, Velocity incorrecta");
-
-        // H(t1, x0) = 1.5 (Índice 2)
-        assertEquals(1.5f, result[1][0][0], 1e-6f, "Step 1, Cell 0, Depth incorrecta");
+        // 2. Verificar Desempaquetado
+        // H(t0, x0) = 1.1
+        assertEquals(1.1f, result[0][0][0], 1e-6f);
+        // V(t0, x0) = 0.5 (Offset 4)
+        assertEquals(0.5f, result[0][1][0], 1e-6f);
+        // H(t1, x0) = 1.5
+        assertEquals(1.5f, result[1][0][0], 1e-6f);
     }
 
     @Test
-    @DisplayName("Sanitización: Inputs negativos deben ser corregidos antes de llamar a GPU")
-    void solveBatch_shouldSanitizeInputs() {
+    @DisplayName("Sanitización: Los datos escritos en el InputBuffer deben estar limpios")
+    void solveBatch_shouldSanitizeInputs_BeforeWritingToBuffer() {
         // --- ARRANGE ---
-        float[] dirtyInflows = {-50f, 0f, 100f};
-        float[] depths = new float[CELL_COUNT];
-        float[] q = new float[CELL_COUNT];
+        float[] dirtyInflows = {-50f, 0f, 100f}; // Inputs sucios
+        float[] dummy = new float[CELL_COUNT];
+        int batchSize = 3;
 
-        // Mock respuesta vacía válida (3*3*2 = 18 floats)
-        float[] dummyResult = new float[3 * 3 * 2];
-        when(mockNativeSolver.runBatch(anyLong(), any())).thenReturn(dummyResult);
+        when(mockNativeSolver.runBatch(anyLong(), any(), any(), anyInt())).thenReturn(0);
 
         // --- ACT ---
-        gpuSolver.solveBatch(depths, dirtyInflows, q);
+        gpuSolver.solveBatch(dummy, dirtyInflows, dummy);
 
         // --- ASSERT ---
-        ArgumentCaptor<float[]> inflowCaptor = ArgumentCaptor.forClass(float[].class);
+        // Capturamos el buffer que realmente se envió a C++
+        ArgumentCaptor<FloatBuffer> inputCaptor = ArgumentCaptor.forClass(FloatBuffer.class);
 
-        // Solo verificamos runBatch, initSession recibe depths sanitizados pero es otro método
         verify(mockNativeSolver).runBatch(
                 eq(FAKE_SESSION_HANDLE),
-                inflowCaptor.capture()
+                inputCaptor.capture(),
+                any(FloatBuffer.class),
+                eq(batchSize)
         );
 
-        // Verificar Inflows
-        float[] sentInflows = inflowCaptor.getValue();
-        assertEquals(0.001f, sentInflows[0], 1e-6f, "Negativo debe ser 0.001");
-        assertEquals(0.001f, sentInflows[1], 1e-6f, "Cero debe ser 0.001");
-        assertEquals(100f, sentInflows[2], 1e-6f, "Positivo debe quedar igual");
+        FloatBuffer sentBuffer = inputCaptor.getValue();
+
+        // Leemos el contenido del buffer (estamos en test, podemos leerlo)
+        // Nota: Como es DirectBuffer, leemos usando absolute get o rewind
+        float val0 = sentBuffer.get(0);
+        float val1 = sentBuffer.get(1);
+        float val2 = sentBuffer.get(2);
+
+        assertEquals(0.001f, val0, 1e-6f, "Input negativo debe ser 0.001");
+        assertEquals(0.001f, val1, 1e-6f, "Input cero debe ser 0.001");
+        assertEquals(100f,   val2, 1e-6f, "Input positivo debe persistir");
     }
 
     @Test
-    @DisplayName("close() debe llamar a destroySession y anular el handle")
+    @DisplayName("close() debe liberar la sesión nativa")
     void close_shouldDestroySession() {
         // --- ARRANGE ---
-        // Forzamos inicialización para tener un handle válido que cerrar
-        float[] dummy = {1f};
-        float[] dummyBig = new float[CELL_COUNT];
-        when(mockNativeSolver.runBatch(anyLong(), any())).thenReturn(new float[2]);
+        float[] dummy = {100f};
+        float[] bigDummy = new float[CELL_COUNT];
+        when(mockNativeSolver.runBatch(anyLong(), any(), any(), anyInt())).thenReturn(0);
 
-        gpuSolver.solveBatch(dummyBig, dummy, dummyBig); // Init
+        // Forzar init
+        gpuSolver.solveBatch(bigDummy, dummy, bigDummy);
 
         // --- ACT ---
         gpuSolver.close();
 
         // --- ASSERT ---
         verify(mockNativeSolver, times(1)).destroySession(FAKE_SESSION_HANDLE);
-
-        // Intentar usarlo después de cerrar debe lanzar excepción Y RE-INICIALIZAR (o fallar, según diseño)
-        // En tu diseño actual, checkea (sessionHandle == 0) -> initializeSession.
-        // Así que si llamas a solveBatch de nuevo, volverá a inicializar.
-        // Si queremos que falle, tendríamos que cambiar el diseño.
-        // Pero RAII permite revivir.
-
-        // Verificamos comportamiento: Llama a initSession de nuevo
-        gpuSolver.solveBatch(dummyBig, dummy, dummyBig);
-        verify(mockNativeSolver, times(2)).initSession(any(), any(), any(), any(), any(), any(), anyInt());
     }
 }

@@ -1,3 +1,4 @@
+// src/main/java/projectstalker/physics/jni/INativeManningSolver.java
 package projectstalker.physics.jni;
 
 import java.nio.FloatBuffer;
@@ -21,14 +22,23 @@ public interface INativeManningSolver {
     );
 
     /**
-     * Lifecycle: Run
+     * Lifecycle: Run (DMA / Zero-Copy)
      * Ejecuta el batch pasando SOLO los datos dinámicos (Extrinsic State).
+     * <p>
+     * Ahora opera "in-place" sobre memoria Pinned.
      *
      * @param sessionHandle Puntero a la sesión C++.
-     * @param newInflows    Array primitivo comprimido [BatchSize] para Pinning rápido.
-     * @return Array plano con la matriz cuadrada de resultados [BatchSize * BatchSize * 2].
+     * @param inputBuffer   Buffer Directo con los nuevos inflows (Input).
+     * @param outputBuffer  Buffer Directo donde escribir resultados (Output).
+     * @param batchSize     Tamaño del batch a procesar.
+     * @return Código de estado (0 = éxito).
      */
-    float[] runBatch(long sessionHandle, float[] newInflows);
+    int runBatch(
+            long sessionHandle,
+            FloatBuffer inputBuffer,
+            FloatBuffer outputBuffer,
+            int batchSize
+    );
 
     // Lifecycle: Destroy
     void destroySession(long sessionHandle);

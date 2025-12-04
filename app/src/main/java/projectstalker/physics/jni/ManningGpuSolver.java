@@ -11,53 +11,52 @@ import java.nio.FloatBuffer;
  * Actúa como un puente (wrapper) Stateful hacia la librería nativa JNI para resolver
  * la ecuación de Manning en la GPU.
  * <p>
- * Implementa el patrón RAII: Inicializa la sesión GPU de forma perezosa (Lazy) y la libera en close().
+ * REFACTORIZADO PARA DMA (Direct Memory Access):
+ * Mantiene buffers de memoria "Pinned" (DirectByteBuffer) persistentes para reutilizarlos
+ * en cada batch, eliminando la fragmentación del Heap y las copias de JNI.
  */
 @Slf4j
 public final class ManningGpuSolver implements AutoCloseable {
 
     private final INativeManningSolver nativeSolver;
     private long sessionHandle = 0; // Puntero a la sesión C++ (0 = inválido)
-    private final int cellCount; // Guardado para validaciones
-    private final RiverGeometry geometry; // Guardamos referencia para el Lazy Init
+    private final int cellCount;
+    private final RiverGeometry geometry;
 
-    // Constructor Principal (Stateful)
-    // Se asume que este Solver se crea UNA vez por simulación y se reutiliza.
+    // --- DMA Buffers (Reutilizables) ---
+    // Se asignan una vez y crecen solo si es necesario.
+    // Al ser DirectBuffers, residen fuera del Garbage Collector y tienen dirección física fija.
+    private FloatBuffer inputBuffer = null;
+    private FloatBuffer outputBuffer = null;
+
     public ManningGpuSolver(RiverGeometry geometry) {
         this(NativeManningGpuSingleton.getInstance(), geometry);
     }
 
-    // Constructor para Inyección de Dependencias (Testing)
     public ManningGpuSolver(INativeManningSolver nativeSolver, RiverGeometry geometry) {
         this.nativeSolver = nativeSolver;
         this.geometry = geometry;
         this.cellCount = geometry.getCellCount();
-        // NOTA: Ya no llamamos a initializeSession aquí (Lazy Init)
     }
 
     /**
-     * Inicializa la sesión GPU.
-     * Convierte la geometría Java y el ESTADO INICIAL a Buffers Directos y llama al Init nativo.
-     * Se ejecuta solo la primera vez que se llama a solveBatch.
+     * Inicializa la sesión GPU (Lazy Init).
+     * Mantiene la lógica original de crear buffers temporales solo para la carga inicial.
      */
     private void initializeSession(float[] initialDepths, float[] initialQ) {
         log.info("Inicializando sesión GPU Manning (Lazy) para {} celdas...", cellCount);
 
-        // 1. Preparar Geometría (Calculando pendientes si es necesario)
         float[] slopeArray = calculateAndSanitizeBedSlopes(this.geometry);
 
-        // 2. Crear Direct Buffers (Geometría)
+        // Buffers temporales (solo viven durante esta llamada)
         FloatBuffer widthBuf   = createDirectBuffer(this.geometry.getBottomWidth());
         FloatBuffer sideBuf    = createDirectBuffer(this.geometry.getSideSlope());
         FloatBuffer manningBuf = createDirectBuffer(this.geometry.getManningCoefficient());
         FloatBuffer bedBuf     = createDirectBuffer(slopeArray);
 
-        // 3. Crear Direct Buffers (Estado Inicial - Flyweight Intrinsic)
-        // Sanitizamos antes de enviar para asegurar estabilidad numérica en el estado base
         FloatBuffer depthBuf   = createDirectBuffer(sanitizeDepths(initialDepths));
-        FloatBuffer qBuf       = createDirectBuffer(initialQ); // Q puede ser negativo, no sanitizamos agresivamente
+        FloatBuffer qBuf       = createDirectBuffer(initialQ);
 
-        // 4. Llamada Nativa (Baking + Carga)
         this.sessionHandle = nativeSolver.initSession(
                 widthBuf, sideBuf, manningBuf, bedBuf,
                 depthBuf, qBuf,
@@ -71,36 +70,101 @@ public final class ManningGpuSolver implements AutoCloseable {
     }
 
     /**
-     * Resuelve un lote de pasos de tiempo en la GPU.
+     * Resuelve un lote de pasos de tiempo en la GPU usando DMA.
      *
-     * @param initialDepths        Estado de profundidad en t=0 del batch. Se usa para initSession la primera vez.
-     * @param newInflows           Array 1D [BatchSize] con los caudales que entran al río.
-     * @param initialRiverStateQ   Estado de caudal en t=0 del batch. Se usa para initSession la primera vez.
-     * @return [batchSize][2][batchSize] Matriz triangular/cuadrada con los NUEVOS datos calculados.
+     * @return [batchSize][2][activeWidth] Matriz triangular/cuadrada con los resultados.
      */
     public float[][][] solveBatch(float[] initialDepths, float[] newInflows, float[] initialRiverStateQ) {
-        // --- LAZY INITIALIZATION ---
+        // 1. Lazy Initialization
         if (sessionHandle == 0) {
             initializeSession(initialDepths, initialRiverStateQ);
         }
 
         int batchSize = newInflows.length;
 
-        // 1. Sanitización ligera (solo de inputs dinámicos)
+        // 2. Sanitización (Ligera)
         float[] safeInflows = sanitizeInflows(newInflows);
 
-        // 2. Ejecución Nativa (Zero-Copy Pinning)
-        // Pasamos SOLO lo que cambia (Flyweight Extrinsic State)
-        float[] packedResults = nativeSolver.runBatch(sessionHandle, safeInflows);
+        // 3. Preparación de Memoria DMA
+        // Calculamos el tamaño exacto de salida esperado (Triangular/Cuadrado optimizado)
+        int activeWidth = Math.min(batchSize, cellCount);
+        int neededOutputFloats = batchSize * activeWidth * 2; // H y V
 
-        // 3. Desempaquetado (SoA -> Estructurado 3D)
-        // Devuelve la matriz cuadrada activa, no todo el río.
-        return unpackGpuResults(packedResults, batchSize);
+        // Redimensionamos los buffers directos si el batch creció
+        ensureBuffersCapacity(batchSize, neededOutputFloats);
+
+        // 4. Llenado del Buffer de Entrada (Java Heap -> Pinned Memory)
+        this.inputBuffer.clear(); // Resetear punteros
+        this.inputBuffer.put(safeInflows);
+        // No es necesario 'flip' para JNI GetDirectBufferAddress, pero la posición queda al final.
+
+        // 5. EJECUCIÓN NATIVA (Zero-Copy)
+        // Pasamos los buffers, no arrays. C++ escribe directo en outputBuffer.
+        int status = nativeSolver.runBatch(sessionHandle, inputBuffer, outputBuffer, batchSize);
+
+        if (status != 0) {
+            throw new RuntimeException("Error nativo en Manning GPU. Código: " + status);
+        }
+
+        // 6. Recuperación de Resultados (Pinned Memory -> Java Heap)
+        // Volcamos el buffer directo a un array temporal Java para procesarlo rápido.
+        // Usamos 'bulk get' que es mucho más rápido que leer float a float.
+        float[] tempResults = new float[neededOutputFloats];
+
+        this.outputBuffer.clear(); // IMPORTANTE: Resetear posición a 0 para leer desde el principio
+        this.outputBuffer.get(tempResults); // Copia rápida de memoria
+
+        // 7. Desempaquetado
+        return unpackGpuResults(tempResults, batchSize);
     }
 
     /**
-     * Libera los recursos de la GPU.
+     * Asegura que los buffers tengan el tamaño correcto aplicando la lógica de histéresis:
+     * - Crece si falta espacio.
+     * - Se encoge si sobra más del doble de lo necesario.
+     * - En ambos casos de re-alloc, aplica un factor de seguridad del 20% (x1.2).
      */
+    private void ensureBuffersCapacity(int requiredInputFloats, int requiredOutputFloats) {
+        this.inputBuffer = manageBufferResize(this.inputBuffer, requiredInputFloats);
+        this.outputBuffer = manageBufferResize(this.outputBuffer, requiredOutputFloats);
+    }
+
+    /**
+     * Implementa la lógica de resizing C++:
+     * if (needed > cap || cap > needed * 2) -> reallocate(needed * 1.2)
+     */
+    private FloatBuffer manageBufferResize(FloatBuffer currentBuffer, int neededElements) {
+        // Caso 1: Inicialización
+        if (currentBuffer == null) {
+            return allocateDirectFloatBuffer((int) (neededElements * 1.2f));
+        }
+
+        int currentCap = currentBuffer.capacity();
+
+        // Lógica de Resizing (Grow or Shrink)
+        // Si no cabe, O si es monstruosamente grande para lo que necesitamos hoy
+        if (neededElements > currentCap || currentCap > (neededElements * 2)) {
+            // Calculamos nuevo tamaño con 20% de margen de seguridad
+            int newSize = (int) (neededElements * 1.2f);
+
+            // Nota: Al perder la referencia 'currentBuffer', el Cleaner de Java
+            // eventualmente liberará la memoria nativa antigua.
+            return allocateDirectFloatBuffer(newSize);
+        }
+
+        // El buffer actual es válido y eficiente
+        return currentBuffer;
+    }
+
+    private FloatBuffer allocateDirectFloatBuffer(int floats) {
+        // Aseguramos al menos 1 float para evitar buffers de tamaño 0
+        if (floats < 1) floats = 1;
+
+        return ByteBuffer.allocateDirect(floats * 4)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer();
+    }
+
     @Override
     public void close() {
         if (sessionHandle != 0) {
@@ -108,14 +172,15 @@ public final class ManningGpuSolver implements AutoCloseable {
             nativeSolver.destroySession(sessionHandle);
             sessionHandle = 0;
         }
+        // Ayudamos al GC liberando referencias fuertes a los buffers directos
+        inputBuffer = null;
+        outputBuffer = null;
     }
 
-    // --- Helpers de Desempaquetado y Sanitización ---
+    // --- Helpers de Desempaquetado y Sanitización (Inalterados en lógica) ---
 
     private float[][][] unpackGpuResults(float[] gpuResults, int batchSize) {
-        // El tamaño esperado ahora es el cuadrado del batch (H y V)
-        // Tamaño = BatchSize * BatchSize * 2
-        int activeWidth = Math.min(batchSize, cellCount); // Seguridad por si el batch es gigante
+        int activeWidth = Math.min(batchSize, cellCount);
         int expectedSize = batchSize * activeWidth * 2;
 
         if (gpuResults == null || gpuResults.length != expectedSize) {
@@ -124,14 +189,11 @@ public final class ManningGpuSolver implements AutoCloseable {
                     expectedSize, gpuResults != null ? gpuResults.length : 0));
         }
 
-        // Matriz de retorno: [Tiempo][Variable][Espacio_Activo]
-        // Nota: La dimensión espacial es 'activeWidth' (BatchSize), NO 'cellCount'.
         float[][][] results = new float[batchSize][2][activeWidth];
 
-        // Layout GPU SoA: [ Bloque H (size=NxN) | Bloque V (size=NxN) ]
-        int blockSize = batchSize * activeWidth;
+        // Layout GPU SoA: [ Bloque H ] [ Bloque V ]
         int offsetH = 0;
-        int offsetV = blockSize;
+        int offsetV = batchSize * activeWidth; // Mitad del array
 
         int ptrH = offsetH;
         int ptrV = offsetV;
@@ -149,7 +211,6 @@ public final class ManningGpuSolver implements AutoCloseable {
         boolean dirty = false;
         for(float f : inflows) if(f <= 0) { dirty = true; break; }
         if(!dirty) return inflows;
-
         float[] clean = new float[inflows.length];
         for(int i=0; i<inflows.length; i++) clean[i] = Math.max(0.001f, inflows[i]);
         return clean;
@@ -159,32 +220,27 @@ public final class ManningGpuSolver implements AutoCloseable {
         boolean dirty = false;
         for(float f : depths) if(f < 1e-3f) { dirty = true; break; }
         if(!dirty) return depths;
-
         float[] clean = new float[depths.length];
         for(int i=0; i<depths.length; i++) clean[i] = Math.max(0.001f, depths[i]);
         return clean;
     }
 
     private float[] calculateAndSanitizeBedSlopes(RiverGeometry geometry) {
-        // (Nota: Usamos clone aquí porque es una operación única en init)
         float[] elevations = geometry.cloneElevationProfile();
         float dx = geometry.getSpatialResolution();
         int n = geometry.getCellCount();
         float[] slopes = new float[n];
-
         for (int i = 0; i < n - 1; i++) {
             double s = (elevations[i] - elevations[i + 1]) / dx;
             slopes[i] = (float) Math.max(1e-7, s);
         }
         if (n > 0) slopes[n - 1] = (n > 1) ? slopes[n - 2] : 1e-7f;
-
         return slopes;
     }
 
+    // Helper antiguo para initSession (ahora usa allocateDirectFloatBuffer para la nueva lógica)
     private FloatBuffer createDirectBuffer(float[] data) {
-        ByteBuffer bb = ByteBuffer.allocateDirect(data.length * 4);
-        bb.order(ByteOrder.nativeOrder());
-        FloatBuffer fb = bb.asFloatBuffer();
+        FloatBuffer fb = allocateDirectFloatBuffer(data.length);
         fb.put(data);
         fb.position(0);
         return fb;

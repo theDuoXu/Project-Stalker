@@ -37,7 +37,7 @@ class ManningBatchProcessorTest {
     private SimulationConfig mockConfig;
 
     // Dimensiones predichas para el río (100000m / 50m = 2000 celdas)
-    private final int CELL_COUNT = 2000;
+    private int cellCount;
     private final int BATCH_SIZE = 3;
     private final double DELTA_TIME = 10.0;
 
@@ -51,7 +51,7 @@ class ManningBatchProcessorTest {
         // --- 2. Inicializar INSTANCIAS REALES de Modelos Fisicoquímicos ---
         this.realTempModel = new RiverTemperatureModel(config, this.realGeometry);
         this.realPhModel = new RiverPhModel(this.realGeometry);
-
+        this.cellCount = this.realGeometry.getCellCount();
         // --- 3. Inicializar Mocks de Configuración ---
         mockConfig = mock(SimulationConfig.class);
         when(mockConfig.getCpuProcessorCount()).thenReturn(2);
@@ -85,10 +85,10 @@ class ManningBatchProcessorTest {
 
         // 1. Estado Inicial
         float initialUniformDepth = 0.5f;
-        float[] initialData = new float[CELL_COUNT];
+        float[] initialData = new float[cellCount];
         Arrays.fill(initialData, initialUniformDepth);
         // Velocidad inicial uniforme
-        float[] initialVel = new float[CELL_COUNT];
+        float[] initialVel = new float[cellCount];
         Arrays.fill(initialVel, 1.0f);
 
         RiverState initialRiverState = new RiverState(
@@ -102,7 +102,7 @@ class ManningBatchProcessorTest {
         Arrays.fill(newInflows, 200.0f); // Caudal de entrada constante
 
         // 3. Resultados Fisicoquímicos (Pre-cálculo)
-        float[][][] phTmp = new float[BATCH_SIZE][2][CELL_COUNT];
+        float[][][] phTmp = new float[BATCH_SIZE][2][cellCount];
         float timeStep = 0.0f;
         for (int i = 0; i < BATCH_SIZE; i++) {
             double t = currentTime + timeStep;
