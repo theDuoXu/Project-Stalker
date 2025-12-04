@@ -20,11 +20,12 @@ static void throw_java_exception(JNIEnv *env, const char* message) {
 }
 
 // Convierte std::vector<float> a jfloatArray para devolver resultados
+// NOTA: Se mantiene para la API de Transporte (Legacy) que aún usa vectores.
 static jfloatArray vector_to_jfloatarray(JNIEnv *env, const std::vector<float>& vec) {
     if (vec.empty()) return env->NewFloatArray(0);
-    
+
     // Check de seguridad por si el vector es monstruoso
-    if (vec.size() > (size_t)2147483647) { 
+    if (vec.size() > (size_t)2147483647) {
         throw_java_exception(env, "El resultado de la GPU excede el tamaño máximo de array en Java.");
         return nullptr;
     }
@@ -32,7 +33,7 @@ static jfloatArray vector_to_jfloatarray(JNIEnv *env, const std::vector<float>& 
     jsize size = static_cast<jsize>(vec.size());
     jfloatArray result = env->NewFloatArray(size);
     if (result == nullptr) return nullptr; // OutOfMemoryError ya lanzado por JVM
-    
+
     env->SetFloatArrayRegion(result, 0, size, vec.data());
     return result;
 }
@@ -40,22 +41,24 @@ static jfloatArray vector_to_jfloatarray(JNIEnv *env, const std::vector<float>& 
 extern "C" {
 
 // =============================================================================
-// SECCIÓN 1: NUEVA API MANNING (Stateful + Zero Copy Híbrido + Flyweight)
+// SECCIÓN 1: NUEVA API MANNING (Stateful + Zero Copy Total + Flyweight)
 // =============================================================================
 
 /*
  * Inicializa la sesión GPU.
- * Usa DirectBuffers para la geometría estática y ahora también para el ESTADO INICIAL (Flyweight).
+ * Usa DirectBuffers para la geometría estática y el ESTADO INICIAL (Flyweight).
+ * Mantiene la lógica de "Punteros Directos" ya implementada en el paso anterior.
  */
 JNIEXPORT jlong JNICALL
 Java_projectstalker_physics_jni_NativeManningGpuSingleton_initSession(
     JNIEnv *env, jobject thiz,
     jobject widthBuf, jobject slopeBuf, jobject manningBuf, jobject bedBuf,
-    jobject initDepthBuf, jobject initQBuf, // <--- NUEVOS ARGUMENTOS
+    jobject initDepthBuf, jobject initQBuf,
     jint cellCount
 ) {
     try {
         // Obtener punteros directos (Zero-Copy desde DirectBuffers)
+        // Java garantiza que la memoria está "Pinned" al usar allocateDirect()
         float* pWidth   = (float*)env->GetDirectBufferAddress(widthBuf);
         float* pSlope   = (float*)env->GetDirectBufferAddress(slopeBuf);
         float* pManning = (float*)env->GetDirectBufferAddress(manningBuf);
@@ -67,7 +70,7 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_initSession(
 
         // Validación básica de punteros
         if (!pWidth || !pSlope || !pManning || !pBed || !pInitDepth || !pInitQ) {
-            throw_java_exception(env, "Error JNI Init: Buffers inválidos (deben ser DirectBuffers).");
+            throw_java_exception(env, "Error JNI Init: Buffers inválidos. Asegúrese de usar ByteBuffer.allocateDirect().");
             return 0;
         }
 
@@ -88,62 +91,56 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_initSession(
 }
 
 /*
- * Ejecuta el batch.
- * MODIFICADO: Ahora es mucho más ligero (Flyweight).
- * Solo recibe 'newInflowsArr'. El estado inicial ya reside en la GPU.
+ * Ejecuta el batch usando DMA (Zero-Copy).
+ * MODIFICADO:
+ * 1. Recibe Buffers de Entrada y Salida pre-asignados (Input/Output).
+ * 2. No devuelve array (escribe in-place).
+ * 3. No realiza allocations (new/malloc) durante la ejecución.
  */
-JNIEXPORT jfloatArray JNICALL
+JNIEXPORT jint JNICALL
 Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
     JNIEnv *env, jobject thiz,
     jlong handle,
-    jfloatArray newInflowsArr
-    // ELIMINADOS: initialDepthsArr, initialQArr (Ya están en la sesión)
+    jobject inputBuf,  // Buffer Directo de Entrada (Inflows)
+    jobject outputBuf, // Buffer Directo de Salida (Results)
+    jint batchSize
 ) {
     // 1. Validar Sesión
     ManningSession* session = (ManningSession*)handle;
     if (!session) {
         throw_java_exception(env, "Error JNI Run: La sesión de Manning es nula o ha sido cerrada.");
-        return nullptr;
+        return -1;
     }
 
-    // 2. Acceso Crítico a Arrays Java (Pinning)
-    // Solo necesitamos pinear el array de inflows (que es pequeño)
-    void* pNewInflows = env->GetPrimitiveArrayCritical(newInflowsArr, nullptr);
+    // 2. Obtener Direcciones de Memoria Pinned (Zero-Copy)
+    // GetDirectBufferAddress devuelve el puntero crudo a la memoria física.
+    // Coste: Casi cero.
+    float* pInput  = (float*)env->GetDirectBufferAddress(inputBuf);
+    float* pOutput = (float*)env->GetDirectBufferAddress(outputBuf);
 
-    if (!pNewInflows) {
-        throw_java_exception(env, "Error JNI Run: Fallo crítico al acceder a arrays de memoria.");
-        return nullptr;
+    if (!pInput || !pOutput) {
+        throw_java_exception(env, "Error JNI Run: Buffers no son directos (allocateDirect) o son inválidos.");
+        return -2;
     }
-
-    jsize batchSize = env->GetArrayLength(newInflowsArr);
-    std::vector<float> results;
-    std::string errorMsg;
 
     // 3. Ejecución C++ (Protegida)
+    // Los datos viajan GPU <-> RAM(Pinned) directamente vía DMA.
     try {
-        results = run_manning_batch_stateful(
+        run_manning_batch_stateful(
             session,
-            (float*)pNewInflows,
+            pInput,
+            pOutput,
             (int)batchSize
         );
+        return 0; // Éxito
+
     } catch (const std::exception& e) {
-        errorMsg = e.what();
+        throw_java_exception(env, e.what());
+        return -3;
     } catch (...) {
-        errorMsg = "Error desconocido nativo en Manning Run.";
+        throw_java_exception(env, "Error desconocido nativo en Manning Run.");
+        return -4;
     }
-
-    // 4. Liberar Pinning (JNI_ABORT = No copiar de vuelta, solo leímos inputs)
-    env->ReleasePrimitiveArrayCritical(newInflowsArr, pNewInflows, JNI_ABORT);
-
-    // 5. Manejo de Errores Diferido
-    if (!errorMsg.empty()) {
-        throw_java_exception(env, errorMsg.c_str());
-        return nullptr;
-    }
-
-    // 6. Convertir y retornar resultados
-    // Nota: El vector 'results' ahora es más pequeño (Triangular/Cuadrado), Java deberá reconstruirlo.
-    return vector_to_jfloatarray(env, results);
 }
 
 /*
@@ -172,7 +169,7 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_solveManningGpu(
     jfloatArray bottomWidths, jfloatArray sideSlopes,
     jfloatArray manningCoefficients, jfloatArray bedSlopes)
 {
-    throw_java_exception(env, "MÉTODO OBSOLETO: solveManningGpu. Use la nueva API Stateful (initSession/runBatch).");
+    throw_java_exception(env, "MÉTODO OBSOLETO: solveManningGpu. Use la nueva API Stateful DMA.");
     return nullptr;
 }
 
@@ -183,7 +180,7 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_solveManningGpuBatch(
     jint batchSize, jint cellCount,
     jobject bottomWidthBuf, jobject sideSlopeBuf, jobject manningBuf, jobject bedSlopeBuf)
 {
-    throw_java_exception(env, "MÉTODO OBSOLETO: solveManningGpuBatch. Use la nueva API Stateful (initSession/runBatch).");
+    throw_java_exception(env, "MÉTODO OBSOLETO: solveManningGpuBatch. Use la nueva API Stateful DMA.");
     return nullptr;
 }
 

@@ -1,8 +1,6 @@
 // src/main/cpp/include/projectstalker/physics/manning_solver.h
 #pragma once
 
-#include <vector>
-
 /**
  * Estructura de Sesión para Manning (Stateful).
  * Mantiene la geometría residente en VRAM y gestiona buffers adaptativos
@@ -57,24 +55,27 @@ ManningSession* init_manning_session(
     const float* h_sideSlopes,
     const float* h_manningCoeffs,
     const float* h_bedSlopes,
-    const float* h_initialDepths, // <--- NUEVO: Carga pesada en init
-    const float* h_initialQ,      // <--- NUEVO: Carga pesada en init
+    const float* h_initialDepths,
+    const float* h_initialQ,
     int cellCount
 );
 
 /**
- * Ejecuta un batch de simulación utilizando la sesión persistente.
- * LIGERO: Solo recibe los nuevos caudales (Extrinsic State).
- * Reutiliza el estado base cargado en init.
+ * Ejecuta un batch de simulación utilizando la sesión persistente y memoria PINNED.
  *
- * @param session      Puntero a la sesión activa.
- * @param h_newInflows Array comprimido de caudales de entrada [BatchSize].
- * @param batchSize    Número de pasos a simular.
- * @return Vector con los resultados del triangulo activo [BatchSize^2 * 2].
+ * DMA / ZERO-COPY:
+ * Ya no devuelve un vector. Escribe directamente en 'h_pinned_results',
+ * que es memoria mapeada directamente desde Java (DirectBuffer).
+ *
+ * @param session           Puntero a la sesión activa.
+ * @param h_pinned_inflows  Puntero a memoria PINNED con los caudales nuevos.
+ * @param h_pinned_results  Puntero a memoria PINNED donde escribir [BatchSize^2 * 2].
+ * @param batchSize         Número de pasos a simular.
  */
-std::vector<float> run_manning_batch_stateful(
+void run_manning_batch_stateful(
     ManningSession* session,
-    const float* h_newInflows, // Solo pasamos el delta
+    const float* h_pinned_inflows, // Input Zero-Copy
+    float* h_pinned_results,       // Output Zero-Copy
     int batchSize
 );
 

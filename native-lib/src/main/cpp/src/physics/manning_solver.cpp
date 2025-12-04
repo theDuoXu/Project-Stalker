@@ -1,7 +1,7 @@
+// src/main/cpp/src/physics/manning_solver.cpp
 #include "projectstalker/physics/manning_solver.h"
 #include "projectstalker/physics/manning_kernel.h"
 #include <cuda_runtime.h>
-#include <vector>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -111,24 +111,29 @@ static void resize_buffer_if_needed(float** ptr, size_t* currentCap, size_t need
     }
 }
 
-std::vector<float> run_manning_batch_stateful(
+// DMA / Zero-Copy Enabled Version
+void run_manning_batch_stateful(
     ManningSession* session,
-    const float* h_newInflows, // Solo pasamos lo que cambia (Extrinsic)
+    const float* h_pinned_inflows, // DMA Input Pointer
+    float* h_pinned_results,       // DMA Output Pointer
     int batchSize
 ) {
-    if (!session || batchSize <= 0) return {};
+    if (!session || batchSize <= 0) return;
 
     int cellCount = session->cellCount;
     // El kernel escribe en formato SoA, necesitamos espacio para todo el bloque [H... | V...]
+    // Nota: Aunque solo copiamos un subconjunto de vuelta, la GPU calcula todo o escribe en un buffer lineal.
+    // Aquí asumimos que d_results debe ser capaz de alojar (BatchSize * CellCount * 2).
     size_t totalThreads = (size_t)batchSize * cellCount;
     size_t neededOutputElements = totalThreads * 2; // H y V
 
-    // --- 1. Gestión de Memoria Adaptativa ---
+    // --- 1. Gestión de Memoria Adaptativa (Buffers Internos GPU) ---
     resize_buffer_if_needed(&session->d_newInflows, &session->inputBatchCapacity, (size_t)batchSize);
     resize_buffer_if_needed(&session->d_results, &session->resultCapacityElements, neededOutputElements);
 
-    // --- 2. Transferencia Mínima (Input) ---
-    CUDA_CHECK_M(cudaMemcpy(session->d_newInflows, h_newInflows, batchSize * sizeof(float), cudaMemcpyHostToDevice));
+    // --- 2. Transferencia Mínima (Input via DMA) ---
+    // Al ser h_pinned_inflows memoria pinned (DirectBuffer), el driver usa DMA directo.
+    CUDA_CHECK_M(cudaMemcpy(session->d_newInflows, h_pinned_inflows, batchSize * sizeof(float), cudaMemcpyHostToDevice));
 
     // --- 3. Ejecución del Kernel (Smart Fetch + SoA Output) ---
     launchManningSmartKernel(
@@ -146,32 +151,25 @@ std::vector<float> run_manning_batch_stateful(
     );
 
     CUDA_CHECK_M(cudaGetLastError());
-    CUDA_CHECK_M(cudaDeviceSynchronize());
 
-    // --- 4. Recuperación de Resultados (OPTIMIZADA - Triangular Transfer) ---
+    // --- 4. Recuperación de Resultados (DMA Output - Triangular Transfer) ---
 
     // AHORRO CRÍTICO: No bajamos todo el río (CellCount).
     // Solo bajamos la región donde la ola ha podido llegar.
-    // Como simplificación eficiente, bajamos el cuadrado [BatchSize x BatchSize].
-    // Si BatchSize=5000 y CellCount=50000, bajamos 25M en vez de 250M floats.
-
     int activeWidth = batchSize;
-    // Seguridad: Si el batch es mayor que el río (raro), limitamos al río. (imposible, explota en memoria)
+    // Seguridad: Si el batch es mayor que el río (raro), limitamos al río.
     if (activeWidth > cellCount) activeWidth = cellCount;
-
-    size_t outputSizeSmall = (size_t)batchSize * activeWidth * 2; // H y V
-    std::vector<float> host_results(outputSizeSmall);
 
     // Configuración para cudaMemcpy2D
     // Pitch (ancho de fila en bytes)
-    size_t srcPitch = cellCount * sizeof(float); // Ancho real en GPU
-    size_t dstPitch = activeWidth * sizeof(float); // Ancho compactado en CPU
+    size_t srcPitch = cellCount * sizeof(float);   // Ancho real en GPU
+    size_t dstPitch = activeWidth * sizeof(float); // Ancho compactado en CPU (Host Buffer)
     size_t widthBytes = activeWidth * sizeof(float);
     size_t height = batchSize;
 
-    // A. Copiar bloque H (Inicio de d_results)
+    // A. Copiar bloque H (Inicio de d_results) -> Primera mitad de h_pinned_results
     float* src_H = session->d_results;
-    float* dst_H = host_results.data(); // Primera mitad del vector host
+    float* dst_H = h_pinned_results;
 
     CUDA_CHECK_M(cudaMemcpy2D(
         dst_H, dstPitch,
@@ -180,9 +178,10 @@ std::vector<float> run_manning_batch_stateful(
         cudaMemcpyDeviceToHost
     ));
 
-    // B. Copiar bloque V (Desplazado por totalThreads en GPU)
-    float* src_V = session->d_results + totalThreads; // Offset SoA
-    float* dst_V = host_results.data() + (batchSize * activeWidth); // Segunda mitad vector host
+    // B. Copiar bloque V (Desplazado por totalThreads en GPU) -> Segunda mitad de h_pinned_results
+    // Calculamos el offset en el buffer de salida: [ Bloque H (Batch x Width) ] [ AQUÍ EMPIEZA V ]
+    float* src_V = session->d_results + totalThreads; // Offset SoA en GPU
+    float* dst_V = h_pinned_results + (batchSize * activeWidth); // Offset lineal en Host
 
     CUDA_CHECK_M(cudaMemcpy2D(
         dst_V, dstPitch,
@@ -191,7 +190,9 @@ std::vector<float> run_manning_batch_stateful(
         cudaMemcpyDeviceToHost
     ));
 
-    return host_results;
+    // Sincronización final obligatoria para asegurar que la escritura DMA terminó
+    // antes de que Java intente leer el buffer.
+    CUDA_CHECK_M(cudaDeviceSynchronize());
 }
 
 void destroy_manning_session(ManningSession* session) {
