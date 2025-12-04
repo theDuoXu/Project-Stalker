@@ -9,7 +9,7 @@ import projectstalker.config.RiverConfig;
 import projectstalker.config.SimulationConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.ManningSimulationResult;
+import projectstalker.domain.simulation.ISimulationResult; // <--- Cambio a Interfaz
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.model.RiverPhModel;
 import projectstalker.physics.model.RiverTemperatureModel;
@@ -23,7 +23,7 @@ import static org.mockito.Mockito.*;
 /**
  * Test unitario para ManningBatchProcessor.
  * <p>
- * REFACTORIZADO: Adaptado a la nueva arquitectura Stateful/Smart Fetch.
+ * REFACTORIZADO: Adaptado a la nueva arquitectura Stateful/Smart Fetch e Interfaz ISimulationResult.
  * Verifica la lógica de ensamblaje en modo CPU (Legacy/Integrity Check) utilizando
  * modelos fisicoquímicos reales.
  */
@@ -56,10 +56,11 @@ class ManningBatchProcessorTest {
         mockConfig = mock(SimulationConfig.class);
         when(mockConfig.getCpuProcessorCount()).thenReturn(2);
         // Probamos el modo CPU, pero el constructor inicializará la sesión GPU igualmente
+        // si estuviera habilitada. Aquí forzamos false.
         when(mockConfig.isUseGpuAccelerationOnManning()).thenReturn(false);
 
         // --- 4. Inicializar BatchProcessor ---
-        // Nota: Esto disparará initSession() de la GPU internamente.
+        // Nota: Esto disparará initSession() de la GPU internamente si enabled=true.
         // Si no hay librería nativa en el entorno de test, el Singleton lo manejará (logueando error)
         // o fallará si la carga es estricta. Asumimos entorno válido o mockeable.
         batchProcessor = new ManningBatchProcessor(this.realGeometry, mockConfig);
@@ -111,8 +112,8 @@ class ManningBatchProcessorTest {
         }
 
         // --- ACT: Ejecución Real del Batch Processor ---
-        // Usamos la nueva firma que acepta float[] newInflows
-        ManningSimulationResult result = batchProcessor.processBatch(
+        // Usamos la nueva firma que devuelve ISimulationResult
+        ISimulationResult result = batchProcessor.processBatch(
                 BATCH_SIZE,
                 initialRiverState,
                 newInflows, // Input 1D
@@ -122,10 +123,11 @@ class ManningBatchProcessorTest {
 
         // --- ASSERT Y LOGGING DE RESULTADOS ---
         assertNotNull(result, "El resultado de la simulación no debe ser nulo.");
-        assertEquals(BATCH_SIZE, result.getStates().size(), "El resultado debe tener el tamaño de batch correcto.");
+        assertEquals(BATCH_SIZE, result.getTimestepCount(), "El resultado debe tener el número de pasos correcto.");
 
         // Obtener y loggear el estado DESPUÉS del batch (el último estado)
-        RiverState finalState = result.getStates().get(BATCH_SIZE - 1);
+        // Usamos la interfaz agnóstica getStateAt
+        RiverState finalState = result.getStateAt(BATCH_SIZE - 1);
         double finalAvgDepth = calculateAverageDepth(finalState);
         double finalAvgVelocity = calculateAverageVelocity(finalState);
 
@@ -140,7 +142,7 @@ class ManningBatchProcessorTest {
         assertTrue(finalAvgDepth > initialAvgDepth, "La profundidad media debería aumentar con el influjo de caudal.");
 
         // 2. Verificación de Ensamblaje Fisicoquímico
-        RiverState state0 = result.getStates().get(0);
+        RiverState state0 = result.getStateAt(0);
         double expectedTemp0 = phTmp[0][0][0];
         assertEquals(expectedTemp0, state0.getTemperatureAt(0), 1e-6, "La temperatura ensamblada debe coincidir con la calculada por el modelo real.");
 

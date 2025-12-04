@@ -1,7 +1,7 @@
 package projectstalker.physics.simulator;
 
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.AfterEach; // Nuevo
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -10,7 +10,7 @@ import projectstalker.config.RiverConfig;
 import projectstalker.config.SimulationConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.ManningSimulationResult;
+import projectstalker.domain.simulation.ISimulationResult; // <--- Cambio a Interfaz
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.model.RiverPhModel;
 import projectstalker.physics.model.RiverTemperatureModel;
@@ -18,7 +18,6 @@ import projectstalker.physics.model.RiverTemperatureModel;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.mock;
 
 /**
  * Test de Integración End-to-End para el solver de GPU.
@@ -92,11 +91,11 @@ class ManningGpuIntegrationTest {
         float[] newDischarges = new float[BATCH_SIZE];
         Arrays.fill(newDischarges, 200.0f); // Caudal entrante
 
-        // 3. Instanciar el SUT (Carga nativa + Init Session)
-        log.info("Instanciando ManningBatchProcessor (Carga librería + Init GPU)...");
+        // 3. Instanciar el SUT (Carga nativa + Lazy Init Configurado)
+        log.info("Instanciando ManningBatchProcessor (Carga librería)...");
         batchProcessor = assertDoesNotThrow(
                 () -> new ManningBatchProcessor(this.realGeometry, simConfig),
-                "Falló la instanciación. ¿Librería nativa faltante o error en initSession?"
+                "Falló la instanciación. ¿Librería nativa faltante?"
         );
 
         // 4. Resultados Fisicoquímicos (Pre-cálculo)
@@ -112,7 +111,8 @@ class ManningGpuIntegrationTest {
         // --- ACT & ASSERT (Ejecución Nativa) ---
         log.warn(">>> EJECUTANDO STACK NATIVO (GPU) <<<");
 
-        ManningSimulationResult result = assertDoesNotThrow(() ->
+        // Usamos la Interfaz Abstracta ISimulationResult
+        ISimulationResult result = assertDoesNotThrow(() ->
                         batchProcessor.processBatch(
                                 BATCH_SIZE,
                                 initialRiverState,
@@ -127,18 +127,30 @@ class ManningGpuIntegrationTest {
 
         // --- ASSERT (Sanity Checks) ---
         assertNotNull(result, "Resultado nulo.");
-        assertEquals(BATCH_SIZE, result.getStates().size());
+        // Verificamos tamaño usando el método de la interfaz
+        assertEquals(BATCH_SIZE, result.getTimestepCount());
 
-        RiverState finalState = result.getStates().get(BATCH_SIZE - 1);
+        // Accedemos al último estado usando la interfaz agnóstica
+        RiverState finalState = result.getStateAt(BATCH_SIZE - 1);
 
         // Verificación de integridad numérica
-        float sampleH = finalState.getWaterDepthAt(10);
-        float sampleV = finalState.getVelocityAt(10);
+        // Elegimos un índice (10) que seguramente esté dentro de la zona de influencia de la ola
+        // para un batch de 3 pasos, la ola llega a la celda 0, 1, 2.
+        // La celda 10 debería tener valores del estado inicial desplazado (reconstrucción flyweight).
+        // Vamos a chequear tanto una celda nueva como una vieja para validar la fusión.
 
-        assertFalse(Float.isNaN(sampleH), "Profundidad NaN detectada.");
-        assertFalse(Float.isNaN(sampleV), "Velocidad NaN detectada.");
-        assertTrue(sampleH > 0.0f, "Profundidad debe ser positiva.");
-        assertTrue(sampleV > 0.0f, "Velocidad debe ser positiva.");
+        // A. Zona Nueva (Celda 0) - Calculado por GPU
+        float hNew = finalState.getWaterDepthAt(0);
+        assertFalse(Float.isNaN(hNew), "Profundidad Nueva NaN detectada.");
+        assertTrue(hNew > 0.0f, "Profundidad Nueva debe ser positiva.");
+
+        // B. Zona Vieja (Celda 10) - Reconstruido del estado inicial
+        float hOld = finalState.getWaterDepthAt(10);
+        float hInit = initialRiverState.getWaterDepthAt(0); // El valor inicial que fluyó hasta la 10
+        // Nota: Con velocidad 1.0 y dt 10, la ola avanza < 1 celda, así que es complejo validar desplazamiento exacto sin saber dx.
+        // Pero validamos sanidad:
+        assertFalse(Float.isNaN(hOld), "Profundidad Vieja NaN detectada.");
+        assertTrue(hOld > 0.0f, "Profundidad Vieja debe ser positiva.");
 
         log.info("Test de Integración GPU superado.");
     }

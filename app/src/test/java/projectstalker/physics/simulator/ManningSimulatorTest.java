@@ -10,11 +10,10 @@ import projectstalker.config.RiverConfig;
 import projectstalker.config.SimulationConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.ManningSimulationResult;
+import projectstalker.domain.simulation.ISimulationResult; // <--- Cambio a Interfaz
 
 import java.lang.reflect.Field;
-import java.util.Arrays;
-import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -22,7 +21,7 @@ import static org.mockito.Mockito.*;
 /**
  * Test unitario para ManningSimulator.
  * <p>
- * REFACTORIZADO: Adaptado a la nueva arquitectura "Unified Batch Processor".
+ * REFACTORIZADO: Adaptado a la nueva arquitectura "Unified Batch Processor" e Interfaz ISimulationResult.
  * Verifica que el simulador orquesta correctamente el tiempo, genera los inputs (inputs 1D)
  * y delega la ejecución al ManningBatchProcessor.
  */
@@ -33,7 +32,7 @@ class ManningSimulatorTest {
     private RiverConfig mockConfig;
     private SimulationConfig mockSimConfig;
     private RiverGeometry mockGeometry;
-    private ManningBatchProcessor mockBatchProcessor; // El ÚNICO delegado ahora
+    private ManningBatchProcessor mockBatchProcessor;
 
     private final int CELL_COUNT = 5;
     private final double DELTA_TIME = 10.0;
@@ -44,7 +43,6 @@ class ManningSimulatorTest {
         mockConfig = mock(RiverConfig.class);
         when(mockConfig.totalLength()).thenReturn(25.0f);
         when(mockConfig.spatialResolution()).thenReturn(5.0f);
-        // Parámetros dummy para evitar NPEs en factorías
         when(mockConfig.seed()).thenReturn(12345L);
         when(mockConfig.baseManning()).thenReturn(0.035f);
         when(mockConfig.baseWidth()).thenReturn(10.0f);
@@ -64,16 +62,12 @@ class ManningSimulatorTest {
         when(mockGeometry.clonePhProfile()).thenReturn(new float[CELL_COUNT]);
 
         // --- 3. Instanciación e Inyección de Dependencias ---
-        // Creamos el simulador real
         simulator = new ManningSimulator(mockConfig, mockSimConfig);
 
-        // Inyectamos el Mock de Geometría (necesario para validaciones de tamaño)
         Field geometryField = ManningSimulator.class.getDeclaredField("geometry");
         geometryField.setAccessible(true);
         geometryField.set(simulator, mockGeometry);
 
-        // Inyectamos el Mock de BatchProcessor (El corazón de la refactorización)
-        // Ahora el simulador NO tiene gpuSolver ni cpuSolver directos, todo va al processor.
         mockBatchProcessor = mock(ManningBatchProcessor.class);
         Field batchProcessorField = ManningSimulator.class.getDeclaredField("batchProcessor");
         batchProcessorField.setAccessible(true);
@@ -101,8 +95,8 @@ class ManningSimulatorTest {
 
         double initialTime = simulator.getCurrentTimeInSeconds();
 
-        // Mock respuesta del processor
-        ManningSimulationResult mockResult = createMockResult(1);
+        // Mock respuesta del processor (Interfaz Genérica)
+        ISimulationResult mockResult = createMockResult(1);
         when(mockBatchProcessor.processBatch(eq(1), any(), any(), any(), anyBoolean()))
                 .thenReturn(mockResult);
 
@@ -110,11 +104,10 @@ class ManningSimulatorTest {
         simulator.advanceTimeStep(DELTA_TIME);
 
         // ASSERT
-        // Verifica que se llamó a processBatch con size=1 y un array de inputs de tamaño 1
         verify(mockBatchProcessor, times(1)).processBatch(
                 eq(1),
                 any(RiverState.class),
-                any(float[].class), // newInflows (1D)
+                any(float[].class),
                 any(float[][][].class),
                 anyBoolean()
         );
@@ -134,41 +127,41 @@ class ManningSimulatorTest {
         int batchSize = 3;
         double initialTime = simulator.getCurrentTimeInSeconds();
 
-        // 1. Configurar Mock Resultado
-        ManningSimulationResult mockResult = createMockResult(batchSize);
-        // Marcamos el último estado con un valor reconocible
-        RiverState finalState = mockResult.getStates().get(batchSize - 1);
-        when(finalState.getWaterDepthAt(0)).thenReturn(99.9f); // Marker
+        // 1. Configurar Mock Resultado (Interfaz Genérica)
+        ISimulationResult mockResult = createMockResult(batchSize);
+        // Configuramos el mock para devolver un estado final dummy
+        RiverState finalState = createDummyState(CELL_COUNT);
+        // Simulamos una propiedad para verificar identidad después
+        when(mockResult.getFinalState()).thenReturn(Optional.of(finalState));
 
         when(mockBatchProcessor.processBatch(eq(batchSize), any(), any(), any(), anyBoolean()))
                 .thenReturn(mockResult);
 
-        // Guardar el estado ANTES de ejecutar ---
+        // Guardar el estado ANTES de ejecutar
         RiverState stateBeforeExecution = simulator.getCurrentState();
 
         // ACT
-        ManningSimulationResult result = simulator.advanceBatchTimeStep(DELTA_TIME, batchSize);
+        ISimulationResult result = simulator.advanceBatchTimeStep(DELTA_TIME, batchSize);
 
         // ASSERT
         ArgumentCaptor<float[]> inflowCaptor = ArgumentCaptor.forClass(float[].class);
 
-        // 1. Verificar Delegación con nueva firma
+        // 1. Verificar Delegación
         verify(mockBatchProcessor, times(1)).processBatch(
                 eq(batchSize),
-                eq(stateBeforeExecution),        // <-- USAR LA REFERENCIA GUARDADA (Inicial)
-                inflowCaptor.capture(),          // Inputs 1D capturados
-                any(float[][][].class),          // phTmp
-                eq(false)                        // isGpuAccelerated
+                eq(stateBeforeExecution),
+                inflowCaptor.capture(),
+                any(float[][][].class),
+                eq(false)
         );
 
-        // 2. Verificar Inputs Generados (Smart Fetch Array)
+        // 2. Verificar Inputs Generados
         float[] capturedInflows = inflowCaptor.getValue();
         assertEquals(batchSize, capturedInflows.length, "El array de inputs debe tener tamaño batchSize");
-        // El FlowConfig mock devuelve 10.0f base, así que deberíamos ver eso
         assertEquals(10.0f, capturedInflows[0], 0.1f);
 
         // 3. Verificar Actualización de Estado Final
-        // Aquí SÍ queremos verificar que el simulador tiene el estado NUEVO
+        // El simulador debe haber actualizado su currentState con lo que devolvió el mock
         assertEquals(finalState, simulator.getCurrentState());
         assertEquals(initialTime + (batchSize * DELTA_TIME), simulator.getCurrentTimeInSeconds(), 0.001);
     }
@@ -180,16 +173,12 @@ class ManningSimulatorTest {
         return new RiverState(data, data, data, data, data);
     }
 
-    private ManningSimulationResult createMockResult(int batchSize) {
-        // Crear lista de estados mockeados
-        List<RiverState> states = new java.util.ArrayList<>();
-        for(int i=0; i<batchSize; i++) {
-            states.add(mock(RiverState.class));
-        }
-
-        return ManningSimulationResult.builder()
-                .geometry(mockGeometry)
-                .states(states)
-                .build();
+    // Helper simplificado: Mockeamos la interfaz directamente
+    private ISimulationResult createMockResult(int batchSize) {
+        ISimulationResult result = mock(ISimulationResult.class);
+        when(result.getTimestepCount()).thenReturn(batchSize);
+        // Configuración básica para evitar NPE si el código bajo prueba llama a getFinalState
+        when(result.getFinalState()).thenReturn(Optional.of(createDummyState(CELL_COUNT)));
+        return result;
     }
 }

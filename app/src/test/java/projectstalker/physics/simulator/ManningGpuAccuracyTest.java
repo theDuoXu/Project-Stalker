@@ -9,7 +9,7 @@ import projectstalker.config.RiverConfig;
 import projectstalker.config.SimulationConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.ManningSimulationResult;
+import projectstalker.domain.simulation.ISimulationResult; // <--- Cambio a Interfaz
 import projectstalker.factory.RiverGeometryFactory;
 
 import java.util.Arrays;
@@ -71,9 +71,6 @@ class ManningGpuAccuracyTest {
         float[] zeroArray = new float[cellCount];
 
         // Importante: El estado inicial debe ser consistente porque la GPU lee de él (Smart Fetch Región 2)
-        // Calculamos el caudal inicial aproximado (Q = V * A aprox) o simplemente llenamos con valor conocido.
-        // Aquí usamos el método de RiverState para consistencia si es posible, o inyección manual.
-        // Dado que RiverState es un record/DTO, llenamos arrays dummy para T, pH, etc.
         RiverState initialState = new RiverState(
                 initialDepth, initialVelocity, zeroArray, zeroArray, zeroArray
         );
@@ -85,8 +82,9 @@ class ManningGpuAccuracyTest {
         // 3. Temperatura/pH Dummy (No afectan a la hidráulica en este test)
         float[][][] phTmp = new float[BATCH_SIZE][2][cellCount];
 
-        ManningSimulationResult resultCpu;
-        ManningSimulationResult resultGpu;
+        // Usamos la interfaz común para soportar tanto Dense (CPU) como Flyweight (GPU)
+        ISimulationResult resultCpu;
+        ISimulationResult resultGpu;
 
         // --- EJECUCIÓN A: MODO CPU (Legacy Logic) ---
         log.info(">> Ejecutando en CPU...");
@@ -94,7 +92,7 @@ class ManningGpuAccuracyTest {
         long t1 = System.nanoTime();
         // Usamos try-with-resources para asegurar limpieza
         try (ManningBatchProcessor cpuProcessor = new ManningBatchProcessor(realGeometry, cpuConfig)) {
-            // El procesador expandirá la matriz internamente
+            // El procesador expandirá la matriz internamente y devolverá DenseManningResult
             resultCpu = cpuProcessor.processBatch(
                     BATCH_SIZE, initialState, flowInput, phTmp,
                     false // Force CPU
@@ -107,7 +105,7 @@ class ManningGpuAccuracyTest {
 
         long t2 = System.nanoTime();
         try (ManningBatchProcessor gpuProcessor = new ManningBatchProcessor(realGeometry, gpuConfig)) {
-            // El procesador enviará el array comprimido a la VRAM
+            // El procesador usará transferencias triangulares y devolverá FlyweightManningResult
             resultGpu = gpuProcessor.processBatch(
                     BATCH_SIZE, initialState, flowInput, phTmp,
                     true // Force GPU
@@ -122,8 +120,9 @@ class ManningGpuAccuracyTest {
         assertNotNull(resultGpu);
 
         for (int t = 0; t < BATCH_SIZE; t++) {
-            RiverState sCpu = resultCpu.getStates().get(t);
-            RiverState sGpu = resultGpu.getStates().get(t);
+            // Acceso agnóstico a la implementación (Dense vs Flyweight)
+            RiverState sCpu = resultCpu.getStateAt(t);
+            RiverState sGpu = resultGpu.getStateAt(t);
 
             compareStates(t, sCpu, sGpu);
         }
