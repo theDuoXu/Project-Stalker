@@ -10,6 +10,7 @@ import projectstalker.config.SimulationConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.factory.RiverGeometryFactory;
+import projectstalker.physics.impl.ManningProfileCalculatorTask;
 import projectstalker.physics.simulator.ManningBatchProcessor;
 
 import java.util.Arrays;
@@ -28,12 +29,14 @@ public class ManningGpuBenchmark {
     private final int CELL_COUNT = 50_000;
 
     // Umbral de Batch Size para dejar de ejecutar CPU real e interpolar.
-    // Ejecutar 100k celdas por 1000 pasos en CPU tardaría demasiado para un test.
+    // Ejecutar 50k celdas por 1000 pasos en CPU tardaría demasiado para un test.
     private final int CPU_EXECUTION_THRESHOLD_BATCH = 50;
 
+    private final float BASE_DISCHARGE = 50.0f; // Caudal base para equilibrio
+
     @BeforeEach
-    void setUp() {
-        // 1. Geometría Grande usando la Factoría (Inspirado en TransportGpuBenchmark)
+    void setUp() throws Exception {
+        // 1. Geometría Grande usando la Factoría
         RiverConfig riverConfig = RiverConfig.builder()
                 .totalLength(CELL_COUNT * 50.0f) // Longitud total para obtener el número de celdas deseado
                 .spatialResolution(50.0f)
@@ -60,31 +63,44 @@ public class ManningGpuBenchmark {
         this.cpuConfig = baseConfig.withUseGpuAccelerationOnManning(false);
         this.gpuConfig = baseConfig.withUseGpuAccelerationOnManning(true);
 
-        // 3. Estado Inicial
-        float[] h = new float[geometry.getCellCount()]; Arrays.fill(h, 1.0f); // 1m profundidad
-        float[] v = new float[geometry.getCellCount()]; Arrays.fill(v, 1.0f); // 1m/s velocidad
-        float[] zeros = new float[geometry.getCellCount()];
+        // 3. GENERAR ESTADO INICIAL ESTABLE (Warm-Up Hidráulico)
+        // Calculamos el perfil H/V de equilibrio para un caudal constante.
+        // Esto es crucial para que la optimización Flyweight de la GPU sea válida.
 
-        // Creamos estado inicial completo para evitar nulos
-        this.initialState = RiverState.builder()
-                .waterDepth(h)
-                .velocity(v)
-                .temperature(zeros)
-                .ph(zeros)
-                .contaminantConcentration(zeros)
-                .build();
+        log.info("Generando estado inicial estable para {} celdas...", CELL_COUNT);
 
-        log.info("Setup Benchmark: {} celdas. VRAM Estimada (Batch 10k): ~8 GB.",
-                String.format("%,d", geometry.getCellCount()));
+        float[] qProfile = new float[this.geometry.getCellCount()];
+        Arrays.fill(qProfile, BASE_DISCHARGE);
+
+        float[] seedDepth = new float[this.geometry.getCellCount()];
+        Arrays.fill(seedDepth, 1.0f);
+
+        // Ejecución síncrona del cálculo de perfil
+        ManningProfileCalculatorTask calculator = new ManningProfileCalculatorTask(
+                qProfile, seedDepth, this.geometry
+        );
+        calculator.call();
+
+        // Arrays auxiliares vacíos
+        float[] zeros = new float[this.geometry.getCellCount()];
+
+        this.initialState = new RiverState(
+                calculator.getCalculatedWaterDepth(), // H equilibrada
+                calculator.getCalculatedVelocity(),   // V equilibrada
+                zeros, // T
+                zeros, // pH
+                zeros  // C
+        );
+
+        log.info("Setup Benchmark completado. VRAM Estimada (Batch 10k): ~8 GB.");
     }
 
     @Test
     @DisplayName("Benchmark: Escalabilidad Batch (CPU Interpolada vs GPU Real)")
     void benchmarkMassiveScalability() {
-        log.info("=== INICIANDO BENCHMARK MANNING MASIVO (100k Celdas) ===");
+        log.info("=== INICIANDO BENCHMARK MANNING MASIVO (50k Celdas) ===");
 
         // Tamaños de lote a probar (Variable independiente)
-        // Nota: 20k batches * 100k celdas * 8 bytes output = ~16 GB VRAM. Seguro en 5090.
         int[] batchSizes = {10, 100, 1_000, 5_000};
 
         // --- WARM-UP ---
@@ -145,15 +161,16 @@ public class ManningGpuBenchmark {
      * Ejecuta una iteración de benchmark midiendo el tiempo de procesamiento.
      */
     private double runBatchIteration(int batchSize, boolean useGpu) {
-        // 1. Preparación de Inputs
+        // 1. Preparación de Inputs (Delta Extrinsic)
         float[] newInflows = new float[batchSize];
-        Arrays.fill(newInflows, 150.0f);
+        Arrays.fill(newInflows, 150.0f); // Caudal de avenida
 
-        // --- CORRECCIÓN: Hack de memoria seguro ---
-        // Creamos UN SOLO array de ceros del tamaño correcto (100k celdas)
+        // --- Hack de memoria seguro para auxiliares ---
+        // Creamos UN SOLO array de ceros del tamaño correcto
         // y lo reutilizamos para todos los pasos de tiempo.
-        // Coste de memoria: ~400KB (vs GBs si creamos nuevos)
-        float[] sharedDummyData = new float[CELL_COUNT];
+        // Coste de memoria: ~400KB (vs GBs si creamos nuevos arrays por paso)
+        int n = this.geometry.getCellCount();
+        float[] sharedDummyData = new float[n];
 
         float[][][] phTmp = new float[batchSize][2][]; // Array de punteros
         for(int k=0; k<batchSize; k++) {
@@ -166,10 +183,14 @@ public class ManningGpuBenchmark {
         // 2. Ejecución Controlada
         long start = System.nanoTime();
 
+        // Usamos try-with-resources para asegurar que se libera la VRAM tras cada iteración
         try (ManningBatchProcessor processor = new ManningBatchProcessor(geometry, config)) {
             processor.processBatch(batchSize, initialState, newInflows, phTmp, useGpu);
-            long end = System.nanoTime();
-            return (end - start) / 1_000_000.0;
+            // Nota: processBatch ya devuelve un ISimulationResult (Flyweight o Dense),
+            // pero para el benchmark solo nos importa el tiempo de retorno.
         }
+
+        long end = System.nanoTime();
+        return (end - start) / 1_000_000.0;
     }
 }
