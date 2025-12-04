@@ -7,6 +7,7 @@
 #include <string>
 #include <sstream>
 
+// Macro de Chequeo de Errores CUDA
 #define CUDA_CHECK_M(call) { \
     cudaError_t err_code = call; \
     if (err_code != cudaSuccess) { \
@@ -19,13 +20,17 @@
     } \
 }
 
+// -----------------------------------------------------------------------------
+// IMPLEMENTACIÓN DEL CICLO DE VIDA (Stateful)
+// -----------------------------------------------------------------------------
+
 ManningSession* init_manning_session(
     const float* h_bottomWidths,
     const float* h_sideSlopes,
     const float* h_manningCoeffs,
     const float* h_bedSlopes,
-    const float* h_initialDepths,
-    const float* h_initialQ,
+    const float* h_initialDepths, // Estado base (Intrinsic)
+    const float* h_initialQ,      // Estado base (Intrinsic)
     int cellCount
 ) {
     if (cellCount <= 0) return nullptr;
@@ -38,36 +43,33 @@ ManningSession* init_manning_session(
     float* d_temp_bed = nullptr;
 
     try {
-        // 0. Crear Stream Asíncrono (Non-Blocking para evitar serialización con CPU)
-        CUDA_CHECK_M(cudaStreamCreateWithFlags(&session->stream, cudaStreamNonBlocking));
-
-        // 1. Reserva VRAM (Síncrona, solo ocurre una vez al inicio)
+        // 1. Reserva VRAM para Geometría Invariante
         CUDA_CHECK_M(cudaMalloc(&session->d_bottomWidths, cellBytes));
         CUDA_CHECK_M(cudaMalloc(&session->d_sideSlopes, cellBytes));
         CUDA_CHECK_M(cudaMalloc(&session->d_inv_n, cellBytes));
         CUDA_CHECK_M(cudaMalloc(&session->d_sqrt_slope, cellBytes));
         CUDA_CHECK_M(cudaMalloc(&session->d_pythagoras, cellBytes));
+
+        // 2. Reserva VRAM para Buffers de Estado del Río (Tamaño Fijo)
         CUDA_CHECK_M(cudaMalloc(&session->d_initialQ, cellBytes));
         CUDA_CHECK_M(cudaMalloc(&session->d_initialDepths, cellBytes));
+
+        // 3. Reserva Temporales para Baking
         CUDA_CHECK_M(cudaMalloc(&d_temp_manning, cellBytes));
         CUDA_CHECK_M(cudaMalloc(&d_temp_bed, cellBytes));
 
-        // 2. Transferencias Iniciales (Usamos Async aunque esperamos al final para asegurar orden)
-        // Nota: Usamos el stream para empezar a encolar trabajo
-        CUDA_CHECK_M(cudaMemcpyAsync(session->d_bottomWidths, h_bottomWidths, cellBytes, cudaMemcpyHostToDevice, session->stream));
-        CUDA_CHECK_M(cudaMemcpyAsync(session->d_sideSlopes, h_sideSlopes, cellBytes, cudaMemcpyHostToDevice, session->stream));
-        CUDA_CHECK_M(cudaMemcpyAsync(session->d_initialQ, h_initialQ, cellBytes, cudaMemcpyHostToDevice, session->stream));
-        CUDA_CHECK_M(cudaMemcpyAsync(session->d_initialDepths, h_initialDepths, cellBytes, cudaMemcpyHostToDevice, session->stream));
-        CUDA_CHECK_M(cudaMemcpyAsync(d_temp_manning, h_manningCoeffs, cellBytes, cudaMemcpyHostToDevice, session->stream));
-        CUDA_CHECK_M(cudaMemcpyAsync(d_temp_bed, h_bedSlopes, cellBytes, cudaMemcpyHostToDevice, session->stream));
+        // 4. Copia Host -> Device (Heavy Lifting - Una sola vez)
+        CUDA_CHECK_M(cudaMemcpy(session->d_bottomWidths, h_bottomWidths, cellBytes, cudaMemcpyHostToDevice));
+        CUDA_CHECK_M(cudaMemcpy(session->d_sideSlopes, h_sideSlopes, cellBytes, cudaMemcpyHostToDevice));
 
-        // 3. Kernel Baking (Encolado en el Stream)
-        // Nota: launchManningBakingKernel debe modificarse para aceptar stream,
-        // pero por ahora usamos el default stream y sincronizamos.
-        // *MEJORA PRO*: Sincronizamos el stream antes de llamar al baking si el baking usa stream 0.
-        // Para simplificar sin tocar el .cu ahora mismo: Forzamos sync.
-        CUDA_CHECK_M(cudaStreamSynchronize(session->stream));
+        // Copiamos el estado inicial una sola vez (Flyweight Intrinsic)
+        CUDA_CHECK_M(cudaMemcpy(session->d_initialQ, h_initialQ, cellBytes, cudaMemcpyHostToDevice));
+        CUDA_CHECK_M(cudaMemcpy(session->d_initialDepths, h_initialDepths, cellBytes, cudaMemcpyHostToDevice));
 
+        CUDA_CHECK_M(cudaMemcpy(d_temp_manning, h_manningCoeffs, cellBytes, cudaMemcpyHostToDevice));
+        CUDA_CHECK_M(cudaMemcpy(d_temp_bed, h_bedSlopes, cellBytes, cudaMemcpyHostToDevice));
+
+        // 5. BAKING: Pre-calcular constantes físicas en GPU
         launchManningBakingKernel(
             session->d_inv_n,
             session->d_sqrt_slope,
@@ -77,7 +79,7 @@ ManningSession* init_manning_session(
             session->d_sideSlopes,
             cellCount
         );
-        CUDA_CHECK_M(cudaDeviceSynchronize()); // Wait for baking
+        CUDA_CHECK_M(cudaDeviceSynchronize());
 
         cudaFree(d_temp_manning);
         cudaFree(d_temp_bed);
@@ -109,55 +111,36 @@ static void resize_buffer_if_needed(float** ptr, size_t* currentCap, size_t need
     }
 }
 
-// -----------------------------------------------------------------------------
-// RUN BATCH: PIPELINE ASÍNCRONO
-// -----------------------------------------------------------------------------
+// DMA / Zero-Copy Enabled Version
 void run_manning_batch_stateful(
     ManningSession* session,
-    const float* h_pinned_inflows,
-    float* h_pinned_results,
+    const float* h_pinned_inflows, // DMA Input Pointer
+    float* h_pinned_results,       // DMA Output Pointer
     int batchSize
 ) {
     if (!session || batchSize <= 0) return;
 
     int cellCount = session->cellCount;
+    // El kernel escribe en formato SoA, necesitamos espacio para todo el bloque [H... | V...]
+    // Nota: Aunque solo copiamos un subconjunto de vuelta, la GPU calcula todo o escribe en un buffer lineal.
+    // Aquí asumimos que d_results debe ser capaz de alojar (BatchSize * CellCount * 2).
     size_t totalThreads = (size_t)batchSize * cellCount;
-    size_t neededOutputElements = totalThreads * 2;
+    size_t neededOutputElements = totalThreads * 2; // H y V
 
-    // 1. Gestión de Memoria (Síncrona - Rara vez ocurre gracias a la histéresis)
+    // --- 1. Gestión de Memoria Adaptativa (Buffers Internos GPU) ---
     resize_buffer_if_needed(&session->d_newInflows, &session->inputBatchCapacity, (size_t)batchSize);
     resize_buffer_if_needed(&session->d_results, &session->resultCapacityElements, neededOutputElements);
 
-    // 2. INPUT: Transferencia Asíncrona (HtoD)
-    // El bus PCIe sube los datos mientras la CPU prepara la llamada al kernel.
-    CUDA_CHECK_M(cudaMemcpyAsync(
-        session->d_newInflows,
-        h_pinned_inflows,
-        batchSize * sizeof(float),
-        cudaMemcpyHostToDevice,
-        session->stream // <--- STREAM
-    ));
+    // --- 2. Transferencia Mínima (Input via DMA) ---
+    // Al ser h_pinned_inflows memoria pinned (DirectBuffer), el driver usa DMA directo.
+    CUDA_CHECK_M(cudaMemcpy(session->d_newInflows, h_pinned_inflows, batchSize * sizeof(float), cudaMemcpyHostToDevice));
 
-    // 3. COMPUTE: Ejecución Asíncrona
-    // Lanzamos el kernel al stream. Para una RTX 5090, lanzamos todo de golpe.
-    // Partir esto en chunks solo añadiría overhead de CPU launch latency.
-    // Nota: Necesitamos actualizar 'launchManningSmartKernel' en el .cu para aceptar stream.
-    // COMO NO QUEREMOS TOCAR EL .CU AHORA:
-    // El kernel por defecto va al Stream 0 (Legacy).
-    // Para que funcione el pipelining con Stream 0, sincronizamos el stream custom antes.
-    // **FIX CORRECTO:** Modificar manning_kernel.cu es lo ideal.
-    // **WORKAROUND VALID:** Stream 0 serializa con otros streams.
-
-    // Asumiremos que el kernel va al stream por defecto (0).
-    // Esperamos a que la copia termine antes de computar (Stream 0 espera a todos implícitamente? No siempre).
-    // Lo correcto sin tocar .cu:
-    CUDA_CHECK_M(cudaStreamSynchronize(session->stream)); // Espera copia
-
+    // --- 3. Ejecución del Kernel (Smart Fetch + SoA Output) ---
     launchManningSmartKernel(
         session->d_results,
         session->d_newInflows,
-        session->d_initialQ,
-        session->d_initialDepths,
+        session->d_initialQ,      // Intrinsic (VRAM)
+        session->d_initialDepths, // Intrinsic (VRAM)
         session->d_bottomWidths,
         session->d_sideSlopes,
         session->d_inv_n,
@@ -167,51 +150,53 @@ void run_manning_batch_stateful(
         cellCount
     );
 
-    // 4. OUTPUT: Transferencia Asíncrona (DtoH)
-    // El Stream 0 (Kernel) bloqueará el siguiente comando en Stream 0.
-    // Pero cudaMemcpyAsync requiere stream específico para no bloquear CPU.
-    // Usamos el stream por defecto (0) en el MemcpyAsync para encadenarlo tras el kernel.
+    CUDA_CHECK_M(cudaGetLastError());
 
+    // --- 4. Recuperación de Resultados (DMA Output - Triangular Transfer) ---
+
+    // AHORRO CRÍTICO: No bajamos todo el río (CellCount).
+    // Solo bajamos la región donde la ola ha podido llegar.
     int activeWidth = batchSize;
+    // Seguridad: Si el batch es mayor que el río (raro), limitamos al río.
     if (activeWidth > cellCount) activeWidth = cellCount;
 
-    size_t srcPitch = cellCount * sizeof(float);
-    size_t dstPitch = activeWidth * sizeof(float);
+    // Configuración para cudaMemcpy2D
+    // Pitch (ancho de fila en bytes)
+    size_t srcPitch = cellCount * sizeof(float);   // Ancho real en GPU
+    size_t dstPitch = activeWidth * sizeof(float); // Ancho compactado en CPU (Host Buffer)
     size_t widthBytes = activeWidth * sizeof(float);
     size_t height = batchSize;
 
-    // H
-    CUDA_CHECK_M(cudaMemcpy2DAsync(
-        h_pinned_results, dstPitch,
-        session->d_results, srcPitch,
+    // A. Copiar bloque H (Inicio de d_results) -> Primera mitad de h_pinned_results
+    float* src_H = session->d_results;
+    float* dst_H = h_pinned_results;
+
+    CUDA_CHECK_M(cudaMemcpy2D(
+        dst_H, dstPitch,
+        src_H, srcPitch,
         widthBytes, height,
-        cudaMemcpyDeviceToHost,
-        0 // Stream 0 (Default) para asegurar que va después del Kernel
+        cudaMemcpyDeviceToHost
     ));
 
-    // V
-    float* src_V = session->d_results + totalThreads;
-    float* dst_V = h_pinned_results + (batchSize * activeWidth);
+    // B. Copiar bloque V (Desplazado por totalThreads en GPU) -> Segunda mitad de h_pinned_results
+    // Calculamos el offset en el buffer de salida: [ Bloque H (Batch x Width) ] [ AQUÍ EMPIEZA V ]
+    float* src_V = session->d_results + totalThreads; // Offset SoA en GPU
+    float* dst_V = h_pinned_results + (batchSize * activeWidth); // Offset lineal en Host
 
-    CUDA_CHECK_M(cudaMemcpy2DAsync(
+    CUDA_CHECK_M(cudaMemcpy2D(
         dst_V, dstPitch,
         src_V, srcPitch,
         widthBytes, height,
-        cudaMemcpyDeviceToHost,
-        0 // Stream 0
+        cudaMemcpyDeviceToHost
     ));
 
-    // 5. SYNC FINAL (Barrier)
-    // Java necesita los datos YA. Aquí pagamos la latencia.
-    CUDA_CHECK_M(cudaStreamSynchronize(0));
+    // Sincronización final obligatoria para asegurar que la escritura DMA terminó
+    // antes de que Java intente leer el buffer.
+    CUDA_CHECK_M(cudaDeviceSynchronize());
 }
 
 void destroy_manning_session(ManningSession* session) {
     if (!session) return;
-
-    // Destruir Stream
-    if (session->stream) cudaStreamDestroy(session->stream);
-
     if (session->d_bottomWidths) cudaFree(session->d_bottomWidths);
     if (session->d_sideSlopes)   cudaFree(session->d_sideSlopes);
     if (session->d_inv_n)        cudaFree(session->d_inv_n);
