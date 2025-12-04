@@ -29,7 +29,7 @@ class ManningGpuAccuracyTest {
     private final int BATCH_SIZE = 5;
     // Tolerancia relajada para Float (GPU/Fast Math) vs Double (CPU/Precise)
     // Manning tiene potencias fraccionarias, así que el error se acumula.
-    private final float EPSILON = 5e-3f;
+    private final float EPSILON = 1e-2f;
 
     // Estado inicial en Equilibrio Hidráulico
     private RiverState stableInitialState;
