@@ -7,7 +7,7 @@ import projectstalker.config.RiverConfig;
 import projectstalker.config.SimulationConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.ManningSimulationResult;
+import projectstalker.domain.simulation.ISimulationResult; // <--- Cambio clave
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.model.FlowProfileModel;
 import projectstalker.physics.model.RiverPhModel;
@@ -93,9 +93,9 @@ public class ManningSimulator implements AutoCloseable {
      *
      * @param deltaTimeInSeconds El incremento de tiempo para cada paso del batch.
      * @param batchSize          El número de pasos a simular.
-     * @return El resultado de la simulación para el batch completo.
+     * @return El resultado de la simulación (Interfaz abstracta: puede ser Dense o Flyweight).
      */
-    public ManningSimulationResult advanceBatchTimeStep(double deltaTimeInSeconds, int batchSize) {
+    public ISimulationResult advanceBatchTimeStep(double deltaTimeInSeconds, int batchSize) {
         if (batchSize <= 0) {
             throw new IllegalArgumentException("El tamaño del batch debe ser mayor que 0.");
         }
@@ -116,6 +116,8 @@ public class ManningSimulator implements AutoCloseable {
             newDischarges[i] = flowGenerator.getDischargeAt(tempTime);
 
             // Temperatura y pH
+            // TODO Para Flyweight puro, estos arrays de phTmp podrían optimizarse también,
+            // pero su impacto en memoria es menor que el hidráulico.
             float[] temp = temperatureModel.calculate(tempTime);
             float[] ph = phModel.getPhProfile();
             phTmp[i][0] = temp;
@@ -125,8 +127,8 @@ public class ManningSimulator implements AutoCloseable {
         }
 
         // 2. EJECUCIÓN DELEGADA (Híbrida CPU/GPU)
-        // Pasamos los inputs compactos. El Processor decide si expandir en VRAM (GPU) o RAM (CPU).
-        ManningSimulationResult result = batchProcessor.processBatch(
+        // Retorna ISimulationResult (Polimorfismo)
+        ISimulationResult result = batchProcessor.processBatch(
                 batchSize,
                 initialRiverState,
                 newDischarges,
@@ -135,12 +137,12 @@ public class ManningSimulator implements AutoCloseable {
         );
 
         // 3. ACTUALIZACIÓN DE ESTADO
-        // Confirmamos el avance del tiempo y guardamos el último estado calculado.
+        // Confirmamos el avance del tiempo.
         this.currentTimeInSeconds = tempTime;
 
-        if (!result.getStates().isEmpty()) {
-            this.currentState = result.getStates().get(batchSize - 1);
-        }
+        // Actualizamos el 'currentState' usando el método agnóstico de la interfaz.
+        // Esto funciona tanto para listas densas como para reconstrucción virtual.
+        result.getFinalState().ifPresent(state -> this.currentState = state);
 
         return result;
     }

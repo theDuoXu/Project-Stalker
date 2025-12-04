@@ -2,8 +2,6 @@ package projectstalker.physics.jni;
 
 import lombok.extern.slf4j.Slf4j;
 import projectstalker.domain.river.RiverGeometry;
-import projectstalker.domain.river.RiverState;
-import projectstalker.physics.model.FlowProfileModel;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -13,7 +11,7 @@ import java.nio.FloatBuffer;
  * Actúa como un puente (wrapper) Stateful hacia la librería nativa JNI para resolver
  * la ecuación de Manning en la GPU.
  * <p>
- * Implementa el patrón RAII: Inicializa la sesión GPU en el constructor y la libera en close().
+ * Implementa el patrón RAII: Inicializa la sesión GPU de forma perezosa (Lazy) y la libera en close().
  */
 @Slf4j
 public final class ManningGpuSolver implements AutoCloseable {
@@ -21,6 +19,7 @@ public final class ManningGpuSolver implements AutoCloseable {
     private final INativeManningSolver nativeSolver;
     private long sessionHandle = 0; // Puntero a la sesión C++ (0 = inválido)
     private final int cellCount; // Guardado para validaciones
+    private final RiverGeometry geometry; // Guardamos referencia para el Lazy Init
 
     // Constructor Principal (Stateful)
     // Se asume que este Solver se crea UNA vez por simulación y se reutiliza.
@@ -31,29 +30,39 @@ public final class ManningGpuSolver implements AutoCloseable {
     // Constructor para Inyección de Dependencias (Testing)
     public ManningGpuSolver(INativeManningSolver nativeSolver, RiverGeometry geometry) {
         this.nativeSolver = nativeSolver;
+        this.geometry = geometry;
         this.cellCount = geometry.getCellCount();
-        initializeSession(geometry);
+        // NOTA: Ya no llamamos a initializeSession aquí (Lazy Init)
     }
 
     /**
      * Inicializa la sesión GPU.
-     * Convierte la geometría Java a Buffers Directos y llama al Init nativo.
+     * Convierte la geometría Java y el ESTADO INICIAL a Buffers Directos y llama al Init nativo.
+     * Se ejecuta solo la primera vez que se llama a solveBatch.
      */
-    private void initializeSession(RiverGeometry geometry) {
-        log.info("Inicializando sesión GPU Manning para {} celdas...", cellCount);
+    private void initializeSession(float[] initialDepths, float[] initialQ) {
+        log.info("Inicializando sesión GPU Manning (Lazy) para {} celdas...", cellCount);
 
         // 1. Preparar Geometría (Calculando pendientes si es necesario)
-        float[] slopeArray = calculateAndSanitizeBedSlopes(geometry);
+        float[] slopeArray = calculateAndSanitizeBedSlopes(this.geometry);
 
-        // 2. Crear Direct Buffers (Solo viven durante esta llamada, luego C++ copia lo que necesita)
-        // TODO hacer que RiverGeometry implemente FloatBuffers de forma nativa sin necesitar copia
-        FloatBuffer widthBuf   = createDirectBuffer(geometry.getBottomWidth());
-        FloatBuffer sideBuf    = createDirectBuffer(geometry.getSideSlope());
-        FloatBuffer manningBuf = createDirectBuffer(geometry.getManningCoefficient());
+        // 2. Crear Direct Buffers (Geometría)
+        FloatBuffer widthBuf   = createDirectBuffer(this.geometry.getBottomWidth());
+        FloatBuffer sideBuf    = createDirectBuffer(this.geometry.getSideSlope());
+        FloatBuffer manningBuf = createDirectBuffer(this.geometry.getManningCoefficient());
         FloatBuffer bedBuf     = createDirectBuffer(slopeArray);
 
-        // 3. Llamada Nativa (Baking)
-        this.sessionHandle = nativeSolver.initSession(widthBuf, sideBuf, manningBuf, bedBuf, cellCount);
+        // 3. Crear Direct Buffers (Estado Inicial - Flyweight Intrinsic)
+        // Sanitizamos antes de enviar para asegurar estabilidad numérica en el estado base
+        FloatBuffer depthBuf   = createDirectBuffer(sanitizeDepths(initialDepths));
+        FloatBuffer qBuf       = createDirectBuffer(initialQ); // Q puede ser negativo, no sanitizamos agresivamente
+
+        // 4. Llamada Nativa (Baking + Carga)
+        this.sessionHandle = nativeSolver.initSession(
+                widthBuf, sideBuf, manningBuf, bedBuf,
+                depthBuf, qBuf,
+                cellCount
+        );
 
         if (this.sessionHandle == 0) {
             throw new RuntimeException("Fallo crítico al inicializar la sesión GPU de Manning.");
@@ -62,30 +71,31 @@ public final class ManningGpuSolver implements AutoCloseable {
     }
 
     /**
-     * Resuelve un lote de pasos de tiempo completo en la GPU utilizando la sesión activa.
+     * Resuelve un lote de pasos de tiempo en la GPU.
      *
-     * @param initialDepths        Estado de profundidad en t=0 del batch (Semilla para Newton-Raphson).
-     * @param newInflows           Array 1D [BatchSize] con los caudales que entran al río en cada paso t.
-     * @param initialRiverStateQ   Estado de caudal en todo el río en t=0 del batch.
-     * @return [batchSize][2][cellCount] donde [0] es profundidad y [1] es velocidad.
+     * @param initialDepths        Estado de profundidad en t=0 del batch. Se usa para initSession la primera vez.
+     * @param newInflows           Array 1D [BatchSize] con los caudales que entran al río.
+     * @param initialRiverStateQ   Estado de caudal en t=0 del batch. Se usa para initSession la primera vez.
+     * @return [batchSize][2][batchSize] Matriz triangular/cuadrada con los NUEVOS datos calculados.
      */
     public float[][][] solveBatch(float[] initialDepths, float[] newInflows, float[] initialRiverStateQ) {
+        // --- LAZY INITIALIZATION ---
         if (sessionHandle == 0) {
-            throw new IllegalStateException("Intento de usar ManningGpuSolver después de haber sido cerrado (close).");
+            initializeSession(initialDepths, initialRiverStateQ);
         }
 
         int batchSize = newInflows.length;
 
-        // 1. Sanitización ligera (solo de inputs crudos)
+        // 1. Sanitización ligera (solo de inputs dinámicos)
         float[] safeInflows = sanitizeInflows(newInflows);
-        float[] safeInitialDepths = sanitizeDepths(initialDepths);
 
         // 2. Ejecución Nativa (Zero-Copy Pinning)
-        // Pasamos arrays primitivos, JNI se encarga del acceso rápido.
-        float[] packedResults = nativeSolver.runBatch(sessionHandle, safeInflows, safeInitialDepths, initialRiverStateQ);
+        // Pasamos SOLO lo que cambia (Flyweight Extrinsic State)
+        float[] packedResults = nativeSolver.runBatch(sessionHandle, safeInflows);
 
-        // 3. Desempaquetado (De plano a Estructurado)
-        return unpackGpuResults(packedResults, batchSize, cellCount);
+        // 3. Desempaquetado (SoA -> Estructurado 3D)
+        // Devuelve la matriz cuadrada activa, no todo el río.
+        return unpackGpuResults(packedResults, batchSize);
     }
 
     /**
@@ -102,31 +112,42 @@ public final class ManningGpuSolver implements AutoCloseable {
 
     // --- Helpers de Desempaquetado y Sanitización ---
 
-    private float[][][] unpackGpuResults(float[] gpuResults, int batchSize, int cellCount) {
-        int expectedSize = batchSize * cellCount * 2;
+    private float[][][] unpackGpuResults(float[] gpuResults, int batchSize) {
+        // El tamaño esperado ahora es el cuadrado del batch (H y V)
+        // Tamaño = BatchSize * BatchSize * 2
+        int activeWidth = Math.min(batchSize, cellCount); // Seguridad por si el batch es gigante
+        int expectedSize = batchSize * activeWidth * 2;
+
         if (gpuResults == null || gpuResults.length != expectedSize) {
-            throw new IllegalArgumentException(String.format("Error GPU: Tamaño de resultados incorrecto. Esperado: %d, Recibido: %d", expectedSize, gpuResults != null ? gpuResults.length : 0));
+            throw new IllegalArgumentException(String.format(
+                    "Error GPU: Tamaño de resultados incorrecto. Esperado: %d, Recibido: %d",
+                    expectedSize, gpuResults != null ? gpuResults.length : 0));
         }
 
-        float[][][] results = new float[batchSize][2][cellCount];
+        // Matriz de retorno: [Tiempo][Variable][Espacio_Activo]
+        // Nota: La dimensión espacial es 'activeWidth' (BatchSize), NO 'cellCount'.
+        float[][][] results = new float[batchSize][2][activeWidth];
 
-        // Layout GPU: [Step0_Cell0_H, Step0_Cell0_V, Step0_Cell1_H, ...]
-        // Es un array plano continuo.
-        int ptr = 0;
+        // Layout GPU SoA: [ Bloque H (size=NxN) | Bloque V (size=NxN) ]
+        int blockSize = batchSize * activeWidth;
+        int offsetH = 0;
+        int offsetV = blockSize;
+
+        int ptrH = offsetH;
+        int ptrV = offsetV;
+
         for (int t = 0; t < batchSize; t++) {
-            for (int c = 0; c < cellCount; c++) {
-                results[t][0][c] = gpuResults[ptr++]; // H
-                results[t][1][c] = gpuResults[ptr++]; // V
+            for (int c = 0; c < activeWidth; c++) {
+                results[t][0][c] = gpuResults[ptrH++]; // H
+                results[t][1][c] = gpuResults[ptrV++]; // V
             }
         }
         return results;
     }
 
     private float[] sanitizeInflows(float[] inflows) {
-        // Validación básica: Caudales negativos -> 0.001
         boolean dirty = false;
         for(float f : inflows) if(f <= 0) { dirty = true; break; }
-
         if(!dirty) return inflows;
 
         float[] clean = new float[inflows.length];
@@ -135,10 +156,8 @@ public final class ManningGpuSolver implements AutoCloseable {
     }
 
     private float[] sanitizeDepths(float[] depths) {
-        // Validación básica: Profundidad ~0 -> 0.001
         boolean dirty = false;
         for(float f : depths) if(f < 1e-3f) { dirty = true; break; }
-
         if(!dirty) return depths;
 
         float[] clean = new float[depths.length];
@@ -147,6 +166,7 @@ public final class ManningGpuSolver implements AutoCloseable {
     }
 
     private float[] calculateAndSanitizeBedSlopes(RiverGeometry geometry) {
+        // (Nota: Usamos clone aquí porque es una operación única en init)
         float[] elevations = geometry.cloneElevationProfile();
         float dx = geometry.getSpatialResolution();
         int n = geometry.getCellCount();
