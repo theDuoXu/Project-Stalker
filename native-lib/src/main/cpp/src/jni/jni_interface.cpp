@@ -40,17 +40,18 @@ static jfloatArray vector_to_jfloatarray(JNIEnv *env, const std::vector<float>& 
 extern "C" {
 
 // =============================================================================
-// SECCIÓN 1: NUEVA API MANNING (Stateful + Zero Copy Híbrido)
+// SECCIÓN 1: NUEVA API MANNING (Stateful + Zero Copy Híbrido + Flyweight)
 // =============================================================================
 
 /*
  * Inicializa la sesión GPU.
- * Usa DirectBuffers para la geometría estática (Zero-Copy ideal para datos invariantes).
+ * Usa DirectBuffers para la geometría estática y ahora también para el ESTADO INICIAL (Flyweight).
  */
 JNIEXPORT jlong JNICALL
 Java_projectstalker_physics_jni_NativeManningGpuSingleton_initSession(
     JNIEnv *env, jobject thiz,
     jobject widthBuf, jobject slopeBuf, jobject manningBuf, jobject bedBuf,
+    jobject initDepthBuf, jobject initQBuf, // <--- NUEVOS ARGUMENTOS
     jint cellCount
 ) {
     try {
@@ -60,15 +61,23 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_initSession(
         float* pManning = (float*)env->GetDirectBufferAddress(manningBuf);
         float* pBed     = (float*)env->GetDirectBufferAddress(bedBuf);
 
+        // Obtener punteros del estado inicial (Solo se leen una vez)
+        float* pInitDepth = (float*)env->GetDirectBufferAddress(initDepthBuf);
+        float* pInitQ     = (float*)env->GetDirectBufferAddress(initQBuf);
+
         // Validación básica de punteros
-        if (!pWidth || !pSlope || !pManning || !pBed) {
-            throw_java_exception(env, "Error JNI Init: Buffers de geometría inválidos (deben ser DirectBuffers).");
+        if (!pWidth || !pSlope || !pManning || !pBed || !pInitDepth || !pInitQ) {
+            throw_java_exception(env, "Error JNI Init: Buffers inválidos (deben ser DirectBuffers).");
             return 0;
         }
 
-        // Llamada al constructor C++ (Baking)
-        ManningSession* session = init_manning_session(pWidth, pSlope, pManning, pBed, (int)cellCount);
-        
+        // Llamada al constructor C++ (Baking + Carga de Estado Base)
+        ManningSession* session = init_manning_session(
+            pWidth, pSlope, pManning, pBed,
+            pInitDepth, pInitQ,
+            (int)cellCount
+        );
+
         // Retornar puntero opaco
         return (jlong)session;
 
@@ -80,16 +89,15 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_initSession(
 
 /*
  * Ejecuta el batch.
- * Usa GetPrimitiveArrayCritical para arrays dinámicos (Critical Pinning).
- * Esto evita copias Java -> Native para los datos que cambian frame a frame.
+ * MODIFICADO: Ahora es mucho más ligero (Flyweight).
+ * Solo recibe 'newInflowsArr'. El estado inicial ya reside en la GPU.
  */
 JNIEXPORT jfloatArray JNICALL
 Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
     JNIEnv *env, jobject thiz,
     jlong handle,
-    jfloatArray newInflowsArr,
-    jfloatArray initialDepthsArr,
-    jfloatArray initialQArr
+    jfloatArray newInflowsArr
+    // ELIMINADOS: initialDepthsArr, initialQArr (Ya están en la sesión)
 ) {
     // 1. Validar Sesión
     ManningSession* session = (ManningSession*)handle;
@@ -99,17 +107,10 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
     }
 
     // 2. Acceso Crítico a Arrays Java (Pinning)
-    // ADVERTENCIA: Entre Get y Release NO se pueden hacer llamadas JNI ni bloquear el hilo.
-    void* pNewInflows   = env->GetPrimitiveArrayCritical(newInflowsArr, nullptr);
-    void* pInitialDepth = env->GetPrimitiveArrayCritical(initialDepthsArr, nullptr);
-    void* pInitialQ     = env->GetPrimitiveArrayCritical(initialQArr, nullptr);
+    // Solo necesitamos pinear el array de inflows (que es pequeño)
+    void* pNewInflows = env->GetPrimitiveArrayCritical(newInflowsArr, nullptr);
 
-    if (!pNewInflows || !pInitialDepth || !pInitialQ) {
-        // Liberación segura en caso de fallo parcial
-        if (pNewInflows) env->ReleasePrimitiveArrayCritical(newInflowsArr, pNewInflows, JNI_ABORT);
-        if (pInitialDepth) env->ReleasePrimitiveArrayCritical(initialDepthsArr, pInitialDepth, JNI_ABORT);
-        if (pInitialQ) env->ReleasePrimitiveArrayCritical(initialQArr, pInitialQ, JNI_ABORT);
-        
+    if (!pNewInflows) {
         throw_java_exception(env, "Error JNI Run: Fallo crítico al acceder a arrays de memoria.");
         return nullptr;
     }
@@ -123,12 +124,9 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
         results = run_manning_batch_stateful(
             session,
             (float*)pNewInflows,
-            (float*)pInitialDepth,
-            (float*)pInitialQ,
             (int)batchSize
         );
     } catch (const std::exception& e) {
-        // Guardamos el error pero NO lanzamos excepción todavía (estamos en sección crítica)
         errorMsg = e.what();
     } catch (...) {
         errorMsg = "Error desconocido nativo en Manning Run.";
@@ -136,8 +134,6 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
 
     // 4. Liberar Pinning (JNI_ABORT = No copiar de vuelta, solo leímos inputs)
     env->ReleasePrimitiveArrayCritical(newInflowsArr, pNewInflows, JNI_ABORT);
-    env->ReleasePrimitiveArrayCritical(initialDepthsArr, pInitialDepth, JNI_ABORT);
-    env->ReleasePrimitiveArrayCritical(initialQArr, pInitialQ, JNI_ABORT);
 
     // 5. Manejo de Errores Diferido
     if (!errorMsg.empty()) {
@@ -146,6 +142,7 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
     }
 
     // 6. Convertir y retornar resultados
+    // Nota: El vector 'results' ahora es más pequeño (Triangular/Cuadrado), Java deberá reconstruirlo.
     return vector_to_jfloatarray(env, results);
 }
 

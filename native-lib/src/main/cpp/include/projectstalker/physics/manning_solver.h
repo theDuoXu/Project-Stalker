@@ -19,18 +19,20 @@ struct ManningSession {
     float* d_sqrt_slope   = nullptr; // sqrt(S)
     float* d_pythagoras   = nullptr; // sqrt(1 + m^2)
 
-    // --- 2. Buffers de Trabajo Adaptativos (Crecen bajo demanda) ---
-    // Matriz gigante de salida [BatchSize * CellCount * 2]
+    // --- 2. Estado Base (Flyweight Intrinsic) ---
+    // Se cargan una vez en init y actúan como el estado base del río (t=0)
+    // para propagar la ola en cada batch.
+    float* d_initialQ      = nullptr;
+    float* d_initialDepths = nullptr;
+
+    // --- 3. Buffers de Trabajo Adaptativos (Crecen bajo demanda) ---
+    // Matriz de salida (ahora optimizada con copia triangular)
     float* d_results       = nullptr;
 
     // Buffer pequeño de entrada comprimida [BatchSize]
     float* d_newInflows    = nullptr;
 
-    // Estado del río al inicio del batch [CellCount]
-    float* d_initialQ      = nullptr;
-    float* d_initialDepths = nullptr;
-
-    // --- 3. Metadatos de Control de Memoria (High-Water Mark) ---
+    // --- 4. Metadatos de Control de Memoria (High-Water Mark) ---
     size_t resultCapacityElements = 0; // Capacidad actual de d_results (floats)
     size_t inputBatchCapacity     = 0; // Capacidad actual de d_newInflows (floats)
 
@@ -41,11 +43,13 @@ struct ManningSession {
 
 /**
  * Inicializa la sesión en GPU.
- * 1. Reserva memoria para la geometría.
+ * 1. Reserva memoria para geometría y ESTADO INICIAL.
  * 2. Ejecuta el kernel de "Baking" para pre-calcular constantes.
  * 3. Retorna el puntero a la estructura de sesión.
  *
- * @param cellCount Número de celdas del río.
+ * @param h_initialDepths Estado de profundidad base del río.
+ * @param h_initialQ      Estado de caudal base del río.
+ * @param cellCount       Número de celdas del río.
  * @return Puntero opaco a la sesión (ManningSession*).
  */
 ManningSession* init_manning_session(
@@ -53,26 +57,24 @@ ManningSession* init_manning_session(
     const float* h_sideSlopes,
     const float* h_manningCoeffs,
     const float* h_bedSlopes,
+    const float* h_initialDepths, // <--- NUEVO: Carga pesada en init
+    const float* h_initialQ,      // <--- NUEVO: Carga pesada en init
     int cellCount
 );
 
 /**
  * Ejecuta un batch de simulación utilizando la sesión persistente.
- * Implementa lógica de memoria adaptativa: si el batchSize crece, redimensiona los buffers.
- * Utiliza la lógica "Smart Fetch" para expandir los datos en GPU.
+ * LIGERO: Solo recibe los nuevos caudales (Extrinsic State).
+ * Reutiliza el estado base cargado en init.
  *
- * @param session         Puntero a la sesión activa.
- * @param h_newInflows    Array comprimido de caudales de entrada [BatchSize].
- * @param h_initialDepths Estado de profundidad en t=0 (Semilla NR) [CellCount].
- * @param h_initialQ      Estado de caudal en t=0 (Base para propagación) [CellCount].
- * @param batchSize       Número de pasos a simular.
- * @return Vector con todos los resultados desplegados [H0, V0, H1, V1...].
+ * @param session      Puntero a la sesión activa.
+ * @param h_newInflows Array comprimido de caudales de entrada [BatchSize].
+ * @param batchSize    Número de pasos a simular.
+ * @return Vector con los resultados del triangulo activo [BatchSize^2 * 2].
  */
 std::vector<float> run_manning_batch_stateful(
     ManningSession* session,
-    const float* h_newInflows,
-    const float* h_initialDepths,
-    const float* h_initialQ,
+    const float* h_newInflows, // Solo pasamos el delta
     int batchSize
 );
 

@@ -82,11 +82,11 @@ __global__ void manningBakingKernel(
 }
 
 // -----------------------------------------------------------------------------
-// KERNEL 2: SMART SOLVER (Stateful + Smart Fetch)
+// KERNEL 2: SMART SOLVER (Stateful + Smart Fetch + SoA Writing)
 // -----------------------------------------------------------------------------
 
 __global__ void manningSmartKernel(
-    float* __restrict__ d_results,        // [H0, V0, H1, V1...] BatchSize * CellCount * 2
+    float* __restrict__ d_results,        // Output SoA: [H0...Hn | V0...Vn]
     const float* __restrict__ d_newInflows, // Input comprimido [BatchSize]
     const float* __restrict__ d_initialQ,   // Estado base [CellCount]
     const float* __restrict__ d_initialDepths, // Semilla estática [CellCount]
@@ -157,11 +157,13 @@ __global__ void manningSmartKernel(
     // Velocidad V = Q / A
     float V = Q_target / fmaxf(A_final, SAFE_EPSILON);
 
-    // 8. Escritura (Expandida)
-    // El buffer de resultados contiene toda la historia [BatchSize * CellCount * 2]
-    int out_idx = id * 2;
-    d_results[out_idx]     = H;
-    d_results[out_idx + 1] = V;
+    // 8. Escritura Coalescente (SoA - Structure of Arrays)
+    // Layout en memoria: [ Bloque H (TotalThreads) ] [ Bloque V (TotalThreads) ]
+    // Esto asegura que hilos consecutivos escriban en direcciones consecutivas.
+    // (SoA): id, id + Total -> Stride 1 (Perfecto)
+
+    d_results[id]                = H; // Escribimos H en la primera mitad
+    d_results[id + totalThreads] = V; // Escribimos V en la segunda mitad
 }
 
 // --- Launchers (Implementación de manning_kernel.h) ---

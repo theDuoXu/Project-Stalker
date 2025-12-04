@@ -36,8 +36,9 @@ void launchManningBakingKernel(
  *
  * 1. Recibe 'd_newInflows' (pequeño) y 'd_initialQ' (estado base) en lugar de una matriz gigante.
  * 2. Recibe geometría pre-cocinada (inv_n, sqrt_slope...) en lugar de datos crudos.
+ * 3. Escribe resultados en formato SoA (Coalescente).
  *
- * @param d_results       Salida: Matriz completa [H, V] para todo el batch. Tamaño: batchSize * cellCount * 2
+ * @param d_results       Salida: Matriz SoA [H_block | V_block]. Total: batchSize * cellCount * 2
  * @param d_newInflows    Entrada: Caudales entrando al sistema en cada paso t. Tamaño: batchSize
  * @param d_initialQ      Entrada: Estado del caudal en el río en t=0. Tamaño: cellCount
  * @param d_initialDepths Entrada: Estado de la profundidad en t=0 (Semilla para Newton-Raphson). Tamaño: cellCount
