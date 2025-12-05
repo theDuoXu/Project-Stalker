@@ -14,24 +14,24 @@ import projectstalker.config.SimulationConfig.GpuStrategy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Procesa un lote (batch) de pasos de tiempo de simulación de Manning.
- * <p>
- * Implementa un enfoque híbrido y actúa como Factoría de Resultados:
- * 1. GPU (Stateful + DMA): Delega al {@link ManningGpuSolver}. Soporta modos SMART (Optimized) y FULL (Robust).
- * 2. CPU (Concurrent): Fallback a threads de Java con matrices densas.
  */
 @Slf4j
 public class ManningBatchProcessor implements AutoCloseable {
 
+
     private final RiverGeometry geometry;
     private final ExecutorService threadPool;
     private final int cellCount;
-
-    // Stateful Solver: Encapsula la sesión GPU y los buffers DMA persistentes.
     private final ManningGpuSolver gpuSolver;
+
+    // Parámetro de configuración cacheado
+    private final int fullEvolutionStride;
 
     public ManningBatchProcessor(RiverGeometry geometry, SimulationConfig simulationConfig) {
         this.geometry = geometry;
@@ -48,13 +48,13 @@ public class ManningBatchProcessor implements AutoCloseable {
             this.gpuSolver = null;
         }
 
-        log.info("ManningBatchProcessor inicializado. (CPU Threads: {})", processorCount);
+        // Leer el stride de la configuración (Default 1 si no está definido)
+        // Asumiendo que el getter se llama getGpuFullEvolutionStride()
+        this.fullEvolutionStride = Math.max(1, simulationConfig.getGpuFullEvolutionStride());
+
+        log.info("ManningBatchProcessor inicializado. (CPU Threads: {}, GPU Stride: {})", processorCount, fullEvolutionStride);
     }
 
-    /**
-     * Procesa un batch completo.
-     * @param strategy La estrategia GPU a utilizar (Trusted, Safe o Full).
-     */
     public ISimulationResult processBatch(int batchSize,
                                           RiverState initialRiverState,
                                           float[] newInflows,
@@ -69,18 +69,15 @@ public class ManningBatchProcessor implements AutoCloseable {
         }
     }
 
-    // Sobrecarga para compatibilidad hacia atrás (default trust=false -> Safe Mode)
     public ISimulationResult processBatch(int batchSize,
                                           RiverState initialRiverState,
                                           float[] newInflows,
                                           float[][][] phTmp,
                                           boolean isGpuAccelerated) {
+        // Por defecto SAFE
         return processBatch(batchSize, initialRiverState, newInflows, phTmp, isGpuAccelerated, GpuStrategy.SMART_SAFE);
     }
 
-    /**
-     * Realiza el cómputo GPU con selección explícita de estrategia.
-     */
     private ISimulationResult gpuComputeBatch(int batchSize, RiverState initialRiverState,
                                               float[] newInflows, float[][][] phTmp,
                                               GpuStrategy strategy) {
@@ -96,31 +93,28 @@ public class ManningBatchProcessor implements AutoCloseable {
 
             long t1 = System.nanoTime();
 
-            // EJECUCIÓN NATIVA CON SELECTOR DE ESTRATEGIA
             float[][][] packedResults;
             boolean executedAsFull = false;
 
             switch (strategy) {
                 case FULL_EVOLUTION:
-                    // CAMINO DIRECTO 1: Ejecución Robusta Explícita
-                    packedResults = gpuSolver.solveFullEvolutionBatch(initialDepths, newInflows, initialQ);
+                    // PASAMOS EL STRIDE CONFIGURADO
+                    packedResults = gpuSolver.solveFullEvolutionBatch(initialDepths, newInflows, initialQ, this.fullEvolutionStride);
                     executedAsFull = true;
                     break;
 
                 case SMART_TRUSTED:
-                    // CAMINO DIRECTO 2: Ejecución Optimizada "Ciega" (Confianza total)
                     packedResults = gpuSolver.solveSmartBatch(initialDepths, newInflows, initialQ, true);
                     break;
 
                 case SMART_SAFE:
                 default:
-                    // CAMINO HÍBRIDO: Intenta optimizar, pero con red de seguridad (Try-Catch)
                     try {
-                        // trust=false fuerza la validación interna en el solver
                         packedResults = gpuSolver.solveSmartBatch(initialDepths, newInflows, initialQ, false);
                     } catch (IllegalStateException e) {
-                        log.warn("GPU Smart Optimization rechazada (Safety Check). Fallback a FULL EVOLUTION. Motivo: {}", e.getMessage());
-                        packedResults = gpuSolver.solveFullEvolutionBatch(initialDepths, newInflows, initialQ);
+                        log.warn("GPU Smart Optimization rechazada. Fallback a FULL EVOLUTION (Stride={}). Motivo: {}", this.fullEvolutionStride, e.getMessage());
+                        // EN FALLBACK TAMBIÉN USAMOS EL STRIDE
+                        packedResults = gpuSolver.solveFullEvolutionBatch(initialDepths, newInflows, initialQ, this.fullEvolutionStride);
                         executedAsFull = true;
                     }
                     break;
@@ -128,35 +122,36 @@ public class ManningBatchProcessor implements AutoCloseable {
 
             long t2 = System.nanoTime();
 
-            if (packedResults == null || packedResults.length != batchSize) {
-                log.error("Error crítico GPU: BatchSize incorrecto en retorno.");
-                return DenseManningResult.builder()
-                        .geometry(this.geometry)
-                        .states(Collections.emptyList())
-                        .simulationTime(0)
-                        .build();
+            // Validación de integridad básica del retorno
+            // Nota: En modo FULL con Stride > 1, packedResults.length (tiempo) será menor que batchSize.
+            // FlyweightManningResult debe saber manejar esto o debemos expandirlo aquí si fuera necesario.
+            // Como ISimulationResult abstrae el tiempo, FlyweightManningResult usará lo que tenga.
+            if (packedResults == null || packedResults.length == 0) {
+                log.error("Error crítico GPU: Resultado vacío.");
+                return DenseManningResult.builder().geometry(this.geometry).states(Collections.emptyList()).simulationTime(0).build();
             }
 
             long simulationTimeMs = (t2 - t0) / 1_000_000;
+            int effectiveStride = (executedAsFull) ? this.fullEvolutionStride : 1;
 
             ISimulationResult result = new FlyweightManningResult(
                     this.geometry,
                     simulationTimeMs,
                     initialRiverState,
                     packedResults,
-                    phTmp
+                    phTmp,
+                    effectiveStride
             );
 
             long t4 = System.nanoTime();
 
-            // LOG DE PERFILADO
+            // LOG
             double totalMs = (t4 - t0) / 1e6;
             if (totalMs > 5.0) {
                 double prepMs = (t1 - t0) / 1e6;
                 double gpuMs = (t2 - t1) / 1e6;
                 double wrapMs = (t4 - t2) / 1e6;
-
-                String modeLabel = executedAsFull ? "FULL" : "SMART";
+                String modeLabel = executedAsFull ? ("FULL(s=" + this.fullEvolutionStride + ")") : "SMART";
 
                 log.debug(">>> GPU DMA BATCH [{}]: Total={}ms | Prep={}ms | GPU+DMA={}ms | Wrap={}ms <<<",
                         modeLabel,
@@ -175,22 +170,16 @@ public class ManningBatchProcessor implements AutoCloseable {
         }
     }
 
-    // --- CPU Compute Batch (Legacy) ---
+    // --- CPU Compute Batch ---
     private ISimulationResult cpuComputeBatch(int batchSize, RiverState initialRiverState,
                                               float[] newInflows, float[][][] phTmp) {
         long tStart = System.currentTimeMillis();
-
         float[][] allDischargeProfiles = createDischargeProfiles(batchSize, newInflows, initialRiverState.discharge(this.geometry));
-
         List<ManningProfileCalculatorTask> tasks = new ArrayList<>(batchSize);
         float[] initialWaterDepth = initialRiverState.waterDepth();
 
         for (int i = 0; i < batchSize; i++) {
-            tasks.add(new ManningProfileCalculatorTask(
-                    allDischargeProfiles[i],
-                    initialWaterDepth,
-                    geometry
-            ));
+            tasks.add(new ManningProfileCalculatorTask(allDischargeProfiles[i], initialWaterDepth, geometry));
         }
 
         List<Future<ManningProfileCalculatorTask>> futures;
@@ -212,16 +201,9 @@ public class ManningBatchProcessor implements AutoCloseable {
                 throw new RuntimeException("Fallo en tarea CPU #" + i, e);
             }
         }
-
         List<RiverState> states = assembleRiverStateResults(batchSize, phTmp, resultingDepths, resultingVelocities);
-
         long tEnd = System.currentTimeMillis();
-
-        return DenseManningResult.builder()
-                .geometry(this.geometry)
-                .states(states)
-                .simulationTime(tEnd - tStart)
-                .build();
+        return DenseManningResult.builder().geometry(this.geometry).states(states).simulationTime(tEnd - tStart).build();
     }
 
     private float[][] createDischargeProfiles(int batchSize, float[] newDischarges, float[] initialDischarges) {
@@ -259,12 +241,8 @@ public class ManningBatchProcessor implements AutoCloseable {
 
     @Override
     public void close() {
-        if (gpuSolver != null) {
-            gpuSolver.close();
-        }
-        if (threadPool != null && !threadPool.isShutdown()) {
-            threadPool.shutdown();
-        }
+        if (gpuSolver != null) gpuSolver.close();
+        if (threadPool != null && !threadPool.isShutdown()) threadPool.shutdown();
         log.info("ManningBatchProcessor cerrado.");
     }
 }

@@ -95,7 +95,8 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_initSession(
  * MODIFICADO:
  * 1. Recibe Buffers de Entrada y Salida pre-asignados (Input/Output).
  * 2. Recibe 'mode' para seleccionar estrategia (Smart vs Full).
- * 3. No devuelve array (escribe in-place).
+ * 3. Recibe 'stride' para muestreo de salida (Nuevo).
+ * 4. No devuelve array (escribe in-place).
  */
 JNIEXPORT jint JNICALL
 Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
@@ -104,7 +105,8 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
     jobject inputBuf,  // Buffer Directo de Entrada (Inflows)
     jobject outputBuf, // Buffer Directo de Salida (Results)
     jint batchSize,
-    jint mode          // 0=Smart, 1=Full
+    jint mode,         // 0=Smart, 1=Full
+    jint stride
 ) {
     // 1. Validar Sesión
     ManningSession* session = (ManningSession*)handle;
@@ -132,7 +134,8 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
             pInput,
             pOutput,
             (int)batchSize,
-            (int)mode // Pasamos el modo seleccionado
+            (int)mode,
+            (int)stride // <--- Pasamos el stride
         );
         return 0; // Éxito
 

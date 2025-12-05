@@ -16,9 +16,7 @@ void launchManningBakingKernel(
     int cellCount
 );
 
-// --- Smart Solver ---
-// Calcula todo el dominio, pero asume lógica "Smart Fetch" para inputs.
-// Ideal para sistemas de alerta temprana y entradas de ondas nuevas.
+// --- Smart Solver (Lazy / Optimized) ---
 void launchManningSmartKernel(
     float* d_results,
     const float* d_newInflows,
@@ -33,23 +31,30 @@ void launchManningSmartKernel(
     int cellCount
 );
 
-// --- Full Evolution Solver ---
-// Estructura separada para simulación completa.
-// Aunque por ahora comparte inputs, este kernel está preparado para:
-// 1. Lógica de caudal compleja (interacción de olas).
-// 2. Outputs masivos (sin recorte triangular).
-void launchManningFullKernel(
+// --- Step Solver (Full Evolution / Ping-Pong) ---
+// Calcula UN SOLO paso de tiempo (t) basándose en el estado anterior (t-1).
+// Se llama repetidamente desde el bucle C++.
+//
+// @param d_current_Q     Buffer de escritura para el estado Q actual (Ping/Pong).
+// @param d_prev_Q        Buffer de lectura del estado Q anterior (Ping/Pong).
+// @param d_results       Buffer global de salida (se escribe solo si save_to_output es true).
+// @param current_inflow  Caudal de entrada para este paso de tiempo (t).
+// @param write_offset    Offset en d_results donde escribir (si corresponde).
+// @param save_to_output  Flag para indicar si este paso debe guardarse (Stride).
+void launchManningStepKernel(
+    float* d_current_Q,
+    const float* d_prev_Q,
     float* d_results,
-    const float* d_newInflows,
-    const float* d_initialQ,
-    const float* d_initialDepths,
+    float current_inflow,
+    const float* d_initialDepths, // Semilla
     const float* d_bottomWidths,
     const float* d_sideSlopes,
     const float* d_inv_n,
     const float* d_sqrt_slope,
     const float* d_pythagoras,
-    int batchSize,
-    int cellCount
+    int cellCount,
+    bool save_to_output,
+    int write_offset
 );
 
 #ifdef __cplusplus

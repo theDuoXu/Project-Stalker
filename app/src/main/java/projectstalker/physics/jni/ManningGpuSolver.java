@@ -11,7 +11,7 @@ import java.nio.FloatBuffer;
  * Actúa como un puente (wrapper) Stateful hacia la librería nativa JNI.
  * Soporta dos estrategias:
  * 1. Smart/Lazy: Optimizado para alertas (recorte triangular). Requiere estado estable.
- * 2. Full Evolution: Robusto para ciencia (matriz completa). Sin restricciones.
+ * 2. Full Evolution: Robusto para ciencia (matriz completa con Stride). Sin restricciones.
  */
 @Slf4j
 public final class ManningGpuSolver implements AutoCloseable {
@@ -21,7 +21,6 @@ public final class ManningGpuSolver implements AutoCloseable {
     private final int cellCount;
     private final RiverGeometry geometry;
 
-    // Tolerancia para considerar Steady State (5%)
     private static final float STEADY_STATE_TOLERANCE = 0.05f;
 
     // --- DMA Buffers Persistentes ---
@@ -38,150 +37,123 @@ public final class ManningGpuSolver implements AutoCloseable {
         this.cellCount = geometry.getCellCount();
     }
 
-    // --- MÉTODOS PÚBLICOS DE RESOLUCIÓN ---
+    // --- MÉTODOS PÚBLICOS ---
 
-    /**
-     * Estrategia OPTIMIZADA (Smart/Lazy).
-     * Calcula y transfiere solo el triángulo de influencia de la nueva ola.
-     * <p>
-     * REQUISITO: El río aguas abajo debe estar en equilibrio (Steady State).
-     * Si no se confía en la optimización, se verificará el caudal.
-     */
     public float[][][] solveSmartBatch(float[] initialDepths,
                                        float[] newInflows,
                                        float[] initialRiverStateQ,
                                        boolean trustOptimization) {
-        // 1. Validación de Seguridad (Solo para modo Smart)
         if (!trustOptimization) {
             validateSteadyStateCondition(initialRiverStateQ);
         }
 
-        // 2. Configuración de Tamaño (Triangular/Cuadrado recortado)
         int batchSize = newInflows.length;
         int activeWidth = Math.min(batchSize, cellCount);
 
-        // 3. Ejecución
         return executeNativeBatch(
                 initialDepths, newInflows, initialRiverStateQ,
-                activeWidth, // Ancho de salida esperado
-                INativeManningSolver.MODE_SMART_LAZY
+                activeWidth,
+                INativeManningSolver.MODE_SMART_LAZY,
+                1 // Stride siempre es 1 en Smart (Triángulo denso)
         );
     }
 
-    /**
-     * Estrategia ROBUSTA (Full Evolution).
-     * Calcula y transfiere la matriz rectangular completa (Batch x CellCount).
-     * <p>
-     * Úsalo cuando el río ya tiene olas complejas o el estado no es estacionario.
-     * Es más lento en transferencia (PCIe), pero físicamente riguroso.
-     */
     public float[][][] solveFullEvolutionBatch(float[] initialDepths,
                                                float[] newInflows,
-                                               float[] initialRiverStateQ) {
-        // En Full Mode siempre traemos todo el río
+                                               float[] initialRiverStateQ,
+                                               int stride) { // <--- STRIDE EXPLICITO
         int batchSize = newInflows.length;
         int fullWidth = cellCount;
 
         return executeNativeBatch(
                 initialDepths, newInflows, initialRiverStateQ,
-                fullWidth, // Ancho de salida total
-                INativeManningSolver.MODE_FULL_EVOLUTION
+                fullWidth,
+                INativeManningSolver.MODE_FULL_EVOLUTION,
+                stride
         );
     }
 
-    // --- Lógica Común de Ejecución (DRY) ---
+    // Sobrecarga por defecto (Stride = 1)
+    public float[][][] solveFullEvolutionBatch(float[] initialDepths,
+                                               float[] newInflows,
+                                               float[] initialRiverStateQ) {
+        return solveFullEvolutionBatch(initialDepths, newInflows, initialRiverStateQ, 1);
+    }
+
+    // --- Lógica Común ---
 
     private float[][][] executeNativeBatch(float[] initialDepths,
                                            float[] newInflows,
                                            float[] initialQ,
                                            int targetOutputWidth,
-                                           int mode) {
-        // A. Lazy Init
+                                           int mode,
+                                           int stride) { // <--- STRIDE
         if (sessionHandle == 0) {
             initializeSession(initialDepths, initialQ);
         }
 
         int batchSize = newInflows.length;
 
-        // B. Preparación de Memoria DMA
-        // Calculamos el tamaño necesario según la estrategia (Target Width)
-        int neededOutputFloats = batchSize * targetOutputWidth * 2; // H y V
+        // Cálculo de tamaño de salida teniendo en cuenta el Stride
+        // Total steps = ceil(batchSize / stride)
+        int savedSteps = (batchSize + stride - 1) / stride;
+
+        // En Smart, targetOutputWidth es pequeño (triángulo). En Full es cellCount.
+        // Pero en Full, la dimensión temporal se reduce por el stride.
+        // En Smart, el stride es 1, así que savedSteps == batchSize.
+        int outputHeight = savedSteps;
+
+        int neededOutputFloats = outputHeight * targetOutputWidth * 2;
 
         ensureBuffersCapacity(batchSize, neededOutputFloats);
 
-        // C. Llenado Input (Pinned)
         this.inputBuffer.clear();
         this.inputBuffer.put(sanitizeInflows(newInflows));
 
-        // D. Llamada Nativa (Zero-Copy)
         int status = nativeSolver.runBatch(
                 sessionHandle,
                 inputBuffer,
                 outputBuffer,
                 batchSize,
-                mode // Pasamos el modo a C++
+                mode,
+                stride
         );
 
         if (status != 0) {
-            throw new RuntimeException("Error nativo en Manning GPU. Código: " + status + " Modo: " + mode);
+            throw new RuntimeException("Error nativo en Manning GPU. Código: " + status);
         }
 
-        // E. Recuperación Resultados
         float[] tempResults = new float[neededOutputFloats];
         this.outputBuffer.clear();
         this.outputBuffer.get(tempResults);
 
-        // F. Desempaquetado
-        return unpackGpuResults(tempResults, batchSize, targetOutputWidth);
+        return unpackGpuResults(tempResults, outputHeight, targetOutputWidth);
     }
 
-    // --- Helpers Internos ---
+    // --- Helpers ---
 
     private void initializeSession(float[] initialDepths, float[] initialQ) {
         log.info("Inicializando sesión GPU Manning (Lazy) para {} celdas...", cellCount);
         float[] slopeArray = calculateAndSanitizeBedSlopes(this.geometry);
-
         FloatBuffer widthBuf   = createDirectBuffer(this.geometry.getBottomWidth());
         FloatBuffer sideBuf    = createDirectBuffer(this.geometry.getSideSlope());
         FloatBuffer manningBuf = createDirectBuffer(this.geometry.getManningCoefficient());
         FloatBuffer bedBuf     = createDirectBuffer(slopeArray);
         FloatBuffer depthBuf   = createDirectBuffer(sanitizeDepths(initialDepths));
         FloatBuffer qBuf       = createDirectBuffer(initialQ);
-
         this.sessionHandle = nativeSolver.initSession(widthBuf, sideBuf, manningBuf, bedBuf, depthBuf, qBuf, cellCount);
-
         if (this.sessionHandle == 0) throw new RuntimeException("Fallo crítico al inicializar sesión GPU.");
         log.info("Sesión GPU inicializada (Handle: {}).", sessionHandle);
     }
 
-    /**
-     * Verifica la estabilidad del caudal base.
-     * Corrección aplicada: Índices [2] y [length-3] para evitar efectos de borde.
-     */
     private void validateSteadyStateCondition(float[] q) {
-        if (q == null || q.length < 6) return; // Array muy pequeño, no validamos o asumimos OK.
-
-        // Muestreo evitando las primerísimas celdas (condición de contorno)
+        if (q == null || q.length < 6) return;
         float qStart = q[2];
         float qEnd = q[q.length - 3];
-
         float diff = Math.abs(qStart - qEnd);
         float maxQ = Math.max(Math.abs(qStart), Math.abs(qEnd));
-
-        boolean isStable;
-        if (maxQ < 1.0f) {
-            isStable = diff < 0.1f;
-        } else {
-            isStable = (diff / maxQ) <= STEADY_STATE_TOLERANCE;
-        }
-
-        if (!isStable) {
-            throw new IllegalStateException(String.format(
-                    "OPTIMIZACIÓN INSEGURA: El caudal base no es estable (Steady State).\n" +
-                            "Q[2]=%.2f, Q[N-3]=%.2f (Delta=%.1f%%).\n" +
-                            "El modo Smart requiere caudal uniforme. Use 'trustOptimization=true' o 'solveFullEvolutionBatch'.",
-                    qStart, qEnd, (diff / maxQ) * 100f));
-        }
+        boolean isStable = (maxQ < 1.0f) ? (diff < 0.1f) : ((diff / maxQ) <= STEADY_STATE_TOLERANCE);
+        if (!isStable) throw new IllegalStateException("Río inestable para optimización Smart.");
     }
 
     private void ensureBuffersCapacity(int requiredInputFloats, int requiredOutputFloats) {
@@ -204,25 +176,24 @@ public final class ManningGpuSolver implements AutoCloseable {
     }
 
     /**
-     * Desempaqueta los resultados planos de la GPU a una matriz estructurada.
-     * Acepta 'activeWidth' dinámico para soportar tanto Smart (triángulo) como Full (rectángulo).
+     * Desempaqueta los resultados planos.
+     * outputHeight = número de pasos guardados (batchSize / stride).
      */
-    private float[][][] unpackGpuResults(float[] gpuResults, int batchSize, int activeWidth) {
-        int expectedSize = batchSize * activeWidth * 2;
+    private float[][][] unpackGpuResults(float[] gpuResults, int outputHeight, int activeWidth) {
+        int expectedSize = outputHeight * activeWidth * 2;
 
         if (gpuResults == null || gpuResults.length != expectedSize) {
             throw new IllegalArgumentException(String.format(
-                    "Error GPU Unpack: Tamaño incorrecto. Esperado: %d, Recibido: %d (Batch=%d, Width=%d)",
-                    expectedSize, (gpuResults != null ? gpuResults.length : 0), batchSize, activeWidth));
+                    "Error GPU Unpack: Tamaño incorrecto. Esperado: %d, Recibido: %d",
+                    expectedSize, (gpuResults != null ? gpuResults.length : 0)));
         }
 
-        float[][][] results = new float[batchSize][2][activeWidth];
+        float[][][] results = new float[outputHeight][2][activeWidth];
 
-        // Layout GPU SoA: [ Bloque H (Batch x Width) ] [ Bloque V (Batch x Width) ]
         int ptrH = 0;
-        int ptrV = batchSize * activeWidth; // Inicio del bloque V
+        int ptrV = outputHeight * activeWidth; // Inicio del bloque V
 
-        for (int t = 0; t < batchSize; t++) {
+        for (int t = 0; t < outputHeight; t++) {
             for (int c = 0; c < activeWidth; c++) {
                 results[t][0][c] = gpuResults[ptrH++];
                 results[t][1][c] = gpuResults[ptrV++];
@@ -234,7 +205,6 @@ public final class ManningGpuSolver implements AutoCloseable {
     @Override
     public void close() {
         if (sessionHandle != 0) {
-            log.info("Cerrando sesión GPU Manning (Handle: {})...", sessionHandle);
             nativeSolver.destroySession(sessionHandle);
             sessionHandle = 0;
         }
@@ -242,7 +212,6 @@ public final class ManningGpuSolver implements AutoCloseable {
         outputBuffer = null;
     }
 
-    // --- Helpers de Sanitización y Geometría ---
     private float[] sanitizeInflows(float[] inflows) {
         boolean dirty = false;
         for(float f : inflows) if(f <= 0) { dirty = true; break; }

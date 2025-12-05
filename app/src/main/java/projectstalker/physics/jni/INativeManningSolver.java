@@ -36,6 +36,7 @@ public interface INativeManningSolver {
      * @param outputBuffer  Buffer Directo donde escribir resultados (Output).
      * @param batchSize     Tamaño del batch a procesar.
      * @param mode          Estrategia de simulación (Use constantes MODE_*).
+     * @param stride        Factor de submuestreo (1=Todos los pasos, N=Cada N pasos). Solo afecta a FULL_EVOLUTION.
      * @return Código de estado (0 = éxito).
      */
     int runBatch(
@@ -43,7 +44,8 @@ public interface INativeManningSolver {
             FloatBuffer inputBuffer,
             FloatBuffer outputBuffer,
             int batchSize,
-            int mode
+            int mode,
+            int stride
     );
 
     // Lifecycle: Destroy

@@ -60,6 +60,11 @@ public class SimulationConfig {
     int cpuTimeBatchSize;
 
     /**
+     * El factor de submuestreo a aplicar
+     */
+    @Builder.Default
+    int gpuFullEvolutionStride = 1;
+    /**
      * Número de núcleos CPU a utilizar en simulaciones CPU
      */
     int cpuProcessorCount;

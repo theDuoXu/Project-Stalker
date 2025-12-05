@@ -3,11 +3,11 @@
 #include "projectstalker/physics/manning_kernel.h"
 #include <cuda_runtime.h>
 #include <iostream>
+#include <algorithm> // std::swap
 #include <stdexcept>
 #include <string>
 #include <sstream>
 
-// Macro de Chequeo de Errores CUDA
 #define CUDA_CHECK_M(call) { \
     cudaError_t err_code = call; \
     if (err_code != cudaSuccess) { \
@@ -39,6 +39,7 @@ ManningSession* init_manning_session(
     float* d_temp_bed = nullptr;
 
     try {
+        // 1. Buffers Geometría y Estado Base
         CUDA_CHECK_M(cudaMalloc(&session->d_bottomWidths, cellBytes));
         CUDA_CHECK_M(cudaMalloc(&session->d_sideSlopes, cellBytes));
         CUDA_CHECK_M(cudaMalloc(&session->d_inv_n, cellBytes));
@@ -46,15 +47,26 @@ ManningSession* init_manning_session(
         CUDA_CHECK_M(cudaMalloc(&session->d_pythagoras, cellBytes));
         CUDA_CHECK_M(cudaMalloc(&session->d_initialQ, cellBytes));
         CUDA_CHECK_M(cudaMalloc(&session->d_initialDepths, cellBytes));
+
+        // 2. Buffers Ping-Pong (Estado Dinámico)
+        CUDA_CHECK_M(cudaMalloc(&session->d_ping_Q, cellBytes));
+        CUDA_CHECK_M(cudaMalloc(&session->d_pong_Q, cellBytes));
+
+        // 3. Temporales
         CUDA_CHECK_M(cudaMalloc(&d_temp_manning, cellBytes));
         CUDA_CHECK_M(cudaMalloc(&d_temp_bed, cellBytes));
 
+        // Transferencias
         CUDA_CHECK_M(cudaMemcpy(session->d_bottomWidths, h_bottomWidths, cellBytes, cudaMemcpyHostToDevice));
         CUDA_CHECK_M(cudaMemcpy(session->d_sideSlopes, h_sideSlopes, cellBytes, cudaMemcpyHostToDevice));
         CUDA_CHECK_M(cudaMemcpy(session->d_initialQ, h_initialQ, cellBytes, cudaMemcpyHostToDevice));
         CUDA_CHECK_M(cudaMemcpy(session->d_initialDepths, h_initialDepths, cellBytes, cudaMemcpyHostToDevice));
         CUDA_CHECK_M(cudaMemcpy(d_temp_manning, h_manningCoeffs, cellBytes, cudaMemcpyHostToDevice));
         CUDA_CHECK_M(cudaMemcpy(d_temp_bed, h_bedSlopes, cellBytes, cudaMemcpyHostToDevice));
+
+        // Inicializar Ping-Pong con estado inicial (para que el primer paso tenga datos previos)
+        CUDA_CHECK_M(cudaMemcpy(session->d_ping_Q, h_initialQ, cellBytes, cudaMemcpyHostToDevice));
+        // Pong no necesita init, se sobrescribirá.
 
         launchManningBakingKernel(
             session->d_inv_n,
@@ -96,83 +108,167 @@ static void resize_buffer_if_needed(float** ptr, size_t* currentCap, size_t need
         *currentCap = newCap;
     }
 }
+// -----------------------------------------------------------------------------
+// HELPER: ESTRATEGIA FULL EVOLUTION (Ping-Pong Step Loop)
+// -----------------------------------------------------------------------------
+static void run_full_evolution_strategy(
+    ManningSession* session,
+    const float* h_pinned_inflows,
+    float* h_pinned_results,
+    int batchSize,
+    int stride,
+    int savedSteps
+) {
+    int cellCount = session->cellCount;
+
+    // Punteros locales para el swap
+    float* d_curr = session->d_ping_Q; // Asumimos que Ping tiene el último estado válido
+    float* d_prev = session->d_pong_Q;
+
+    // Offset entre bloques H y V en el buffer de salida reducido
+    // El buffer d_results tiene tamaño [savedSteps * cellCount * 2]
+    int output_pitch_elements = savedSteps * cellCount;
+    int saved_count = 0;
+
+    // Bucle de Orquestación en CPU
+    for (int t = 0; t < batchSize; t++) {
+        // Swap: El que fue Current (escritura) en t-1 pasa a ser Prev (lectura) en t
+        std::swap(d_curr, d_prev);
+
+        // Input: Leemos directamente de la memoria Pinned (Zero-Copy implícito CPU)
+        float current_inflow = h_pinned_inflows[t];
+
+        // Stride Logic
+        bool save = (t % stride == 0);
+        int write_idx_h = -1;
+        int write_idx_v = -1;
+
+        if (save) {
+            // Calculamos índice plano en el buffer de salida
+            write_idx_h = saved_count * cellCount;
+            write_idx_v = write_idx_h + output_pitch_elements;
+            saved_count++;
+        }
+
+        // Lanzar Kernel Paso a Paso
+        launchManningStepKernel(
+            d_curr,         // Escribir aquí
+            d_prev,         // Leer de aquí
+            session->d_results,
+            current_inflow,
+            session->d_initialDepths, // Semilla estática
+            session->d_bottomWidths, session->d_sideSlopes,
+            session->d_inv_n, session->d_sqrt_slope, session->d_pythagoras,
+            cellCount,
+            save,
+            write_idx_h,
+            write_idx_v
+        );
+    }
+
+    // Persistencia del Estado
+    // Aseguramos que session->d_ping_Q apunte al último buffer escrito (d_curr)
+    session->d_ping_Q = d_curr;
+    session->d_pong_Q = d_prev;
+
+    // Output Retrieval (Copia Lineal Compactada)
+    // Como el kernel ya escribió con stride, el buffer d_results es denso.
+    size_t bytesToCopy = saved_count * cellCount * 2 * sizeof(float);
+    CUDA_CHECK_M(cudaMemcpy(h_pinned_results, session->d_results, bytesToCopy, cudaMemcpyDeviceToHost));
+}
 
 // -----------------------------------------------------------------------------
-// RUN BATCH (Dual Strategy Support)
+// HELPER: ESTRATEGIA SMART (Monolítica Original)
+// -----------------------------------------------------------------------------
+static void run_smart_strategy(
+    ManningSession* session,
+    const float* h_pinned_inflows,
+    float* h_pinned_results,
+    int batchSize
+) {
+    int cellCount = session->cellCount;
+
+    // 1. Input Inflows (Array completo)
+    // En modo Smart necesitamos subir todo el array de inputs a la GPU de golpe
+    resize_buffer_if_needed(&session->d_newInflows, &session->inputBatchCapacity, batchSize);
+    CUDA_CHECK_M(cudaMemcpy(session->d_newInflows, h_pinned_inflows, batchSize * sizeof(float), cudaMemcpyHostToDevice));
+
+    // 2. Ejecución Kernel
+    launchManningSmartKernel(
+        session->d_results, session->d_newInflows, session->d_initialQ,
+        session->d_initialDepths, session->d_bottomWidths, session->d_sideSlopes,
+        session->d_inv_n, session->d_sqrt_slope, session->d_pythagoras,
+        batchSize, cellCount
+    );
+
+    // 3. Output Retrieval (Triangular 2D Copy)
+    // Recorte triangular para ahorrar ancho de banda
+    int activeWidth = (batchSize > cellCount) ? cellCount : batchSize;
+
+    size_t srcPitch = cellCount * sizeof(float);
+    size_t dstPitch = activeWidth * sizeof(float);
+    size_t widthBytes = activeWidth * sizeof(float);
+
+    // Copiar H
+    CUDA_CHECK_M(cudaMemcpy2D(
+        h_pinned_results, dstPitch,
+        session->d_results, srcPitch,
+        widthBytes, batchSize,
+        cudaMemcpyDeviceToHost
+    ));
+
+    // Copiar V (Offset en GPU es Batch*CellCount, en CPU es Batch*ActiveWidth)
+    float* src_V = session->d_results + ((size_t)batchSize * cellCount);
+    float* dst_V = h_pinned_results + (batchSize * activeWidth);
+
+    CUDA_CHECK_M(cudaMemcpy2D(
+        dst_V, dstPitch,
+        src_V, srcPitch,
+        widthBytes, batchSize,
+        cudaMemcpyDeviceToHost
+    ));
+}
+
+// -----------------------------------------------------------------------------
+// RUN BATCH: ORQUESTADOR PRINCIPAL
 // -----------------------------------------------------------------------------
 void run_manning_batch_stateful(
     ManningSession* session,
     const float* h_pinned_inflows,
     float* h_pinned_results,
     int batchSize,
-    int mode // 0 = Smart, 1 = Full
+    int mode,
+    int stride
 ) {
     if (!session || batchSize <= 0) return;
-
     int cellCount = session->cellCount;
 
-    // El buffer interno SIEMPRE debe ser Full (Batch x CellCount) porque el kernel escribe SoA
-    size_t totalThreads = (size_t)batchSize * cellCount;
-    size_t neededInternalElements = totalThreads * 2; // H y V
+    // 1. Configuración de Memoria de Salida Global
+    // Calculamos cuánto espacio necesitamos en VRAM para guardar los resultados
 
-    resize_buffer_if_needed(&session->d_newInflows, &session->inputBatchCapacity, (size_t)batchSize);
-    resize_buffer_if_needed(&session->d_results, &session->resultCapacityElements, neededInternalElements);
+    // Cálculo seguro de pasos guardados: ceil(batchSize / stride)
+    int savedSteps = (batchSize + stride - 1) / stride;
 
-    // 1. Input (Común)
-    CUDA_CHECK_M(cudaMemcpy(session->d_newInflows, h_pinned_inflows, batchSize * sizeof(float), cudaMemcpyHostToDevice));
+    size_t outputHeight = (mode == MODE_FULL_EVOLUTION) ? savedSteps : batchSize;
+    size_t outputWidth  = (mode == MODE_FULL_EVOLUTION) ? cellCount : batchSize; // Aprox para reserva
 
-    // 2. Kernel Execution (Strategy Switch)
+    // Para Smart: Batch x CellCount (El kernel escribe todo aunque bajemos menos)
+    // Para Full: SavedSteps x CellCount (El kernel escribe compactado)
+    size_t totalOutputElements;
+
     if (mode == MODE_FULL_EVOLUTION) {
-        launchManningFullKernel(
-            session->d_results, session->d_newInflows, session->d_initialQ,
-            session->d_initialDepths, session->d_bottomWidths, session->d_sideSlopes,
-            session->d_inv_n, session->d_sqrt_slope, session->d_pythagoras,
-            batchSize, cellCount
-        );
+        totalOutputElements = savedSteps * cellCount;
     } else {
-        // MODE_SMART_LAZY (Default)
-        launchManningSmartKernel(
-            session->d_results, session->d_newInflows, session->d_initialQ,
-            session->d_initialDepths, session->d_bottomWidths, session->d_sideSlopes,
-            session->d_inv_n, session->d_sqrt_slope, session->d_pythagoras,
-            batchSize, cellCount
-        );
+        totalOutputElements = (size_t)batchSize * cellCount;
     }
 
-    CUDA_CHECK_M(cudaGetLastError());
+    resize_buffer_if_needed(&session->d_results, &session->resultCapacityElements, totalOutputElements * 2);
 
-    // 3. Output Retrieval (Strategy Switch)
-
+    // 2. Despacho de Estrategia
     if (mode == MODE_FULL_EVOLUTION) {
-        // ESTRATEGIA FULL: Descarga Rectangular Completa
-        // Traemos TODO lo que calculó la GPU.
-        // Tamaño = BatchSize * CellCount * 2
-        // Usamos cudaMemcpy simple porque es un bloque contiguo gigante.
-
-        size_t totalBytes = neededInternalElements * sizeof(float);
-        CUDA_CHECK_M(cudaMemcpy(h_pinned_results, session->d_results, totalBytes, cudaMemcpyDeviceToHost));
-
+        run_full_evolution_strategy(session, h_pinned_inflows, h_pinned_results, batchSize, stride, savedSteps);
     } else {
-        // ESTRATEGIA SMART: Descarga Triangular Optimizada
-        // Solo traemos el frente de onda activo [Batch x Batch]
-
-        int activeWidth = batchSize;
-        if (activeWidth > cellCount) activeWidth = cellCount;
-
-        size_t srcPitch = cellCount * sizeof(float);
-        size_t dstPitch = activeWidth * sizeof(float);
-        size_t widthBytes = activeWidth * sizeof(float);
-        size_t height = batchSize;
-
-        // Copiar H
-        float* src_H = session->d_results;
-        float* dst_H = h_pinned_results;
-        CUDA_CHECK_M(cudaMemcpy2D(dst_H, dstPitch, src_H, srcPitch, widthBytes, height, cudaMemcpyDeviceToHost));
-
-        // Copiar V (Offset SoA)
-        float* src_V = session->d_results + totalThreads;
-        float* dst_V = h_pinned_results + (batchSize * activeWidth);
-        CUDA_CHECK_M(cudaMemcpy2D(dst_V, dstPitch, src_V, srcPitch, widthBytes, height, cudaMemcpyDeviceToHost));
+        run_smart_strategy(session, h_pinned_inflows, h_pinned_results, batchSize);
     }
 
     CUDA_CHECK_M(cudaDeviceSynchronize());
@@ -189,5 +285,8 @@ void destroy_manning_session(ManningSession* session) {
     if (session->d_initialDepths) cudaFree(session->d_initialDepths);
     if (session->d_results)      cudaFree(session->d_results);
     if (session->d_newInflows)   cudaFree(session->d_newInflows);
+    // Liberar Ping-Pong
+    if (session->d_ping_Q)       cudaFree(session->d_ping_Q);
+    if (session->d_pong_Q)       cudaFree(session->d_pong_Q);
     delete session;
 }

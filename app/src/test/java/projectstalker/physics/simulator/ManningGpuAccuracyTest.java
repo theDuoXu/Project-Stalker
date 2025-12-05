@@ -7,12 +7,12 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import projectstalker.config.RiverConfig;
 import projectstalker.config.SimulationConfig;
+import projectstalker.config.SimulationConfig.GpuStrategy;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.domain.simulation.ISimulationResult;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.impl.ManningProfileCalculatorTask;
-import projectstalker.config.SimulationConfig.GpuStrategy;
 
 import java.util.Arrays;
 
@@ -61,7 +61,7 @@ class ManningGpuAccuracyTest {
                 new float[cellCount], new float[cellCount], new float[cellCount]
         );
 
-        // Config
+        // Configuración Base
         SimulationConfig baseConfig = SimulationConfig.builder()
                 .riverConfig(riverConfig)
                 .seed(12345L)
@@ -72,7 +72,11 @@ class ManningGpuAccuracyTest {
                 .build();
 
         this.cpuConfig = baseConfig.withUseGpuAccelerationOnManning(false);
-        this.gpuConfig = baseConfig.withUseGpuAccelerationOnManning(true);
+
+        // Configuración GPU explícita para validación 1:1
+        this.gpuConfig = baseConfig
+                .withUseGpuAccelerationOnManning(true)
+                .withGpuFullEvolutionStride(1); // Forzamos Stride=1 para comparar todos los pasos
     }
 
     @Test
@@ -132,14 +136,16 @@ class ManningGpuAccuracyTest {
             double hGpu = gpu.getWaterDepthAt(i);
 
             if (Math.abs(hCpu - hGpu) > EPSILON) {
-                fail(String.format("Divergencia H en T=%d C=%d. CPU=%.5f GPU=%.5f", step, i, hCpu, hGpu));
+                fail(String.format("Divergencia H en T=%d C=%d. CPU=%.5f GPU=%.5f Delta=%.5f",
+                        step, i, hCpu, hGpu, Math.abs(hCpu - hGpu)));
             }
 
             double vCpu = cpu.getVelocityAt(i);
             double vGpu = gpu.getVelocityAt(i);
 
             if (Math.abs(vCpu - vGpu) > EPSILON) {
-                fail(String.format("Divergencia V en T=%d C=%d. CPU=%.5f GPU=%.5f", step, i, vCpu, vGpu));
+                fail(String.format("Divergencia V en T=%d C=%d. CPU=%.5f GPU=%.5f Delta=%.5f",
+                        step, i, vCpu, vGpu, Math.abs(vCpu - vGpu)));
             }
         }
     }

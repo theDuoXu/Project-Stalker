@@ -72,6 +72,7 @@ public class NativeManningGpuSingleton implements INativeManningSolver {
      * @param outputBuffer  Buffer donde la GPU escribirá los resultados H y V (Output).
      * @param batchSize     Tamaño del batch a procesar.
      * @param mode          Estrategia de simulación (0=Smart, 1=Full). Ver constantes en {@link INativeManningSolver}.
+     * @param stride        Factor de submuestreo.
      * @return 0 si éxito, código de error negativo si falla.
      */
     @Override
@@ -80,7 +81,8 @@ public class NativeManningGpuSingleton implements INativeManningSolver {
             FloatBuffer inputBuffer,
             FloatBuffer outputBuffer,
             int batchSize,
-            int mode
+            int mode,
+            int stride
     );
 
     @Override

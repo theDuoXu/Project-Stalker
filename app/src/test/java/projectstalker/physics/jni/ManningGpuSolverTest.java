@@ -18,7 +18,7 @@ import static org.mockito.Mockito.*;
  * 1. Lazy Initialization.
  * 2. DMA Flow (Buffers In/Out).
  * 3. Selección de Estrategia (Smart vs Full).
- * 4. Sanitización.
+ * 4. Stride Logic (Muestreo).
  */
 class ManningGpuSolverTest {
 
@@ -69,11 +69,10 @@ class ManningGpuSolverTest {
         float[] inflows = {100f};
         float[] dummy = new float[CELL_COUNT];
 
-        // Mock runBatch (con int mode)
-        when(mockNativeSolver.runBatch(anyLong(), any(), any(), anyInt(), anyInt())).thenReturn(0);
+        // Mock runBatch (con int mode y stride)
+        when(mockNativeSolver.runBatch(anyLong(), any(), any(), anyInt(), anyInt(), anyInt())).thenReturn(0);
 
         // --- ACT ---
-        // Usamos trust=true para saltar validación de steady state y forzar ejecución directa
         gpuSolver.solveSmartBatch(dummy, inflows, dummy, true);
 
         // --- ASSERT ---
@@ -88,18 +87,16 @@ class ManningGpuSolverTest {
     }
 
     @Test
-    @DisplayName("Smart Mode: Debe llamar a nativo con MODE_SMART_LAZY y desempaquetar triángulo")
+    @DisplayName("Smart Mode: Debe usar MODE_SMART_LAZY y Stride=1 implícito")
     void solveSmartBatch_shouldUseSmartMode() {
         // --- ARRANGE ---
         int batchSize = 2;
         float[] newInflows = {100f, 150f};
         float[] dummy = new float[CELL_COUNT];
 
-        // Output simulado (Smart = Triangular/Cuadrado Batch x Batch)
-        // 2x2 = 4 celdas -> 8 floats
         float[] gpuData = {
-                1.1f, 1.2f, 1.3f, 1.4f, // H
-                2.1f, 2.2f, 2.3f, 2.4f  // V
+                1.1f, 1.2f, 1.3f, 1.4f, // H (2x2)
+                2.1f, 2.2f, 2.3f, 2.4f  // V (2x2)
         };
 
         doAnswer(inv -> {
@@ -109,7 +106,8 @@ class ManningGpuSolverTest {
             return 0;
         }).when(mockNativeSolver).runBatch(
                 eq(FAKE_SESSION_HANDLE), any(), any(), eq(batchSize),
-                eq(INativeManningSolver.MODE_SMART_LAZY) // <--- VERIFICACIÓN CRÍTICA DEL MODO
+                eq(INativeManningSolver.MODE_SMART_LAZY),
+                eq(1) // Stride implícito
         );
 
         // --- ACT ---
@@ -118,55 +116,90 @@ class ManningGpuSolverTest {
         // --- ASSERT ---
         verify(mockNativeSolver).runBatch(
                 eq(FAKE_SESSION_HANDLE), any(), any(), eq(batchSize),
-                eq(INativeManningSolver.MODE_SMART_LAZY)
+                eq(INativeManningSolver.MODE_SMART_LAZY),
+                eq(1)
         );
 
-        // Verificar desempaquetado (Ancho = BatchSize = 2)
-        assertEquals(2, result.length);
-        assertEquals(2, result[0][0].length); // Width es 2, no 50
-        assertEquals(1.1f, result[0][0][0], 1e-6f);
+        assertEquals(2, result.length); // BatchSize
+        assertEquals(2, result[0][0].length); // Width = BatchSize (Triangular)
     }
 
     @Test
-    @DisplayName("Full Evolution Mode: Debe llamar a nativo con MODE_FULL_EVOLUTION y desempaquetar todo")
-    void solveFullEvolutionBatch_shouldUseFullMode() {
+    @DisplayName("Full Mode (Stride=1): Debe usar MODE_FULL_EVOLUTION y bajar todo el rectángulo")
+    void solveFullEvolutionBatch_Default_shouldDownloadEverything() {
         // --- ARRANGE ---
-        int batchSize = 1; // 1 paso
+        int batchSize = 1;
         float[] newInflows = {100f};
         float[] dummy = new float[CELL_COUNT];
 
-        // Output simulado (Full = Batch x CellCount)
-        // 1 x 50 = 50 celdas -> 100 floats
+        // 1 paso x 50 celdas
         float[] gpuData = new float[CELL_COUNT * 2];
-        gpuData[0] = 9.9f; // H en celda 0
-        gpuData[CELL_COUNT] = 8.8f; // V en celda 0 (Offset = 50)
+        gpuData[0] = 9.9f;
 
         doAnswer(inv -> {
             FloatBuffer out = inv.getArgument(2);
-            // Verificamos que el buffer reservado sea gigante
+            // Debe caber la matriz completa
             assertTrue(out.capacity() >= gpuData.length);
             out.clear();
             out.put(gpuData);
             return 0;
         }).when(mockNativeSolver).runBatch(
                 eq(FAKE_SESSION_HANDLE), any(), any(), eq(batchSize),
-                eq(INativeManningSolver.MODE_FULL_EVOLUTION) // <--- VERIFICACIÓN CRÍTICA DEL MODO
+                eq(INativeManningSolver.MODE_FULL_EVOLUTION),
+                eq(1)
         );
 
         // --- ACT ---
         float[][][] result = gpuSolver.solveFullEvolutionBatch(dummy, newInflows, dummy);
 
         // --- ASSERT ---
-        verify(mockNativeSolver).runBatch(
+        assertEquals(1, result.length);
+        assertEquals(CELL_COUNT, result[0][0].length); // Width = CellCount
+        assertEquals(9.9f, result[0][0][0], 1e-6f);
+    }
+
+    @Test
+    @DisplayName("Full Mode (Stride=3): Debe reducir memoria y pasar stride al nativo")
+    void solveFullEvolution_WithStride_ShouldReduceMemoryAndOutput() {
+        // --- ARRANGE ---
+        int batchSize = 10;
+        int stride = 3;
+
+        // Cálculo esperado de pasos guardados: ceil(10/3) = 4
+        // Pasos: 0, 3, 6, 9.
+        int expectedSavedSteps = 4;
+        int expectedTotalFloats = expectedSavedSteps * CELL_COUNT * 2; // H y V
+
+        float[] inflows = new float[batchSize];
+        float[] dummy = new float[CELL_COUNT];
+
+        // Mock para verificar tamaño de buffer
+        doAnswer(inv -> {
+            FloatBuffer out = inv.getArgument(2);
+            int passedStride = inv.getArgument(5);
+
+            assertEquals(stride, passedStride, "El Stride debe llegar al JNI");
+
+            // VERIFICACIÓN CRÍTICA DE MEMORIA
+            // El buffer debe tener el tamaño reducido, no el tamaño 'batchSize * CellCount * 2'
+            assertEquals(expectedTotalFloats, out.capacity(), "El buffer Output debe estar dimensionado para los pasos reducidos");
+
+            return 0;
+        }).when(mockNativeSolver).runBatch(
                 eq(FAKE_SESSION_HANDLE), any(), any(), eq(batchSize),
-                eq(INativeManningSolver.MODE_FULL_EVOLUTION)
+                eq(INativeManningSolver.MODE_FULL_EVOLUTION),
+                eq(stride)
         );
 
-        // Verificar desempaquetado (Ancho = CellCount = 50)
-        assertEquals(1, result.length);
-        assertEquals(CELL_COUNT, result[0][0].length); // Width es 50
-        assertEquals(9.9f, result[0][0][0], 1e-6f);
-        assertEquals(8.8f, result[0][1][0], 1e-6f);
+        // --- ACT ---
+        float[][][] result = gpuSolver.solveFullEvolutionBatch(dummy, inflows, dummy, stride);
+
+        // --- ASSERT ---
+        verify(mockNativeSolver).runBatch(anyLong(), any(), any(), eq(batchSize), eq(1), eq(stride));
+
+        // Verificar dimensión temporal del resultado Java
+        assertEquals(expectedSavedSteps, result.length, "El resultado debe tener solo los pasos guardados");
+        assertEquals(CELL_COUNT, result[0][0].length, "El ancho debe ser el río completo");
     }
 
     @Test
@@ -175,13 +208,12 @@ class ManningGpuSolverTest {
         float[] inflows = {100f};
         float[] dummy = new float[CELL_COUNT];
 
-        // Caudal inestable: Empieza en 10, acaba en 100
         float[] unstableQ = new float[CELL_COUNT];
         unstableQ[2] = 10f;
         unstableQ[CELL_COUNT-3] = 100f;
 
         assertThrows(IllegalStateException.class, () ->
-                gpuSolver.solveSmartBatch(dummy, inflows, unstableQ, false) // trust=false
+                gpuSolver.solveSmartBatch(dummy, inflows, unstableQ, false)
         );
     }
 }

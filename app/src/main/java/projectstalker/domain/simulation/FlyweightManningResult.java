@@ -9,7 +9,9 @@ import java.util.Arrays;
 
 /**
  * Implementación "Flyweight" (Lazy) de los resultados de la simulación.
- * Esta compresión solo funciona con ríos con caudal equilibrado (en estado de reposo)
+ * <p>
+ * Combina resultados dinámicos de la GPU (Extrinsic State) con el estado base del río (Intrinsic State).
+ * Soporta submuestreo (Stride) para ahorrar memoria en simulaciones largas.
  */
 public class FlyweightManningResult implements ISimulationResult {
 
@@ -24,22 +26,25 @@ public class FlyweightManningResult implements ISimulationResult {
     private final float[] initialVelocities;
 
     // --- ESTADO EXTRÍNSECO (Deltas de GPU) ---
+    // Puede estar compactado si stride > 1
     private final float[][][] gpuPackedData;
 
-    // Datos auxiliares
+    // Datos auxiliares (Temp, pH) - Normalmente resolución completa
     private final float[][][] auxData;
 
+    // Factor de submuestreo (1 = Todos los pasos, N = 1 de cada N)
+    private final int stride;
+
     /**
-     * Constructor personalizado.
-     * Ponemos @Builder AQUÍ para que Lombok use este constructor.
-     * Esto permite pasar 'RiverState' al builder y que se desempaquete internamente.
+     * Constructor personalizado con soporte para Stride.
      */
     @Builder
     public FlyweightManningResult(RiverGeometry geometry,
                                   long simulationTime,
-                                  RiverState initialState, // El builder aceptará RiverState
+                                  RiverState initialState,
                                   float[][][] gpuPackedData,
-                                  float[][][] auxData) {
+                                  float[][][] auxData,
+                                  int stride) {
         this.geometry = geometry;
         this.simulationTime = simulationTime;
 
@@ -49,15 +54,25 @@ public class FlyweightManningResult implements ISimulationResult {
 
         this.gpuPackedData = gpuPackedData;
         this.auxData = auxData;
+
+        // Validación para evitar división por cero
+        this.stride = Math.max(1, stride);
+    }
+
+    // Sobrecarga para compatibilidad (Stride = 1)
+    public FlyweightManningResult(RiverGeometry geometry, long time, RiverState initial, float[][][] gpu, float[][][] aux) {
+        this(geometry, time, initial, gpu, aux, 1);
     }
 
     @Override
     public int getTimestepCount() {
-        return gpuPackedData.length;
+        // Devolvemos el número de pasos lógicos representados
+        return gpuPackedData.length * stride;
     }
 
     /**
      * Reconstruye el estado del río en el tiempo 't' bajo demanda.
+     * Si hay stride, devuelve el snapshot más cercano (Sample & Hold).
      */
     @Override
     public RiverState getStateAt(int t) {
@@ -66,29 +81,48 @@ public class FlyweightManningResult implements ISimulationResult {
         float[] h = new float[cellCount];
         float[] v = new float[cellCount];
 
-        // 1. ZONA NUEVA (GPU Data - Onda Dinámica Activa)
-        //
-        float[] gpuH = gpuPackedData[t][0];
-        float[] gpuV = gpuPackedData[t][1];
+        // 1. MAPEO DE TIEMPO A ALMACENAMIENTO (Lógica Stride)
+        // t es el paso de tiempo lógico (0...TotalSteps)
+        // storageIndex es el índice físico en el array GPU (0...PackedLength)
+        int storageIndex = t / stride;
 
-        // La GPU nos devuelve datos válidos hasta el frente de onda
-        int newDataLimit = Math.min(t + 1, gpuH.length);
-        int copyLength = Math.min(newDataLimit, cellCount);
+        // Protección contra desbordamiento (Clamping al último frame disponible)
+        if (storageIndex >= gpuPackedData.length) {
+            storageIndex = gpuPackedData.length - 1;
+        }
+
+        // 2. ZONA NUEVA (GPU Data - Onda Dinámica Activa)
+        float[] gpuH = gpuPackedData[storageIndex][0];
+        float[] gpuV = gpuPackedData[storageIndex][1];
+
+        // Determinamos cuánto datos válidos nos dio la GPU.
+        // En modo Smart: gpuH.length crece con el tiempo (Triangular).
+        // En modo Full: gpuH.length == cellCount (Rectangular).
+        // Usamos gpuH.length directamente, es la fuente de verdad.
+        int copyLength = Math.min(gpuH.length, cellCount);
 
         System.arraycopy(gpuH, 0, h, 0, copyLength);
         System.arraycopy(gpuV, 0, v, 0, copyLength);
 
-        // 2. ZONA ANTIGUA (Estado Base Estacionario)
+        // 3. ZONA ANTIGUA (Estado Base Estacionario)
         int remainingCells = cellCount - copyLength;
 
         if (remainingCells > 0) {
+            // Lógica Correcta: Copia Estática Local.
+            // Copiamos la profundidad que tenía esta celda en el estado base.
+            // NO desplazamos desde el inicio (srcPos != 0), mantenemos srcPos == destPos.
             System.arraycopy(initialDepths, copyLength, h, copyLength, remainingCells);
             System.arraycopy(initialVelocities, copyLength, v, copyLength, remainingCells);
         }
 
-        // 3. CONSTRUCCIÓN DEL ESTADO (Igual)
-        float t_val = (auxData != null && t < auxData.length) ? auxData[t][0][0] : 0f;
-        float ph_val = (auxData != null && t < auxData.length) ? auxData[t][1][0] : 0f;
+        // 4. CONSTRUCCIÓN DEL ESTADO AUXILIAR
+        // Asumimos que auxData (CPU) tiene resolución completa (índice t).
+        // Si no (si también viniera compactado), habría que usar storageIndex.
+        // Aplicamos protección de límites por seguridad.
+        int auxIndex = Math.min(t, (auxData != null ? auxData.length - 1 : 0));
+
+        float t_val = (auxData != null && auxIndex >= 0) ? auxData[auxIndex][0][0] : 0f;
+        float ph_val = (auxData != null && auxIndex >= 0) ? auxData[auxIndex][1][0] : 0f;
 
         float[] tempArr = new float[cellCount];
         float[] phArr = new float[cellCount];
