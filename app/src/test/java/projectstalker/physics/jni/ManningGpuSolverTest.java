@@ -180,9 +180,17 @@ class ManningGpuSolverTest {
 
             assertEquals(stride, passedStride, "El Stride debe llegar al JNI");
 
-            // VERIFICACIÓN CRÍTICA DE MEMORIA
-            // El buffer debe tener el tamaño reducido, no el tamaño 'batchSize * CellCount * 2'
-            assertEquals(expectedTotalFloats, out.capacity(), "El buffer Output debe estar dimensionado para los pasos reducidos");
+            // Verificamos que quepa, no que sea exacto (por el factor 1.2x)
+            assertTrue(out.capacity() >= expectedTotalFloats,
+                    "El buffer Output debe tener capacidad suficiente. Necesario: " + expectedTotalFloats + ", Real: " + out.capacity());
+
+            // Verificamos que NO sea el tamaño gigante original (Batch x CellCount)
+            // Para asegurar que la lógica de reducción de memoria está funcionando.
+            // Tamaño original sería: 10 * 50 * 2 = 1000 floats.
+            // Tamaño reducido esperado: 4 * 50 * 2 = 400 floats.
+            int originalFullSize = batchSize * CELL_COUNT * 2;
+            assertTrue(out.capacity() < originalFullSize,
+                    "El buffer debería ser menor que el tamaño Full sin stride. Capacidad: " + out.capacity());
 
             return 0;
         }).when(mockNativeSolver).runBatch(
@@ -195,7 +203,7 @@ class ManningGpuSolverTest {
         float[][][] result = gpuSolver.solveFullEvolutionBatch(dummy, inflows, dummy, stride);
 
         // --- ASSERT ---
-        verify(mockNativeSolver).runBatch(anyLong(), any(), any(), eq(batchSize), eq(1), eq(stride));
+        verify(mockNativeSolver).runBatch(anyLong(), any(), any(), eq(batchSize), eq(INativeManningSolver.MODE_FULL_EVOLUTION), eq(stride));
 
         // Verificar dimensión temporal del resultado Java
         assertEquals(expectedSavedSteps, result.length, "El resultado debe tener solo los pasos guardados");
