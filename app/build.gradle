@@ -100,16 +100,6 @@ dependencies {
     jmhAnnotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
     jmhImplementation project
 
-    // =======================================================
-    // --- INTEGRACIÓN CUDA (JCUDA) ---
-    // =======================================================
-    // Core JCuda
-    implementation 'org.jcuda:jcuda:12.6.0'
-    implementation 'org.jcuda:jcuda-natives:12.6.0:linux-x86_64'
-
-    // JCublas (Math/Matrix)
-    implementation 'org.jcuda:jcublas:12.6.0'
-    implementation 'org.jcuda:jcublas-natives:12.6.0:linux-x86_64'
 }
 jmh {
     fork = 1
