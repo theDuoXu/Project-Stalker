@@ -9,6 +9,7 @@ import java.util.Arrays;
 
 /**
  * Implementación "Flyweight" (Lazy) de los resultados de la simulación.
+ * Esta compresión solo funciona con ríos con caudal equilibrado (en estado de reposo)
  */
 public class FlyweightManningResult implements ISimulationResult {
 
@@ -65,26 +66,27 @@ public class FlyweightManningResult implements ISimulationResult {
         float[] h = new float[cellCount];
         float[] v = new float[cellCount];
 
-        // 1. ZONA NUEVA (GPU Data)
+        // 1. ZONA NUEVA (GPU Data - Onda Dinámica Activa)
+        //
         float[] gpuH = gpuPackedData[t][0];
         float[] gpuV = gpuPackedData[t][1];
 
+        // La GPU nos devuelve datos válidos hasta el frente de onda
         int newDataLimit = Math.min(t + 1, gpuH.length);
         int copyLength = Math.min(newDataLimit, cellCount);
 
         System.arraycopy(gpuH, 0, h, 0, copyLength);
         System.arraycopy(gpuV, 0, v, 0, copyLength);
 
-        // 2. ZONA ANTIGUA (Estado Inicial Desplazado)
+        // 2. ZONA ANTIGUA (Estado Base Estacionario)
         int remainingCells = cellCount - copyLength;
 
         if (remainingCells > 0) {
-            // Desplazamiento: initial[0] pasa a ser h[copyLength]
-            System.arraycopy(initialDepths, 0, h, copyLength, remainingCells);
-            System.arraycopy(initialVelocities, 0, v, copyLength, remainingCells);
+            System.arraycopy(initialDepths, copyLength, h, copyLength, remainingCells);
+            System.arraycopy(initialVelocities, copyLength, v, copyLength, remainingCells);
         }
 
-        // 3. CONSTRUCCIÓN DEL ESTADO
+        // 3. CONSTRUCCIÓN DEL ESTADO (Igual)
         float t_val = (auxData != null && t < auxData.length) ? auxData[t][0][0] : 0f;
         float ph_val = (auxData != null && t < auxData.length) ? auxData[t][1][0] : 0f;
 
