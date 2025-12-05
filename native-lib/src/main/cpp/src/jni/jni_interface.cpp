@@ -94,8 +94,8 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_initSession(
  * Ejecuta el batch usando DMA (Zero-Copy).
  * MODIFICADO:
  * 1. Recibe Buffers de Entrada y Salida pre-asignados (Input/Output).
- * 2. No devuelve array (escribe in-place).
- * 3. No realiza allocations (new/malloc) durante la ejecución.
+ * 2. Recibe 'mode' para seleccionar estrategia (Smart vs Full).
+ * 3. No devuelve array (escribe in-place).
  */
 JNIEXPORT jint JNICALL
 Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
@@ -103,7 +103,8 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
     jlong handle,
     jobject inputBuf,  // Buffer Directo de Entrada (Inflows)
     jobject outputBuf, // Buffer Directo de Salida (Results)
-    jint batchSize
+    jint batchSize,
+    jint mode          // 0=Smart, 1=Full
 ) {
     // 1. Validar Sesión
     ManningSession* session = (ManningSession*)handle;
@@ -130,7 +131,8 @@ Java_projectstalker_physics_jni_NativeManningGpuSingleton_runBatch(
             session,
             pInput,
             pOutput,
-            (int)batchSize
+            (int)batchSize,
+            (int)mode // Pasamos el modo seleccionado
         );
         return 0; // Éxito
 

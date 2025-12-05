@@ -12,6 +12,7 @@ import projectstalker.domain.river.RiverState;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.impl.ManningProfileCalculatorTask;
 import projectstalker.physics.simulator.ManningBatchProcessor;
+import projectstalker.config.SimulationConfig.GpuStrategy;
 
 import java.util.Arrays;
 
@@ -35,7 +36,7 @@ public class ManningGpuBenchmark {
 
     @BeforeEach
     void setUp() throws Exception {
-        // 1. Geometría Grande usando la Factoría
+        // 1. Geometría Grande
         RiverConfig riverConfig = RiverConfig.builder()
                 .totalLength(CELL_COUNT * 50.0f)
                 .spatialResolution(50.0f)
@@ -47,13 +48,12 @@ public class ManningGpuBenchmark {
         RiverGeometryFactory factory = new RiverGeometryFactory();
         this.geometry = factory.createRealisticRiver(riverConfig);
 
-        // Validación de seguridad
         if (this.geometry.getCellCount() != CELL_COUNT) {
-            log.warn("El número de celdas generado ({}) difiere del solicitado ({}). Ajustando lógica...",
+            log.warn("El número de celdas generado ({}) difiere del solicitado ({}).",
                     this.geometry.getCellCount(), CELL_COUNT);
         }
 
-        // 2. Configuraciones de Simulación
+        // 2. Configuraciones
         SimulationConfig baseConfig = SimulationConfig.builder()
                 .cpuProcessorCount(8)
                 .useGpuAccelerationOnTransport(false)
@@ -62,12 +62,11 @@ public class ManningGpuBenchmark {
         this.cpuConfig = baseConfig.withUseGpuAccelerationOnManning(false);
         this.gpuConfig = baseConfig.withUseGpuAccelerationOnManning(true);
 
-        // 3. GENERAR ESTADO INICIAL ESTABLE (Warm-Up Hidráulico)
+        // 3. WARM-UP HIDRÁULICO (Estado Estable)
         log.info("Generando estado inicial estable para {} celdas...", CELL_COUNT);
 
         float[] qProfile = new float[this.geometry.getCellCount()];
         Arrays.fill(qProfile, BASE_DISCHARGE);
-
         float[] seedDepth = new float[this.geometry.getCellCount()];
         Arrays.fill(seedDepth, 1.0f);
 
@@ -77,7 +76,6 @@ public class ManningGpuBenchmark {
         calculator.call();
 
         float[] zeros = new float[this.geometry.getCellCount()];
-
         this.initialState = new RiverState(
                 calculator.getCalculatedWaterDepth(),
                 calculator.getCalculatedVelocity(),
@@ -88,68 +86,71 @@ public class ManningGpuBenchmark {
     }
 
     @Test
-    @DisplayName("Benchmark: Escalabilidad Batch (CPU Interpolada vs GPU Real + DMA)")
+    @DisplayName("Benchmark: CPU vs GPU Smart (Triangle) vs GPU Full (Rect)")
     void benchmarkMassiveScalability() {
         log.info("=== INICIANDO BENCHMARK MANNING MASIVO (50k Celdas) ===");
 
-        // Tamaños de lote a probar
         int[] batchSizes = {10, 100, 1_000, 5_000};
 
-        // --- WARM-UP GENERAL (JIT) ---
+        // --- WARM-UP GENERAL ---
         log.info(">> Calentando motores (JIT y Contexto CUDA)...");
-        runBatchIteration(10, false); // Warmup CPU JIT
-        runBatchIteration(100, true); // Warmup GPU Context
+        runBatchIteration(10, false, null); // Warmup CPU
+        runBatchIteration(100, true, GpuStrategy.SMART_TRUSTED); // Warmup GPU Smart
+        runBatchIteration(100, true, GpuStrategy.FULL_EVOLUTION); // Warmup GPU Full
         log.info(">> Calentamiento completado.\n");
 
-        System.out.printf("%-15s | %-20s | %-15s | %-15s%n", "BATCH SIZE", "CPU (s)", "GPU (s)", "SPEEDUP");
-        System.out.println("----------------------------------------------------------------------------");
+        System.out.printf("%-10s | %-15s | %-12s | %-12s | %-10s | %-10s%n",
+                "BATCH", "CPU (s)", "SMART (s)", "FULL (s)", "xSMART", "xFULL");
+        System.out.println("----------------------------------------------------------------------------------");
 
         double cpuMsPerStep = 0;
 
-        for (int i = 0; i < batchSizes.length; i++) {
-            int batchSize = batchSizes[i];
+        for (int batchSize : batchSizes) {
             System.gc();
 
-            // 1. Lógica CPU
+            // 1. CPU (Real o Estimada)
             double cpuTimeMs;
             boolean isCpuEstimated = false;
 
-            if (batchSize > CPU_EXECUTION_THRESHOLD_BATCH && i > 0) {
+            if (batchSize > CPU_EXECUTION_THRESHOLD_BATCH && cpuMsPerStep > 0) {
                 cpuTimeMs = cpuMsPerStep * batchSize;
                 isCpuEstimated = true;
             } else {
-                cpuTimeMs = runBatchIteration(batchSize, false);
+                cpuTimeMs = runBatchIteration(batchSize, false, null);
                 if (cpuMsPerStep == 0) {
                     cpuMsPerStep = cpuTimeMs / batchSize;
                 }
             }
 
-            // 2. Medir GPU (Medición Real con DMA optimizado)
-            double gpuTimeMs = runBatchIteration(batchSize, true);
+            // 2. GPU SMART (Optimized)
+            double gpuSmartTimeMs = runBatchIteration(batchSize, true, GpuStrategy.SMART_TRUSTED);
 
-            // 3. Reportar
-            double speedup = cpuTimeMs / gpuTimeMs;
-            double cpuSec = cpuTimeMs / 1000.0;
-            double gpuSec = gpuTimeMs / 1000.0;
+            // 3. GPU FULL (Robust)
+            double gpuFullTimeMs = runBatchIteration(batchSize, true, GpuStrategy.FULL_EVOLUTION);
 
-            String cpuLabel = String.format("%,.2f %s", cpuSec, isCpuEstimated ? "(Est.)" : "");
+            // 4. Reporte
+            double xSmart = cpuTimeMs / gpuSmartTimeMs;
+            double xFull = cpuTimeMs / gpuFullTimeMs;
 
-            System.out.printf("%-15d | %-20s | %-15.4f | %-15.1fx %s%n",
-                    batchSize, cpuLabel, gpuSec, speedup,
-                    (speedup > 100.0 ? "🚀🚀🚀" : (speedup > 10.0 ? "🚀🚀" : "🚀")));
+            String cpuLabel = String.format("%,.2f%s", cpuTimeMs / 1000.0, isCpuEstimated ? "*" : "");
+
+            System.out.printf("%-10d | %-15s | %-12.4f | %-12.4f | %-10.1fx | %-10.1fx%n",
+                    batchSize, cpuLabel,
+                    gpuSmartTimeMs / 1000.0,
+                    gpuFullTimeMs / 1000.0,
+                    xSmart, xFull);
         }
+        System.out.println("(* = CPU Time Estimated)");
     }
 
     /**
-     * Ejecuta una iteración de benchmark midiendo el tiempo de procesamiento puro.
-     * EXCLUYE: Tiempos de inicialización de sesión, carga de geometría y reservas de memoria iniciales.
+     * Ejecuta una iteración midiendo tiempo de Cómputo + DMA.
+     * Excluye setup de VRAM.
      */
-    private double runBatchIteration(int batchSize, boolean useGpu) {
-        // 1. Preparación de Inputs
+    private double runBatchIteration(int batchSize, boolean useGpu, GpuStrategy strategy) {
         float[] newInflows = new float[batchSize];
         Arrays.fill(newInflows, 150.0f);
 
-        // Hack de memoria seguro para auxiliares
         int n = this.geometry.getCellCount();
         float[] sharedDummyData = new float[n];
         float[][][] phTmp = new float[batchSize][2][];
@@ -160,22 +161,18 @@ public class ManningGpuBenchmark {
 
         SimulationConfig config = useGpu ? gpuConfig : cpuConfig;
 
-        // INSTANCIACIÓN FUERA DEL CRONÓMETRO
-        // El benchmark debe medir throughput, no startup time.
         try (ManningBatchProcessor processor = new ManningBatchProcessor(geometry, config)) {
 
-            // --- GPU SPECIFIC WARM-UP ---
-            // Si es GPU, forzamos la ejecución de un batch preliminar para:
-            // 1. Disparar initSession() -> Cargar geometría y estado a VRAM.
-            // 2. Disparar ensureBuffersCapacity() -> Reservar DirectBuffers del tamaño 'batchSize'.
+            // GPU WARM-UP (Alloc VRAM + Pinned Buffers)
             if (useGpu) {
-                processor.processBatch(batchSize, initialState, newInflows, phTmp, true);
+                // Ejecutamos un batch falso con la MISMA estrategia para preparar buffers del tamaño correcto
+                processor.processBatch(batchSize, initialState, newInflows, phTmp, true, strategy);
             }
 
-            // 2. MEDICIÓN CRÍTICA (Solo Cómputo + DMA)
+            // MEASUREMENT
             long start = System.nanoTime();
 
-            processor.processBatch(batchSize, initialState, newInflows, phTmp, useGpu);
+            processor.processBatch(batchSize, initialState, newInflows, phTmp, useGpu, strategy);
 
             long end = System.nanoTime();
             return (end - start) / 1_000_000.0;

@@ -36,19 +36,26 @@ public class SimulationConfig {
      * Paso de tiempo
      */
     float deltaTime;
+
     /**
      * Utiliza aceleración CUDA para estimar la velocidad y la profundidad del agua
      */
     boolean useGpuAccelerationOnManning;
+
     /**
      * Utiliza aceleración CUDA para estimar las soluciones EDP advección difusión reacción
      */
     boolean useGpuAccelerationOnTransport;
 
     /**
-     * El número de pasos de tiempo (Δt) que se agrupan y se pasan a la GPU para cómputo en un solo lote.
-     * Este valor gestiona el compromiso entre el overhead de la transferencia de datos CPU-GPU
-     * y la latencia (responsiveness) del sistema.
+     * Define la estrategia de optimización y física para el solver Manning en GPU.
+     * Por defecto: SMART_SAFE (Optimizado con verificación de seguridad).
+     */
+    @Builder.Default
+    GpuStrategy gpuStrategy = GpuStrategy.SMART_SAFE;
+
+    /**
+     * El número de pasos de tiempo (Δt) que se agrupan y se pasan a la GPU.
      */
     int cpuTimeBatchSize;
 
@@ -62,22 +69,36 @@ public class SimulationConfig {
     }
 
     /**
+     * Estrategias disponibles para la ejecución GPU.
+     */
+    public enum GpuStrategy {
+        /**
+         * Optimización agresiva. Asume Steady State. Descarga triangular.
+         * Más rápido, pero requiere que el río base esté estabilizado.
+         */
+        SMART_TRUSTED,
+
+        /**
+         * Optimización segura (Default). Verifica caudal estable.
+         * Si el río es inestable, hace fallback automático a FULL_EVOLUTION.
+         */
+        SMART_SAFE,
+
+        /**
+         * Simulación completa robusta.
+         * Calcula y descarga todo el dominio. Sin asunciones. Más lento en transferencia (PCIe).
+         */
+        FULL_EVOLUTION
+    }
+
+    /**
      * Define los parámetros para el generador de caudal de entrada.
      */
     @Value
     @Builder
     public static class FlowConfig {
-        /**
-         * Caudal promedio o base sobre el cual se aplican las variaciones.
-         */
         float baseDischarge;
-        /**
-         * Magnitud máxima de la variación sobre el caudal base.
-         */
         float noiseAmplitude;
-        /**
-         * Frecuencia de la variación (valores bajos para cambios lentos).
-         */
         float noiseFrequency;
     }
 }

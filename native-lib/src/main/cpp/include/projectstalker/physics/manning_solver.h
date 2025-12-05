@@ -1,56 +1,42 @@
 // src/main/cpp/include/projectstalker/physics/manning_solver.h
 #pragma once
+
 #include <vector>
-#include <cstddef>
+#include <cstddef> // Necesario para size_t
+
+// Modos de Ejecución
+enum ManningMode {
+    MODE_SMART_LAZY = 0,    // Optimizado: Calcula todo, descarga triángulo. (Alertas/Steady Init)
+    MODE_FULL_EVOLUTION = 1 // Robusto: Calcula todo, descarga rectángulo. (Ciencia/Unsteady)
+};
+
 /**
  * Estructura de Sesión para Manning (Stateful).
- * Mantiene la geometría residente en VRAM y gestiona buffers adaptativos
- * para evitar asignaciones de memoria (cudaMalloc) en cada frame.
  */
 struct ManningSession {
-    // --- 1. Geometría Invariante (Se carga una vez en init) ---
-    // Punteros crudos necesarios para calcular Área y Perímetro
+    // --- 1. Geometría Invariante ---
     float* d_bottomWidths = nullptr;
     float* d_sideSlopes   = nullptr;
-
-    // Constantes físicas pre-cocinadas (Baked) para optimización
-    float* d_inv_n        = nullptr; // 1.0 / n
-    float* d_sqrt_slope   = nullptr; // sqrt(S)
-    float* d_pythagoras   = nullptr; // sqrt(1 + m^2)
+    float* d_inv_n        = nullptr;
+    float* d_sqrt_slope   = nullptr;
+    float* d_pythagoras   = nullptr;
 
     // --- 2. Estado Base (Flyweight Intrinsic) ---
-    // Se cargan una vez en init y actúan como el estado base del río (t=0)
-    // para propagar la ola en cada batch.
     float* d_initialQ      = nullptr;
     float* d_initialDepths = nullptr;
 
-    // --- 3. Buffers de Trabajo Adaptativos (Crecen bajo demanda) ---
-    // Matriz de salida (ahora optimizada con copia triangular)
+    // --- 3. Buffers de Trabajo Adaptativos ---
     float* d_results       = nullptr;
-
-    // Buffer pequeño de entrada comprimida [BatchSize]
     float* d_newInflows    = nullptr;
 
-    // --- 4. Metadatos de Control de Memoria (High-Water Mark) ---
-    size_t resultCapacityElements = 0; // Capacidad actual de d_results (floats)
-    size_t inputBatchCapacity     = 0; // Capacidad actual de d_newInflows (floats)
-
-    int cellCount = 0; // Dimensión fija del río
+    // --- 4. Metadatos ---
+    size_t resultCapacityElements = 0;
+    size_t inputBatchCapacity     = 0;
+    int cellCount = 0;
 };
 
 // --- Funciones de Ciclo de Vida ---
 
-/**
- * Inicializa la sesión en GPU.
- * 1. Reserva memoria para geometría y ESTADO INICIAL.
- * 2. Ejecuta el kernel de "Baking" para pre-calcular constantes.
- * 3. Retorna el puntero a la estructura de sesión.
- *
- * @param h_initialDepths Estado de profundidad base del río.
- * @param h_initialQ      Estado de caudal base del río.
- * @param cellCount       Número de celdas del río.
- * @return Puntero opaco a la sesión (ManningSession*).
- */
 ManningSession* init_manning_session(
     const float* h_bottomWidths,
     const float* h_sideSlopes,
@@ -62,25 +48,22 @@ ManningSession* init_manning_session(
 );
 
 /**
- * Ejecuta un batch de simulación utilizando la sesión persistente y memoria PINNED.
+ * Ejecuta un batch de simulación.
  *
- * DMA / ZERO-COPY:
- * Ya no devuelve un vector. Escribe directamente en 'h_pinned_results',
- * que es memoria mapeada directamente desde Java (DirectBuffer).
- *
+ * @param mode              Estrategia de simulación (SMART vs FULL).
  * @param session           Puntero a la sesión activa.
  * @param h_pinned_inflows  Puntero a memoria PINNED con los caudales nuevos.
- * @param h_pinned_results  Puntero a memoria PINNED donde escribir [BatchSize^2 * 2].
+ * @param h_pinned_results  Puntero a memoria PINNED donde escribir.
+ * - SMART: Triángulo activo [Batch^2 * 2]
+ * - FULL:  Rectángulo total [Batch * CellCount * 2]
  * @param batchSize         Número de pasos a simular.
  */
 void run_manning_batch_stateful(
     ManningSession* session,
-    const float* h_pinned_inflows, // Input Zero-Copy
-    float* h_pinned_results,       // Output Zero-Copy
-    int batchSize
+    const float* h_pinned_inflows,
+    float* h_pinned_results,
+    int batchSize,
+    int mode // Nuevo Argumento
 );
 
-/**
- * Destruye la sesión y libera toda la memoria GPU asociada.
- */
 void destroy_manning_session(ManningSession* session);

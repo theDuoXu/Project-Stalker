@@ -147,7 +147,7 @@ public class TransportGpuBenchmark {
 
             System.out.printf("%-15s | %-20s | %-15.2f | %-15.2fx %s%n",
                     label, cpuLabel, gpuTimeMs, speedup,
-                    (speedup > 10.0 ? "🚀🚀" : (speedup > 5.0 ? "UPUPUP" : "")));
+                    (speedup > 10.0 ? "MUY BIEN" : (speedup > 5.0 ? "BIEN" : "")));
         }
     }
 

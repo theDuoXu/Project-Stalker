@@ -6,6 +6,10 @@ import java.nio.FloatBuffer;
 // La interfaz que define el contrato nativo
 public interface INativeManningSolver {
 
+    // --- Constantes de Estrategia ---
+    int MODE_SMART_LAZY = 0;    // Cálculo optimizado + Transferencia triangular (Default)
+    int MODE_FULL_EVOLUTION = 1; // Cálculo robusto + Transferencia completa (Scientific)
+
     /**
      * Lifecycle: Init
      * Carga la geometría estática y el ESTADO INICIAL (Flyweight Intrinsic) en la GPU.
@@ -16,8 +20,8 @@ public interface INativeManningSolver {
             FloatBuffer sideSlopes,
             FloatBuffer manningCoefficients,
             FloatBuffer bedSlopes,
-            FloatBuffer initialDepths, // Nuevo: Estado base t=0
-            FloatBuffer initialQ,      // Nuevo: Estado base t=0
+            FloatBuffer initialDepths, // Estado base t=0
+            FloatBuffer initialQ,      // Estado base t=0
             int cellCount
     );
 
@@ -31,13 +35,15 @@ public interface INativeManningSolver {
      * @param inputBuffer   Buffer Directo con los nuevos inflows (Input).
      * @param outputBuffer  Buffer Directo donde escribir resultados (Output).
      * @param batchSize     Tamaño del batch a procesar.
+     * @param mode          Estrategia de simulación (Use constantes MODE_*).
      * @return Código de estado (0 = éxito).
      */
     int runBatch(
             long sessionHandle,
             FloatBuffer inputBuffer,
             FloatBuffer outputBuffer,
-            int batchSize
+            int batchSize,
+            int mode
     );
 
     // Lifecycle: Destroy

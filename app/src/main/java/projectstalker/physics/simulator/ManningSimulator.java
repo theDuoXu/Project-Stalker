@@ -7,162 +7,135 @@ import projectstalker.config.RiverConfig;
 import projectstalker.config.SimulationConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.ISimulationResult; // <--- Cambio clave
+import projectstalker.domain.simulation.ISimulationResult;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.model.FlowProfileModel;
 import projectstalker.physics.model.RiverPhModel;
 import projectstalker.physics.model.RiverTemperatureModel;
+import projectstalker.config.SimulationConfig.GpuStrategy;
 
 /**
  * Orquesta la simulación hidrológica del río.
- * <p>
- * REFACTORIZADO: Ahora actúa como una fachada de alto nivel sobre {@link ManningBatchProcessor}.
- * Gestiona el tiempo global, la generación de condiciones de frontera (caudales, T, pH)
- * y el estado actual del río.
- * <p>
- * Implementa AutoCloseable para cerrar limpiamente la sesión de GPU subyacente.
+ * Facade de alto nivel sobre {@link ManningBatchProcessor}.
  */
 @Slf4j
 public class ManningSimulator implements AutoCloseable {
 
-    // --- Miembros de la Simulación ---
     private final RiverConfig config;
     @Getter
     private final RiverGeometry geometry;
 
-    // Modelos de condiciones de frontera
     private final FlowProfileModel flowGenerator;
     private final RiverTemperatureModel temperatureModel;
     private final RiverPhModel phModel;
 
-    // EL MOTOR ÚNICO: Procesa tanto pasos simples como batches
     private final ManningBatchProcessor batchProcessor;
 
-    // --- Estado de la Simulación ---
-    @Getter
-    @Setter
+    @Getter @Setter
     private RiverState currentState;
-    @Getter
-    @Setter
+    @Getter @Setter
     private double currentTimeInSeconds;
-    @Getter
-    @Setter
+    @Getter @Setter
     private boolean isGpuAccelerated;
 
-    /**
-     * Constructor del simulador.
-     *
-     * @param config           La configuración global para el río.
-     * @param simulationConfig La configuración para la ejecución de la simulación.
-     */
+    // Configuración de Estrategia por defecto
+    private final GpuStrategy defaultGpuStrategy;
+
     public ManningSimulator(RiverConfig config, SimulationConfig simulationConfig) {
         this.config = config;
         this.geometry = new RiverGeometryFactory().createRealisticRiver(config);
 
-        // Inicialización de modelos físicos
         this.flowGenerator = new FlowProfileModel((int) config.seed(), simulationConfig.getFlowConfig());
         this.temperatureModel = new RiverTemperatureModel(config, this.geometry);
         this.phModel = new RiverPhModel(this.geometry);
 
-        // Estado inicial (t=0)
         int cellCount = geometry.getCellCount();
         this.currentState = new RiverState(new float[cellCount], new float[cellCount], new float[cellCount], new float[cellCount], new float[cellCount]);
         this.currentTimeInSeconds = 0.0;
+
         this.isGpuAccelerated = simulationConfig.isUseGpuAccelerationOnManning();
 
-        // Inicialización del BatchProcessor (Crea Session GPU + ThreadPool CPU)
+        // MAPEO DE CONFIGURACIÓN -> ESTRATEGIA INTERNA
+        // Convertimos el Enum de Configuración (DTO) al Enum del Procesador (Lógica)
+        this.defaultGpuStrategy = mapConfigStrategy(simulationConfig.getGpuStrategy());
+
         this.batchProcessor = new ManningBatchProcessor(this.geometry, simulationConfig);
 
-        log.info("ManningSimulator inicializado correctamente (Unified Batch Processor).");
+        log.info("ManningSimulator inicializado. GPU={}, Strategy={}", isGpuAccelerated, defaultGpuStrategy);
     }
 
     /**
-     * Avanza la simulación un único paso de tiempo.
-     * <p>
-     * Se implementa delegando al BatchProcessor con un tamaño de batch de 1.
-     * Esto simplifica el mantenimiento al tener una única ruta de código para la física.
-     *
-     * @param deltaTimeInSeconds El incremento de tiempo en segundos.
+     * Mapea el Enum de configuración al Enum interno del procesador.
+     * Esto desacopla la capa de configuración de la capa física.
      */
+    private GpuStrategy mapConfigStrategy(SimulationConfig.GpuStrategy configStrategy) {
+        if (configStrategy == null) return GpuStrategy.SMART_SAFE;
+
+        switch (configStrategy) {
+            case FULL_EVOLUTION: return GpuStrategy.FULL_EVOLUTION;
+            case SMART_TRUSTED:  return GpuStrategy.SMART_TRUSTED;
+            case SMART_SAFE:
+            default:             return GpuStrategy.SMART_SAFE;
+        }
+    }
+
     public void advanceTimeStep(double deltaTimeInSeconds) {
         advanceBatchTimeStep(deltaTimeInSeconds, 1);
     }
 
-    /**
-     * Avanza la simulación para un batch de pasos de tiempo.
-     *
-     * @param deltaTimeInSeconds El incremento de tiempo para cada paso del batch.
-     * @param batchSize          El número de pasos a simular.
-     * @return El resultado de la simulación (Interfaz abstracta: puede ser Dense o Flyweight).
-     */
     public ISimulationResult advanceBatchTimeStep(double deltaTimeInSeconds, int batchSize) {
-        if (batchSize <= 0) {
-            throw new IllegalArgumentException("El tamaño del batch debe ser mayor que 0.");
-        }
+        // Usa la estrategia definida en SimulationConfig
+        return advanceBatchTimeStep(deltaTimeInSeconds, batchSize, this.defaultGpuStrategy);
+    }
+
+    public ISimulationResult advanceBatchTimeStep(double deltaTimeInSeconds, int batchSize, GpuStrategy strategy) {
+        if (batchSize <= 0) throw new IllegalArgumentException("BatchSize debe ser > 0");
 
         int cellCount = geometry.getCellCount();
-        RiverState initialRiverState = this.currentState;
 
-        // 1. PRE-CÓMPUTO DE CONDICIONES DE FRONTERA (Inputs)
-        // Generamos arrays compactos [BatchSize] en lugar de matrices expandidas.
         float[] newDischarges = new float[batchSize];
-        float[][][] phTmp = new float[batchSize][2][cellCount]; // [t][0]=T, [t][1]=pH
+        float[][][] phTmp = new float[batchSize][2][cellCount];
 
-        // Simulamos el avance del tiempo solo para generar los inputs
         double tempTime = currentTimeInSeconds;
 
         for (int i = 0; i < batchSize; i++) {
-            // Caudal de entrada en t (Input para Smart Fetch)
             newDischarges[i] = flowGenerator.getDischargeAt(tempTime);
 
-            // Temperatura y pH
-            // TODO Para Flyweight puro, estos arrays de phTmp podrían optimizarse también,
-            // pero su impacto en memoria es menor que el hidráulico.
-            float[] temp = temperatureModel.calculate(tempTime);
-            float[] ph = phModel.getPhProfile();
-            phTmp[i][0] = temp;
-            phTmp[i][1] = ph;
+            phTmp[i][0] = temperatureModel.calculate(tempTime);
+            phTmp[i][1] = phModel.getPhProfile();
 
             tempTime += deltaTimeInSeconds;
         }
 
-        // 2. EJECUCIÓN DELEGADA (Híbrida CPU/GPU)
-        // Retorna ISimulationResult (Polimorfismo)
         ISimulationResult result = batchProcessor.processBatch(
                 batchSize,
-                initialRiverState,
+                this.currentState,
                 newDischarges,
                 phTmp,
-                isGpuAccelerated
+                this.isGpuAccelerated,
+                strategy // Pasamos la estrategia seleccionada (Full/Smart)
         );
 
-        // 3. ACTUALIZACIÓN DE ESTADO
-        // Confirmamos el avance del tiempo.
         this.currentTimeInSeconds = tempTime;
 
-        // Actualizamos el 'currentState' usando el método agnóstico de la interfaz.
-        // Esto funciona tanto para listas densas como para reconstrucción virtual.
-        result.getFinalState().ifPresent(state -> this.currentState = state);
+        if (result.getFinalState().isPresent()) {
+            this.currentState = result.getFinalState().get();
+        } else {
+            this.currentState = result.getStateAt(batchSize - 1);
+        }
 
         return result;
     }
 
-    /**
-     * Devuelve el caudal de entrada para el tiempo actual de la simulación.
-     */
     public float getCurrentInputDischarge() {
         return flowGenerator.getDischargeAt(currentTimeInSeconds);
     }
 
-    /**
-     * Cierre limpio de recursos.
-     * Cierra la sesión GPU asociada al procesador.
-     */
     @Override
     public void close() {
         if (batchProcessor != null) {
             batchProcessor.close();
-            log.info("ManningSimulator cerrado y recursos liberados.");
+            log.info("ManningSimulator cerrado.");
         }
     }
 }

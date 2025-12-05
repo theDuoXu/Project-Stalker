@@ -62,7 +62,7 @@ public class NativeManningGpuSingleton implements INativeManningSolver {
     /**
      * Ejecuta el batch utilizando DMA (Zero-Copy).
      * <p>
-     * Modificado para DMA:
+     * Modificado para DMA y Selección de Estrategia:
      * 1. No devuelve datos, escribe directamente en {@code outputBuffer}.
      * 2. No realiza copias de Java a C++, lee directamente de {@code inputBuffer}.
      * 3. Ambos buffers deben ser DirectBuffers.
@@ -71,6 +71,7 @@ public class NativeManningGpuSingleton implements INativeManningSolver {
      * @param inputBuffer   Buffer con los nuevos inflows (Input).
      * @param outputBuffer  Buffer donde la GPU escribirá los resultados H y V (Output).
      * @param batchSize     Tamaño del batch a procesar.
+     * @param mode          Estrategia de simulación (0=Smart, 1=Full). Ver constantes en {@link INativeManningSolver}.
      * @return 0 si éxito, código de error negativo si falla.
      */
     @Override
@@ -78,7 +79,8 @@ public class NativeManningGpuSingleton implements INativeManningSolver {
             long sessionHandle,
             FloatBuffer inputBuffer,
             FloatBuffer outputBuffer,
-            int batchSize
+            int batchSize,
+            int mode
     );
 
     @Override
