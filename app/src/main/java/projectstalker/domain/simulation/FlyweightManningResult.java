@@ -9,11 +9,11 @@ import java.util.Arrays;
 
 /**
  * Implementación "Flyweight" (Lazy) de los resultados de la simulación.
+ * Esta compresión solo funciona con ríos con caudal equilibrado (en estado de reposo).
  * <p>
- * Combina resultados dinámicos de la GPU (Extrinsic State) con el estado base del río (Intrinsic State).
- * Soporta submuestreo (Stride) para ahorrar memoria en simulaciones largas.
+ * Implementa {@link IManningResult} para permitir acceso rápido a los arrays crudos.
  */
-public class FlyweightManningResult implements ISimulationResult {
+public class FlyweightManningResult implements IManningResult {
 
     @Getter
     private final RiverGeometry geometry;
@@ -26,25 +26,18 @@ public class FlyweightManningResult implements ISimulationResult {
     private final float[] initialVelocities;
 
     // --- ESTADO EXTRÍNSECO (Deltas de GPU) ---
-    // Puede estar compactado si stride > 1
+    // [Tiempo][Variable (0=H, 1=V)][Celda]
     private final float[][][] gpuPackedData;
 
-    // Datos auxiliares (Temp, pH) - Normalmente resolución completa
+    // Datos auxiliares
     private final float[][][] auxData;
 
-    // Factor de submuestreo (1 = Todos los pasos, N = 1 de cada N)
-    private final int stride;
-
-    /**
-     * Constructor personalizado con soporte para Stride.
-     */
     @Builder
     public FlyweightManningResult(RiverGeometry geometry,
                                   long simulationTime,
                                   RiverState initialState,
                                   float[][][] gpuPackedData,
-                                  float[][][] auxData,
-                                  int stride) {
+                                  float[][][] auxData) {
         this.geometry = geometry;
         this.simulationTime = simulationTime;
 
@@ -54,78 +47,75 @@ public class FlyweightManningResult implements ISimulationResult {
 
         this.gpuPackedData = gpuPackedData;
         this.auxData = auxData;
-
-        // Validación para evitar división por cero
-        this.stride = Math.max(1, stride);
-    }
-
-    // Sobrecarga para compatibilidad (Stride = 1)
-    public FlyweightManningResult(RiverGeometry geometry, long time, RiverState initial, float[][][] gpu, float[][][] aux) {
-        this(geometry, time, initial, gpu, aux, 1);
     }
 
     @Override
     public int getTimestepCount() {
-        // Devolvemos el número de pasos lógicos representados
-        return gpuPackedData.length * stride;
+        return gpuPackedData.length;
+    }
+
+    // --- IMPLEMENTACIÓN IManningResult (Fast Path) ---
+
+    @Override
+    public float[] getRawWaterDepthAt(int t) {
+        // Variable 0 = Profundidad en gpuPackedData
+        return buildCompositeArray(t, 0, initialDepths);
+    }
+
+    @Override
+    public float[] getRawVelocityAt(int t) {
+        // Variable 1 = Velocidad en gpuPackedData
+        return buildCompositeArray(t, 1, initialVelocities);
     }
 
     /**
-     * Reconstruye el estado del río en el tiempo 't' bajo demanda.
-     * Si hay stride, devuelve el snapshot más cercano (Sample & Hold).
+     * Helper centralizado para construir el array híbrido.
+     * Combina la ola dinámica (GPU) con el estado base (Initial).
      */
-    @Override
-    public RiverState getStateAt(int t) {
+    private float[] buildCompositeArray(int t, int gpuVarIndex, float[] initialBackground) {
         int cellCount = geometry.getCellCount();
+        float[] result = new float[cellCount];
 
-        float[] h = new float[cellCount];
-        float[] v = new float[cellCount];
+        // 1. ZONA NUEVA (GPU Data)
+        float[] gpuData = gpuPackedData[t][gpuVarIndex];
 
-        // 1. MAPEO DE TIEMPO A ALMACENAMIENTO (Lógica Stride)
-        // t es el paso de tiempo lógico (0...TotalSteps)
-        // storageIndex es el índice físico en el array GPU (0...PackedLength)
-        int storageIndex = t / stride;
+        // La GPU nos devuelve datos válidos hasta el frente de onda
+        // (Asumiendo propagación CFL <= 1 por paso de tiempo)
+        int newDataLimit = Math.min(t + 1, gpuData.length);
+        int copyLength = Math.min(newDataLimit, cellCount);
 
-        // Protección contra desbordamiento (Clamping al último frame disponible)
-        if (storageIndex >= gpuPackedData.length) {
-            storageIndex = gpuPackedData.length - 1;
-        }
+        System.arraycopy(gpuData, 0, result, 0, copyLength);
 
-        // 2. ZONA NUEVA (GPU Data - Onda Dinámica Activa)
-        float[] gpuH = gpuPackedData[storageIndex][0];
-        float[] gpuV = gpuPackedData[storageIndex][1];
-
-        // Determinamos cuánto datos válidos nos dio la GPU.
-        // En modo Smart: gpuH.length crece con el tiempo (Triangular).
-        // En modo Full: gpuH.length == cellCount (Rectangular).
-        // Usamos gpuH.length directamente, es la fuente de verdad.
-        int copyLength = Math.min(gpuH.length, cellCount);
-
-        System.arraycopy(gpuH, 0, h, 0, copyLength);
-        System.arraycopy(gpuV, 0, v, 0, copyLength);
-
-        // 3. ZONA ANTIGUA (Estado Base Estacionario)
+        // 2. ZONA ANTIGUA (Estado Base Estacionario)
         int remainingCells = cellCount - copyLength;
 
         if (remainingCells > 0) {
-            // Lógica Correcta: Copia Estática Local.
-            // Copiamos la profundidad que tenía esta celda en el estado base.
-            // NO desplazamos desde el inicio (srcPos != 0), mantenemos srcPos == destPos.
-            System.arraycopy(initialDepths, copyLength, h, copyLength, remainingCells);
-            System.arraycopy(initialVelocities, copyLength, v, copyLength, remainingCells);
+            // Preservamos el estado inicial en la zona que la ola aún no ha alcanzado.
+            // Copiamos desde copyLength hacia copyLength para mantener coherencia espacial.
+            System.arraycopy(initialBackground, copyLength, result, copyLength, remainingCells);
         }
 
-        // 4. CONSTRUCCIÓN DEL ESTADO AUXILIAR
-        // Asumimos que auxData (CPU) tiene resolución completa (índice t).
-        // Si no (si también viniera compactado), habría que usar storageIndex.
-        // Aplicamos protección de límites por seguridad.
-        int auxIndex = Math.min(t, (auxData != null ? auxData.length - 1 : 0));
+        return result;
+    }
 
-        float t_val = (auxData != null && auxIndex >= 0) ? auxData[auxIndex][0][0] : 0f;
-        float ph_val = (auxData != null && auxIndex >= 0) ? auxData[auxIndex][1][0] : 0f;
+    // --- IMPLEMENTACIÓN ISimulationResult (Full Object) ---
+
+    @Override
+    public RiverState getStateAt(int t) {
+        // Reutilizamos la lógica del Fast Path para obtener H y V
+        float[] h = getRawWaterDepthAt(t);
+        float[] v = getRawVelocityAt(t);
+
+        // 3. CONSTRUCCIÓN DE AUXILIARES (Química)
+        int cellCount = geometry.getCellCount();
+
+        float t_val = (auxData != null && t < auxData.length) ? auxData[t][0][0] : 0f;
+        float ph_val = (auxData != null && t < auxData.length) ? auxData[t][1][0] : 0f;
 
         float[] tempArr = new float[cellCount];
         float[] phArr = new float[cellCount];
+
+        // Rellenado eficiente (JVM intrinsic)
         Arrays.fill(tempArr, t_val);
         Arrays.fill(phArr, ph_val);
 
