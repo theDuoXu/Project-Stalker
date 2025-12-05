@@ -103,11 +103,13 @@ dependencies {
     // =======================================================
     // --- INTEGRACIÓN CUDA (JCUDA) ---
     // =======================================================
-    def jcudaVersion = '12.5.0'
+    // Core JCuda
+    implementation 'org.jcuda:jcuda:12.6.0'
+    implementation 'org.jcuda:jcuda-natives:12.6.0:linux-x86_64'
 
-    // El módulo 'jcuda-main' incluye: jcuda, jcuda-driver, jcuda-runtime, jcublas, jcurand, etc.
-    implementation "org.jcuda:jcuda-main:$jcudaVersion"
-
+    // JCublas (Math/Matrix)
+    implementation 'org.jcuda:jcublas:12.6.0'
+    implementation 'org.jcuda:jcublas-natives:12.6.0:linux-x86_64'
 }
 jmh {
     fork = 1
