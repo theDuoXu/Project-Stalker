@@ -94,11 +94,20 @@ dependencies {
     implementation 'org.knowm.xchart:xchart:3.8.6'
 
     // =======================================================
-    // --- DEPENDENCIAS EXPLÍCITAS PARA JMH (FIX) ---
+    // --- DEPENDENCIAS EXPLÍCITAS PARA JMH ---
     // =======================================================
     jmhImplementation 'org.openjdk.jmh:jmh-core:1.37'
     jmhAnnotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
     jmhImplementation project
+
+    // =======================================================
+    // --- INTEGRACIÓN CUDA (JCUDA) ---
+    // =======================================================
+    def jcudaVersion = '12.5.0'
+
+    // El módulo 'jcuda-main' incluye: jcuda, jcuda-driver, jcuda-runtime, jcublas, jcurand, etc.
+    implementation "org.jcuda:jcuda-main:$jcudaVersion"
+
 }
 jmh {
     fork = 1
@@ -151,7 +160,7 @@ tasks.register('gpuTest', Test) {
         exceptionFormat "full"
     }
 }
-tasks.register('benchmark', Test){
+tasks.register('benchmark', Test) {
     description = 'Ejecuta las pruebas de rendimiento masivo CPU vs GPU.'
     group = 'verification'
     dependsOn copyNativeLib
