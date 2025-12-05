@@ -54,7 +54,8 @@ void launchManningStepKernel(
     const float* d_pythagoras,
     int cellCount,
     bool save_to_output,
-    int write_offset
+    int write_idx_h,
+    int write_idx_v
 );
 
 #ifdef __cplusplus
