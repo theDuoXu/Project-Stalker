@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <cstddef> // Necesario para size_t
+#include <cuda_runtime_api.h> // Necesario para los tipos cudaStream_t, cudaGraph_t, etc.
 
 // Modos de Ejecución
 enum ManningMode {
@@ -12,6 +13,7 @@ enum ManningMode {
 
 /**
  * Estructura de Sesión para Manning (Stateful).
+ * Contiene punteros a memoria VRAM y el contexto de ejecución (Grafos/Streams).
  */
 struct ManningSession {
     // 1. Geometría Invariante
@@ -38,6 +40,14 @@ struct ManningSession {
     size_t resultCapacityElements = 0;
     size_t inputBatchCapacity     = 0;
     int cellCount = 0;
+
+    // 6. CONTEXTO CUDA (Streams & Graphs)
+    // campos para eliminar la latencia de lanzamiento (Kernel Launch Overhead)
+    // y permitir ejecución asíncrona.
+    cudaStream_t stream       = nullptr; // Stream dedicado para esta sesión
+    cudaGraph_t graph         = nullptr; // Definición del grafo (Topología)
+    cudaGraphExec_t graphExec = nullptr; // Grafo ejecutable (Instancia compilada)
+    bool graphCreated         = false;   // Flag de estado
 };
 
 // --- Funciones de Ciclo de Vida ---

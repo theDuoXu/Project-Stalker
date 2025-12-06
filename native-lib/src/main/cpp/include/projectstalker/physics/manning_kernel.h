@@ -1,6 +1,8 @@
 // src/main/cpp/include/projectstalker/physics/manning_kernel.h
 #pragma once
 
+#include <cuda_runtime_api.h> // Necesario para el tipo cudaStream_t
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -13,10 +15,12 @@ void launchManningBakingKernel(
     const float* d_manning,
     const float* d_bedSlope,
     const float* d_sideSlope,
-    int cellCount
+    int cellCount,
+    cudaStream_t stream // <--- Añadido para init asíncrono
 );
 
 // --- Smart Solver (Lazy / Optimized) ---
+// Se mantiene SIN stream para ejecución directa (Legacy/Default stream).
 void launchManningSmartKernel(
     float* d_results,
     const float* d_newInflows,
@@ -41,6 +45,7 @@ void launchManningSmartKernel(
 // @param current_inflow  Caudal de entrada para este paso de tiempo (t).
 // @param write_offset    Offset en d_results donde escribir (si corresponde).
 // @param save_to_output  Flag para indicar si este paso debe guardarse (Stride).
+// @param stream          Stream de CUDA donde encolar la ejecución (Necesario para Graphs).
 void launchManningStepKernel(
     float* d_current_Q,
     const float* d_prev_Q,
@@ -55,7 +60,8 @@ void launchManningStepKernel(
     int cellCount,
     bool save_to_output,
     int write_idx_h,
-    int write_idx_v
+    int write_idx_v,
+    cudaStream_t stream
 );
 
 #ifdef __cplusplus

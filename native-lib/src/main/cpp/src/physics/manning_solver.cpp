@@ -33,6 +33,13 @@ ManningSession* init_manning_session(
 
     ManningSession* session = new ManningSession();
     session->cellCount = cellCount;
+    session->graphCreated = false;
+    session->graphExec = nullptr;
+    session->graph = nullptr;
+
+    // Crear Stream Dedicado (Non-Blocking para solapamiento futuro)
+    CUDA_CHECK_M(cudaStreamCreateWithFlags(&session->stream, cudaStreamNonBlocking));
+
     size_t cellBytes = cellCount * sizeof(float);
 
     float* d_temp_manning = nullptr;
@@ -56,7 +63,8 @@ ManningSession* init_manning_session(
         CUDA_CHECK_M(cudaMalloc(&d_temp_manning, cellBytes));
         CUDA_CHECK_M(cudaMalloc(&d_temp_bed, cellBytes));
 
-        // Transferencias
+        // Transferencias (Async en el stream por defecto o dedicado)
+        // Usamos sync copy por simplicidad en init
         CUDA_CHECK_M(cudaMemcpy(session->d_bottomWidths, h_bottomWidths, cellBytes, cudaMemcpyHostToDevice));
         CUDA_CHECK_M(cudaMemcpy(session->d_sideSlopes, h_sideSlopes, cellBytes, cudaMemcpyHostToDevice));
         CUDA_CHECK_M(cudaMemcpy(session->d_initialQ, h_initialQ, cellBytes, cudaMemcpyHostToDevice));
@@ -75,9 +83,10 @@ ManningSession* init_manning_session(
             d_temp_manning,
             d_temp_bed,
             session->d_sideSlopes,
-            cellCount
+            cellCount,
+            session->stream // Pasamos el stream
         );
-        CUDA_CHECK_M(cudaDeviceSynchronize());
+        CUDA_CHECK_M(cudaStreamSynchronize(session->stream));
 
         cudaFree(d_temp_manning);
         cudaFree(d_temp_bed);
@@ -108,8 +117,9 @@ static void resize_buffer_if_needed(float** ptr, size_t* currentCap, size_t need
         *currentCap = newCap;
     }
 }
+
 // -----------------------------------------------------------------------------
-// HELPER: ESTRATEGIA FULL EVOLUTION (Ping-Pong Step Loop)
+// HELPER: ESTRATEGIA FULL EVOLUTION (CUDA GRAPHS - Re-Capture Strategy)
 // -----------------------------------------------------------------------------
 static void run_full_evolution_strategy(
     ManningSession* session,
@@ -121,21 +131,30 @@ static void run_full_evolution_strategy(
 ) {
     int cellCount = session->cellCount;
 
-    // Punteros locales para el swap
-    float* d_curr = session->d_ping_Q; // Asumimos que Ping tiene el último estado válido
+    // 1. GESTIÓN DE GRAFOS
+    // Optamos por la estrategia de Re-Captura en cada batch para "quemar" los nuevos valores
+    // de inflow en el grafo sin complicar la actualización de parámetros del kernel.
+    // La captura en CPU es mucho más rápida que el lanzamiento de miles de kernels a la GPU.
+
+    // INICIO CAPTURA DE GRAFO
+    // Todo lo que ocurra en el stream a partir de aquí NO se ejecuta, se graba.
+    CUDA_CHECK_M(cudaStreamBeginCapture(session->stream, cudaStreamCaptureModeGlobal));
+
+    // Punteros locales para el swap (simulación de ping-pong durante la captura)
+    float* d_curr = session->d_ping_Q;
     float* d_prev = session->d_pong_Q;
 
     // Offset entre bloques H y V en el buffer de salida reducido
-    // El buffer d_results tiene tamaño [savedSteps * cellCount * 2]
     int output_pitch_elements = savedSteps * cellCount;
     int saved_count = 0;
 
-    // Bucle de Orquestación en CPU
+    // Bucle de Orquestación (Grabación)
     for (int t = 0; t < batchSize; t++) {
         // Swap: El que fue Current (escritura) en t-1 pasa a ser Prev (lectura) en t
         std::swap(d_curr, d_prev);
 
-        // Input: Leemos directamente de la memoria Pinned (Zero-Copy implícito CPU)
+        // Input: Leemos del Host Pinned array. Al capturar, se graba el valor 'float' actual.
+        // Esto evita tener que subir los inflows a un buffer de GPU.
         float current_inflow = h_pinned_inflows[t];
 
         // Stride Logic
@@ -150,31 +169,55 @@ static void run_full_evolution_strategy(
             saved_count++;
         }
 
-        // Lanzar Kernel Paso a Paso
+        // Lanzar Kernel Paso a Paso (Grabación de Nodo)
+        // Se usa el stream de captura.
         launchManningStepKernel(
             d_curr,         // Escribir aquí
             d_prev,         // Leer de aquí
             session->d_results,
-            current_inflow,
-            session->d_initialDepths, // Semilla estática
+            current_inflow, // Se graba el valor literal
+            session->d_initialDepths,
             session->d_bottomWidths, session->d_sideSlopes,
             session->d_inv_n, session->d_sqrt_slope, session->d_pythagoras,
             cellCount,
             save,
             write_idx_h,
-            write_idx_v
+            write_idx_v,
+            session->stream // Stream de sesión
         );
     }
 
-    // Persistencia del Estado
-    // Aseguramos que session->d_ping_Q apunte al último buffer escrito (d_curr)
+    // Persistencia del Estado (Actualizamos los punteros de sesión para el siguiente batch)
     session->d_ping_Q = d_curr;
     session->d_pong_Q = d_prev;
 
-    // Output Retrieval (Copia Lineal Compactada)
-    // Como el kernel ya escribió con stride, el buffer d_results es denso.
+    // FIN CAPTURA
+    cudaGraph_t captured_graph;
+    CUDA_CHECK_M(cudaStreamEndCapture(session->stream, &captured_graph));
+
+    // INSTANCIACIÓN (Compilación del Grafo)
+    cudaGraphExec_t graphExec;
+    CUDA_CHECK_M(cudaGraphInstantiate(&graphExec, captured_graph, NULL, NULL, 0));
+
+    // EJECUCIÓN (Lanzamiento Único)
+    // La CPU envía un solo comando. La GPU ejecuta los 'batchSize' pasos sin interrupción.
+    CUDA_CHECK_M(cudaGraphLaunch(graphExec, session->stream));
+
+    // LIMPIEZA INMEDIATA (Estrategia Re-Capture)
+    // Destruimos el grafo temporal.
+    CUDA_CHECK_M(cudaGraphExecDestroy(graphExec));
+    CUDA_CHECK_M(cudaGraphDestroy(captured_graph));
+
+    // Output Retrieval (Async en el mismo stream)
+    // Esta copia se encola y comenzará inmediatamente después de que termine el grafo.
     size_t bytesToCopy = saved_count * cellCount * 2 * sizeof(float);
-    CUDA_CHECK_M(cudaMemcpy(h_pinned_results, session->d_results, bytesToCopy, cudaMemcpyDeviceToHost));
+    CUDA_CHECK_M(cudaMemcpyAsync(
+        h_pinned_results,
+        session->d_results,
+        bytesToCopy,
+        cudaMemcpyDeviceToHost,
+        session->stream
+    ));
 }
 
 // -----------------------------------------------------------------------------
@@ -189,11 +232,19 @@ static void run_smart_strategy(
     int cellCount = session->cellCount;
 
     // 1. Input Inflows (Array completo)
-    // En modo Smart necesitamos subir todo el array de inputs a la GPU de golpe
+    // En modo Smart necesitamos subir todo el array de inputs a la GPU de golpe.
+    // Usamos Async Copy en el stream de la sesión.
     resize_buffer_if_needed(&session->d_newInflows, &session->inputBatchCapacity, batchSize);
-    CUDA_CHECK_M(cudaMemcpy(session->d_newInflows, h_pinned_inflows, batchSize * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK_M(cudaMemcpyAsync(
+        session->d_newInflows,
+        h_pinned_inflows,
+        batchSize * sizeof(float),
+        cudaMemcpyHostToDevice,
+        session->stream
+    ));
 
     // 2. Ejecución Kernel
+    // Pasamos el stream por defecto (o null implícito) al launcher porque Smart no usa Grafos.
     launchManningSmartKernel(
         session->d_results, session->d_newInflows, session->d_initialQ,
         session->d_initialDepths, session->d_bottomWidths, session->d_sideSlopes,
@@ -201,7 +252,7 @@ static void run_smart_strategy(
         batchSize, cellCount
     );
 
-    // 3. Output Retrieval (Triangular 2D Copy)
+    // 3. Output Retrieval (Triangular 2D Copy Async)
     // Recorte triangular para ahorrar ancho de banda
     int activeWidth = (batchSize > cellCount) ? cellCount : batchSize;
 
@@ -210,22 +261,24 @@ static void run_smart_strategy(
     size_t widthBytes = activeWidth * sizeof(float);
 
     // Copiar H
-    CUDA_CHECK_M(cudaMemcpy2D(
+    CUDA_CHECK_M(cudaMemcpy2DAsync(
         h_pinned_results, dstPitch,
         session->d_results, srcPitch,
         widthBytes, batchSize,
-        cudaMemcpyDeviceToHost
+        cudaMemcpyDeviceToHost,
+        session->stream
     ));
 
     // Copiar V (Offset en GPU es Batch*CellCount, en CPU es Batch*ActiveWidth)
     float* src_V = session->d_results + ((size_t)batchSize * cellCount);
     float* dst_V = h_pinned_results + (batchSize * activeWidth);
 
-    CUDA_CHECK_M(cudaMemcpy2D(
+    CUDA_CHECK_M(cudaMemcpy2DAsync(
         dst_V, dstPitch,
         src_V, srcPitch,
         widthBytes, batchSize,
-        cudaMemcpyDeviceToHost
+        cudaMemcpyDeviceToHost,
+        session->stream
     ));
 }
 
@@ -249,9 +302,6 @@ void run_manning_batch_stateful(
     // Cálculo seguro de pasos guardados: ceil(batchSize / stride)
     int savedSteps = (batchSize + stride - 1) / stride;
 
-    size_t outputHeight = (mode == MODE_FULL_EVOLUTION) ? savedSteps : batchSize;
-    size_t outputWidth  = (mode == MODE_FULL_EVOLUTION) ? cellCount : batchSize; // Aprox para reserva
-
     // Para Smart: Batch x CellCount (El kernel escribe todo aunque bajemos menos)
     // Para Full: SavedSteps x CellCount (El kernel escribe compactado)
     size_t totalOutputElements;
@@ -271,11 +321,19 @@ void run_manning_batch_stateful(
         run_smart_strategy(session, h_pinned_inflows, h_pinned_results, batchSize);
     }
 
-    CUDA_CHECK_M(cudaDeviceSynchronize());
+    // SINCRONIZACIÓN FINAL
+    // Esperamos a que el stream (Grafos + MemcpyAsync) termine antes de devolver el control a Java.
+    // Esto garantiza que los datos en 'h_pinned_results' sean válidos.
+    CUDA_CHECK_M(cudaStreamSynchronize(session->stream));
 }
 
 void destroy_manning_session(ManningSession* session) {
     if (!session) return;
+
+    if (session->graphExec) cudaGraphExecDestroy(session->graphExec);
+    if (session->graph) cudaGraphDestroy(session->graph);
+    if (session->stream) cudaStreamDestroy(session->stream);
+
     if (session->d_bottomWidths) cudaFree(session->d_bottomWidths);
     if (session->d_sideSlopes)   cudaFree(session->d_sideSlopes);
     if (session->d_inv_n)        cudaFree(session->d_inv_n);
