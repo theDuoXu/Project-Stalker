@@ -89,31 +89,48 @@ class ManningGpuSolverTest {
     }
 
     @Test
-    @DisplayName("Smart Mode: Debe usar MODE_SMART_LAZY y devolver RawGpuResult")
+    @DisplayName("Smart Mode: Debe usar MODE_SMART_LAZY y devolver RawGpuResult expandido")
     void solveSmartBatch_shouldUseSmartMode() {
         // --- ARRANGE ---
         int batchSize = 2;
         float[] newInflows = {100f, 150f};
         float[] dummy = new float[CELL_COUNT];
 
-        // Simulamos datos de retorno del kernel (SoA: H... V...)
-        // Pasos = 2, Celdas = 50. Total Floats = 2 * 50 * 2 = 200.
-        float[] gpuData = new float[batchSize * CELL_COUNT * 2];
-        gpuData[0] = 1.1f; // H[0][0]
-        gpuData[batchSize * CELL_COUNT] = 2.1f; // V[0][0] (Offset a la mitad)
+        // El mock debe devolver datos COMPACTOS, tal como lo hace C++.
+        // En Smart Mode, readWidth = min(batchSize, cellCount) = 2.
+        // Tamaño Buffer = batchSize * readWidth * 2 vars = 2 * 2 * 2 = 8 floats.
+
+        int readWidth = 2;
+        int compactSize = batchSize * readWidth * 2;
+        float[] gpuCompactData = new float[compactSize];
+
+        // Llenamos datos simulados en formato SoA Compacto:
+        // Bloque H (4 floats): [H_t0_c0, H_t0_c1, H_t1_c0, H_t1_c1]
+        // Bloque V (4 floats): [V_t0_c0, V_t0_c1, V_t1_c0, V_t1_c1]
+
+        // H en t=0, c=0
+        gpuCompactData[0] = 1.1f;
+
+        // V en t=0, c=0. Offset = Tamaño bloque H (Batch * ReadWidth) = 4
+        gpuCompactData[4] = 2.1f;
 
         doAnswer(inv -> {
             FloatBuffer out = inv.getArgument(2);
+            // Verificamos que el buffer real sea pequeño (optimizado)
+            // Capacidad debe ser aprox 8 (con el margen 1.2x puede ser 9 o 10)
+            assertTrue(out.capacity() < 200, "El buffer debería estar optimizado para Smart Mode");
+
             out.clear();
-            out.put(gpuData);
+            out.put(gpuCompactData); // Ahora cabe perfectamente
             return 0;
         }).when(mockNativeSolver).runBatch(
                 eq(FAKE_SESSION_HANDLE), any(), any(), eq(batchSize),
                 eq(INativeManningSolver.MODE_SMART_LAZY),
-                eq(1) // Stride implícito
+                eq(1)
         );
 
         // --- ACT ---
+        // Java leerá los 8 floats y los expandirá a 200 floats (rellenando ceros)
         ManningGpuSolver.RawGpuResult result = gpuSolver.solveSmartBatch(dummy, newInflows, dummy, true);
 
         // --- ASSERT ---
@@ -124,9 +141,19 @@ class ManningGpuSolverTest {
         );
 
         assertEquals(2, result.storedSteps());
+
+        // Verificamos que Java HIZO LA EXPANSIÓN correctamente
+        // El array resultante debe ser FULL WIDTH (50 celdas)
         assertEquals(2 * CELL_COUNT, result.depths().length);
+
+        // Verificamos que los datos se colocaron en el índice correcto
+        // t=0, c=0 está en índice 0
         assertEquals(1.1f, result.depths()[0], 1e-6f);
         assertEquals(2.1f, result.velocities()[0], 1e-6f);
+
+        // Verificamos que el resto está a cero (padding de expansión)
+        // t=0, c=5 (fuera del triángulo activo) debe ser 0
+        assertEquals(0.0f, result.depths()[5], 1e-6f);
     }
 
     @Test
