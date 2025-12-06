@@ -29,7 +29,6 @@ public class ManningGpuBenchmark {
     private final int CELL_COUNT = 50_000;
 
     // Umbral de Batch Size para dejar de ejecutar CPU real e interpolar.
-    // 50 pasos en CPU para 50k celdas ya tardan bastante (~segundos).
     private final int CPU_EXECUTION_THRESHOLD_BATCH = 50;
 
     private final float BASE_DISCHARGE = 50.0f; // Caudal base para equilibrio
@@ -57,7 +56,6 @@ public class ManningGpuBenchmark {
         this.baseConfig = SimulationConfig.builder()
                 .cpuProcessorCount(8)
                 .useGpuAccelerationOnTransport(false)
-                .gpuFullEvolutionStride(1) // Stride 1 para comparar manzanas con manzanas
                 .build();
 
         // 3. WARM-UP HIDRÁULICO INSTANTÁNEO (Analítico)
@@ -68,17 +66,40 @@ public class ManningGpuBenchmark {
     }
 
     @Test
-    @DisplayName("Benchmark: CPU vs GPU Smart (Triangle) vs GPU Full (Rect)")
+    @DisplayName("Benchmark A: CPU vs GPU (Stride=1) - High Fidelity")
     void benchmarkMassiveScalability() {
-        log.info("=== INICIANDO BENCHMARK MANNING MASIVO (50k Celdas) ===");
+        runBenchmarkSuite(1, "STRIDE 1 (High Fidelity)");
+    }
 
-        int[] batchSizes = {10, 100, 1_000, 5_000};
+    @Test
+    @DisplayName("Benchmark B: CPU vs GPU (Stride=100) - Long Run / Visualization")
+    void benchmarkMassiveScalabilityWithStride() {
+        runBenchmarkSuite(100, "STRIDE 100 (Long Run)");
+    }
+
+    /**
+     * Motor genérico del Benchmark.
+     */
+    private void runBenchmarkSuite(int stride, String label) {
+        log.info("=== INICIANDO BENCHMARK MANNING MASIVO (50k Celdas) - {} ===", label);
+
+        // Ajustamos los tamaños de batch para que sean múltiplos del stride (requisito estricto)
+        // Ejemplo: Si stride=100, usamos 100, 1000, 5000.
+        // Si stride=1, usamos 10, 100, 1000, 5000.
+        int[] batchSizes;
+        if (stride == 1) {
+            batchSizes = new int[]{10, 100, 1_000, 5_000};
+        } else {
+            batchSizes = new int[]{100, 1_000, 5_000, 10_000}; // Batches más grandes para notar el ahorro
+        }
 
         // --- WARM-UP GENERAL ---
         log.info(">> Calentando motores (JIT y Contexto CUDA)...");
-        runBatchIteration(10, false, null); // Warmup CPU
-        runBatchIteration(100, true, GpuStrategy.SMART_TRUSTED); // Warmup GPU Smart
-        runBatchIteration(100, true, GpuStrategy.FULL_EVOLUTION); // Warmup GPU Full
+        // Warmup con stride 1 siempre es seguro para Smart
+        runBatchIteration(100, true, GpuStrategy.SMART_TRUSTED, 1);
+        // Warmup Full con el stride objetivo
+        int warmupBatch = Math.max(100, stride);
+        runBatchIteration(warmupBatch, true, GpuStrategy.FULL_EVOLUTION, stride);
         log.info(">> Calentamiento completado.\n");
 
         System.out.printf("%-10s | %-15s | %-12s | %-12s | %-10s | %-10s%n",
@@ -91,6 +112,8 @@ public class ManningGpuBenchmark {
             System.gc();
 
             // 1. CPU (Real o Estimada)
+            // CPU ignora el stride en el cálculo físico, pero se beneficia al guardar menos resultados.
+            // Para simplificar la comparativa de "Physics Time", estimamos linealmente.
             double cpuTimeMs;
             boolean isCpuEstimated = false;
 
@@ -98,17 +121,20 @@ public class ManningGpuBenchmark {
                 cpuTimeMs = cpuMsPerStep * batchSize;
                 isCpuEstimated = true;
             } else {
-                cpuTimeMs = runBatchIteration(batchSize, false, null);
+                // CPU Reference siempre Stride 1 para medir coste físico base
+                cpuTimeMs = runBatchIteration(batchSize, false, null, 1);
                 if (cpuMsPerStep == 0) {
                     cpuMsPerStep = cpuTimeMs / batchSize;
                 }
             }
 
             // 2. GPU SMART (Optimized)
-            double gpuSmartTimeMs = runBatchIteration(batchSize, true, GpuStrategy.SMART_TRUSTED);
+            // Smart SIEMPRE usa Stride=1 internamente (Triángulo Denso).
+            double gpuSmartTimeMs = runBatchIteration(batchSize, true, GpuStrategy.SMART_TRUSTED, 1);
 
             // 3. GPU FULL (Robust)
-            double gpuFullTimeMs = runBatchIteration(batchSize, true, GpuStrategy.FULL_EVOLUTION);
+            // Full Evolution SÍ usa el Stride para optimizar PCIe y Memoria.
+            double gpuFullTimeMs = runBatchIteration(batchSize, true, GpuStrategy.FULL_EVOLUTION, stride);
 
             // 4. Reporte
             double xSmart = cpuTimeMs / gpuSmartTimeMs;
@@ -129,40 +155,42 @@ public class ManningGpuBenchmark {
      * Ejecuta una iteración midiendo tiempo de Cómputo + DMA.
      * Excluye setup de VRAM (en la medida de lo posible, aunque el procesador gestiona el ciclo de vida).
      */
-    private double runBatchIteration(int totalStepsToSimulate, boolean useGpu, GpuStrategy strategy) {
+    private double runBatchIteration(int totalStepsToSimulate, boolean useGpu, GpuStrategy strategy, int stride) {
         // Generar Hidrograma de Input (Simulación Larga)
         float[] inputs = new float[totalStepsToSimulate];
         Arrays.fill(inputs, 150.0f);
 
         // CALCULAR BATCH SIZE SEGURO (Límite de Buffer Java ~2GB)
-        // 50k celdas * 2 floats * 4 bytes = 400KB por paso.
-        // 2GB / 400KB = ~5000 pasos max teóricos.
-        // Usamos 2000 como límite seguro para dejar margen al driver y overhead.
+        // Si usamos stride, el buffer de salida es menor, así que podemos procesar lotes más grandes.
+        // Stride 1: 2000 pasos. Stride 100: 200,000 pasos (teórico).
+        // Mantenemos 2000 como base conservadora pero multiplicamos por stride (hasta un límite razonable).
+        int safeBase = 2000;
+        int maxSafeBatch = Math.min(safeBase * stride, 10_000); // Tope 10k para no saturar VRAM de inputs
 
-        int safeBatchSize = Math.min(totalStepsToSimulate, 2000);
+        // Ajustamos para que sea múltiplo del stride (Requisito JNI)
+        int safeBatchSize = (maxSafeBatch / stride) * stride;
+        if (safeBatchSize == 0) safeBatchSize = stride;
 
         // Configurar Iteración
         SimulationConfig iterationConfig = baseConfig
                 .withUseGpuAccelerationOnManning(useGpu)
                 .withGpuStrategy(strategy)
-                .withCpuTimeBatchSize(safeBatchSize) // <--- USAMOS EL TAMAÑO SEGURO
-                .withGpuFullEvolutionStride(1);      // Stride 1 para estrés máximo
+                .withCpuTimeBatchSize(safeBatchSize) // Tamaño de "bocado" seguro
+                .withGpuFullEvolutionStride(stride); // Factor de compresión
 
         // Instanciar Procesador
         try (ManningBatchProcessor processor = new ManningBatchProcessor(geometry, iterationConfig)) {
 
             // WARM-UP (Solo la primera vez para alojar buffers)
             if (useGpu) {
-                // Hacemos un warm-up con un input pequeño para no gastar tiempo
-                float[] warmupInput = new float[Math.min(10, totalStepsToSimulate)];
+                float[] warmupInput = new float[Math.min(stride * 2, totalStepsToSimulate)];
                 processor.process(warmupInput, initialState);
             }
 
             // MEASUREMENT
             long start = System.nanoTime();
 
-            // Si totalStepsToSimulate (5000) > safeBatchSize (2000),
-            // el procesador hará 3 llamadas internas a la GPU (2000, 2000, 1000).
+            // El procesador gestiona el chunking si totalSteps > safeBatchSize
             processor.process(inputs, initialState);
 
             long end = System.nanoTime();
