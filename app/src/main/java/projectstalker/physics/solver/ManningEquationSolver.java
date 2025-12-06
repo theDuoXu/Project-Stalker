@@ -3,114 +3,114 @@ package projectstalker.physics.solver;
 import projectstalker.domain.river.RiverGeometry;
 
 /**
- * Clase que encapsula la lógica para resolver la ecuación de Manning.
- * Utiliza el method de Newton-Raphson para encontrar la profundidad (H)
- * a partir de un caudal (Q) dado.
+ * Biblioteca estática de algoritmos para resolver la Ecuación de Manning.
+ * <p>
+ * Contiene métodos analíticos y numéricos (Newton-Raphson) para determinar
+ * profundidad normal, velocidad y caudal en canales abiertos.
+ * <p>
+ * Stateless y Thread-Safe.
  */
 public final class ManningEquationSolver {
 
     private static final int MAX_ITERATIONS = 20;
-    private static final double TOLERANCE = 1e-6; // Tolerancia para convergencia en metros
+    private static final double TOLERANCE = 1e-6; // Tolerancia convergencia
+
+    private ManningEquationSolver() {}
 
     /**
-     * Prohibido construir esta clase utilidad
+     * Versión "Convenience" que extrae los datos de la geometría.
+     * Mantenida para compatibilidad con tu código existente.
      */
-    private ManningEquationSolver() {
+    public static float findDepth(float targetDischarge, float initialDepthGuess, int cellIndex, RiverGeometry geometry) {
+        // Extraer parámetros
+        float b = geometry.getWidthAt(cellIndex);
+        float m = geometry.getSideSlopeAt(cellIndex);
+        float n = geometry.getManningAt(cellIndex);
+        float S = geometry.getBedSlopeAt(cellIndex);
+
+        return calculateNormalDepth(targetDischarge, S, n, b, m, initialDepthGuess);
     }
 
     /**
-     * Encuentra la profundidad del agua (H) que corresponde a un caudal dado.
-     * Esta clase es Thread safe
+     * Versión "Primitiva" (Core Matemático).
+     * Usada por RiverFactory para calcular el estado inicial sin instanciar simuladores.
      *
-     * @param targetDischarge   El caudal objetivo que la celda debe evacuar (m³/s).
-     * @param initialDepthGuess Una estimación inicial para la profundidad (m).
-     * @param cellIndex         El índice de la celda del río.
-     * @param geometry          La geometría del río.
-     * @return La profundidad calculada (m).
+     * @param targetDischarge Caudal objetivo (m³/s)
+     * @param slope           Pendiente del fondo (m/m)
+     * @param n               Coeficiente de Manning
+     * @param b               Ancho del fondo (m)
+     * @param m               Pendiente lateral (z)
+     * @param initialGuess    (Opcional) Semilla inicial. Si es <=0 se usa 1.0m
      */
+    public static float calculateNormalDepth(float targetDischarge, float slope, float n, float b, float m, float initialGuess) {
+        // Validaciones físicas
+        if (slope <= 1e-7) slope = 1e-7f;
+        if (Math.abs(targetDischarge) < 1e-9) return 0f;
 
-    public static float findDepth(float targetDischarge, float initialDepthGuess, int cellIndex, RiverGeometry geometry) {
+        final double sqrtSlope = Math.sqrt(slope);
+        final double pythagoras = Math.sqrt(1.0 + m * m); // Pre-cálculo geométrico
 
-        // Extraer parámetros geométricos una sola vez
-        final double b = geometry.getWidthAt(cellIndex);
-        final double m = geometry.getSideSlopeAt(cellIndex);
-        final double n = geometry.getManningAt(cellIndex);
-        double S = geometry.getBedSlopeAt(cellIndex);
-
-        // Evitar pendiente cero o negativa que impide el cálculo.
-        if (S <= 1e-7) {
-            S = 1e-7;
-        }
-        final double sqrtSlope = Math.sqrt(S);
-        final double pythagoras = Math.sqrt(1.0 + m * m);
-
-        double H = (initialDepthGuess <= 0) ? 0.1 : initialDepthGuess; // Empezar con un valor pequeño si la estimación es cero
+        double H = (initialGuess <= 0) ? 1.0 : initialGuess;
 
         for (int i = 0; i < MAX_ITERATIONS; i++) {
-            // Función f(H) = Q_calculado(H) - Q_objetivo
-            double calculatedDischarge = calculateQ(H, b, m, n, sqrtSlope,  pythagoras);
+            // 1. Calcular Q actual con el H estimado
+            double calculatedDischarge = calculateQ(H, b, m, n, sqrtSlope, pythagoras);
+
+            // 2. Función objetivo f(H) = 0
             double f_H = calculatedDischarge - targetDischarge;
 
-            // Si el error es suficientemente pequeño, hemos convergido.
-            if (Math.abs(f_H) < TOLERANCE) {
-                return (float) H;
-            }
+            if (Math.abs(f_H) < TOLERANCE) return (float) H;
 
-            // Derivada f'(H) = dQ/dH
+            // 3. Derivada dQ/dH
             double dQ_dH = calculate_dQ_dH(H, b, m, calculatedDischarge, pythagoras);
 
-            // Evitar división por cero o un gradiente que no permita avanzar.
-            if (Math.abs(dQ_dH) < 1e-6) {
-                break; // Salir si la derivada es plana, el method no convergerá
-            }
+            if (Math.abs(dQ_dH) < 1e-6) break; // Derivada plana
 
-            // Fórmula de Newton-Raphson
+            // 4. Paso Newton
             double h_next = H - f_H / dQ_dH;
 
-            // Comprobar convergencia por cambio en H
-            if (Math.abs(h_next - H) < TOLERANCE) {
-                return (float) Math.max(0, h_next);
-            }
+            if (Math.abs(h_next - H) < TOLERANCE) return (float) Math.max(0, h_next);
 
-            // Actualizar H para la siguiente iteración, asegurando que no sea negativo.
-            H = Math.max(0.001, h_next); // Evitar que H sea exactamente cero para prevenir singularidades
+            // 5. Clamp para evitar valores negativos
+            H = Math.max(0.001, h_next);
         }
 
-        // Si no converge, devuelve la última mejor estimación.
         return (float) H;
     }
 
-    /**
-     * Calcula el caudal (Q) usando la ecuación de Manning para un canal trapezoidal.
-     */
+    // Sobrecarga para RiverFactory (sin guess inicial)
+    public static float calculateNormalDepth(float targetDischarge, float slope, float n, float b, float m) {
+        return calculateNormalDepth(targetDischarge, slope, n, b, m, 1.0f);
+    }
+
+    // --- Helpers Matemáticos Internos (Double precision) ---
+
     private static double calculateQ(double H, double b, double m, double n, double sqrtSlope, double pythagoras) {
         double A = (b + m * H) * H;
         if (A <= 0) return 0.0;
-
-        // Usamos el pre-cálculo de Pitágoras
         double P = b + 2.0 * H * pythagoras;
-        if (P <= 1e-9) return 0.0;
-
         double R = A / P;
-        // Usamos sqrtSlope pre-calculado
         return (1.0 / n) * A * Math.pow(R, 2.0 / 3.0) * sqrtSlope;
     }
 
-    /**
-     * Calcula la derivada del caudal respecto a la profundidad (dQ/dH) analíticamente.
-     */
     private static double calculate_dQ_dH(double H, double b, double m, double currentQ, double pythagoras) {
-        if (H <= 1e-9) return Double.POSITIVE_INFINITY;
-
-        // Derivadas optimizadas
         double topWidth = b + 2.0 * m * H;
         double A = (b + m * H) * H;
         double P = b + 2.0 * H * pythagoras;
 
-        double term_A_derivative = (5.0 * topWidth) / (3.0 * A);
-        double term_P_derivative = (4.0 * pythagoras) / (3.0 * P);
+        // Regla de la cadena optimizada para Manning
+        double term_A = (5.0 * topWidth) / (3.0 * A);
+        double term_P = (4.0 * pythagoras) / (3.0 * P);
 
-        // Factorizamos: Q * ( (5/3)*T/A - (2/3)*dP/P )
-        return currentQ * (term_A_derivative - term_P_derivative);
+        return currentQ * (term_A - term_P);
+    }
+
+    /**
+     * Calcula velocidad V = Q / A.
+     */
+    public static float calculateVelocity(float discharge, float depth, float b, float m) {
+        if (depth <= 1e-4) return 0f;
+        float area = (b + m * depth) * depth;
+        return discharge / area;
     }
 }
