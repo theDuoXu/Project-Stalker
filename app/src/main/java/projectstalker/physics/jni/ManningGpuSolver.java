@@ -122,14 +122,13 @@ public final class ManningGpuSolver implements AutoCloseable {
         int savedSteps = batchSize / stride;
         if (savedSteps == 0 && batchSize > 0) savedSteps = 1;
 
-        // 1. CALCULAR ANCHO ACTIVO (Lo que C++ envía)
-        // Smart: Triángulo/Rectángulo compacto. Full: Todo el río.
-        int activeWidth = (mode == INativeManningSolver.MODE_SMART_LAZY)
+        // 1. Calcular ancho activo
+        int readWidth = (mode == INativeManningSolver.MODE_SMART_LAZY)
                 ? Math.min(batchSize, cellCount)
                 : cellCount;
 
-        // 2. DIMENSIONAR Y EJECUTAR
-        int floatsToRead = savedSteps * activeWidth * 2;
+        // 2. Dimensionar y Ejecutar
+        int floatsToRead = savedSteps * readWidth * 2;
         ensureBuffersCapacity(batchSize, floatsToRead);
 
         inputBuffer.clear();
@@ -138,22 +137,25 @@ public final class ManningGpuSolver implements AutoCloseable {
         int status = nativeSolver.runBatch(sessionHandle, inputBuffer, outputBuffer, batchSize, mode, stride);
         if (status != 0) throw new RuntimeException("GPU Error: " + status);
 
-        // 3. EXTRACCIÓN RÁPIDA (Solo separar H y V)
-        // No expandimos a ceros. Devolvemos los datos densos tal cual vienen de C++.
-
-        float[] allData = new float[floatsToRead];
-        outputBuffer.clear();
-        outputBuffer.get(allData);
+        // 3. EXTRACCIÓN OPTIMIZADA (Zero-Copy Intermedio)
+        // Eliminamos el array temporal 'allData'. Leemos directo a destino.
 
         int elementsPerVar = floatsToRead / 2;
         float[] compactH = new float[elementsPerVar];
         float[] compactV = new float[elementsPerVar];
 
-        // Copia en bloque (Muy rápido)
-        System.arraycopy(allData, 0, compactH, 0, elementsPerVar);
-        System.arraycopy(allData, elementsPerVar, compactV, 0, elementsPerVar);
+        // Resetear posición del buffer para lectura
+        outputBuffer.clear();
 
-        return new RawGpuResult(compactH, compactV, savedSteps, activeWidth);
+        // Leer primera mitad (H) directamente al array final
+        // Transferencia: Off-Heap -> Heap (Solo 1 copia)
+        outputBuffer.get(compactH, 0, elementsPerVar);
+
+        // Leer segunda mitad (V) directamente al array final
+        // El buffer ya avanzó su posición interna, sigue leyendo donde se quedó.
+        outputBuffer.get(compactV, 0, elementsPerVar);
+
+        return new RawGpuResult(compactH, compactV, savedSteps, readWidth);
     }
 
     // --- Helpers ---
