@@ -5,30 +5,18 @@ import projectstalker.config.SimulationConfig;
 import projectstalker.config.SimulationConfig.GpuStrategy;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.DenseManningResult;
 import projectstalker.domain.simulation.IManningResult;
+import projectstalker.domain.river.RiverState; // Asegurar import
 import projectstalker.factory.SimulationResultFactory;
 import projectstalker.physics.impl.ManningProfileCalculatorTask;
 import projectstalker.physics.jni.ManningGpuSolver;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-/**
- * Orquestador de la simulación hidráulica.
- * <p>
- * REFACTORIZADO: Ahora gestiona el ciclo de vida completo de la simulación (Chunking/Striding),
- * no solo la ejecución de lotes individuales.
- * <p>
- * Responsabilidades:
- * 1. Decidir la estrategia (CPU vs GPU Smart vs GPU Full Evolution).
- * 2. Gestionar el bucle de tiempo y la paginación de memoria.
- * 3. Utilizar {@link SimulationResultFactory} para producir el resultado optimizado correcto.
- */
 @Slf4j
 public class ManningBatchProcessor implements AutoCloseable {
 
@@ -36,9 +24,6 @@ public class ManningBatchProcessor implements AutoCloseable {
     private final SimulationConfig config;
     private final ExecutorService threadPool;
     private final int cellCount;
-
-    // Solver GPU (Lazy initialization)
-    // Se instancia solo si la config lo pide.
     private final boolean useGpu;
 
     public ManningBatchProcessor(RiverGeometry geometry, SimulationConfig config) {
@@ -49,6 +34,12 @@ public class ManningBatchProcessor implements AutoCloseable {
         int processorCount = config.getCpuProcessorCount();
         this.threadPool = Executors.newFixedThreadPool(Math.max(processorCount, 1));
         log.info("ManningBatchProcessor inicializado. (GPU: {}, Stride: {})", useGpu, config.getGpuFullEvolutionStride());
+    }
+
+    // --- MÉTODOS DE FÁBRICA INTERNOS (Protected para Testing) ---
+    // Esto permite que el Test sobreescriba este método y devuelva un Mock
+    protected ManningGpuSolver createGpuSolver(RiverGeometry geometry) {
+        return new ManningGpuSolver(geometry);
     }
 
     public IManningResult process(float[] fullInflowProfile, RiverState initialState) {
@@ -67,7 +58,8 @@ public class ManningBatchProcessor implements AutoCloseable {
 
     // --- GPU SMART ---
     private IManningResult processGpuSmart(float[] inflowProfile, RiverState initialState, long startTime, GpuStrategy strategy) {
-        try (ManningGpuSolver solver = new ManningGpuSolver(geometry)) {
+        // Usamos el método factoría protegido
+        try (ManningGpuSolver solver = createGpuSolver(geometry)) {
             ManningGpuSolver.RawGpuResult rawResult;
             try {
                 rawResult = solver.solveSmartBatch(
@@ -88,15 +80,15 @@ public class ManningBatchProcessor implements AutoCloseable {
         }
     }
 
-    // --- GPU FULL EVOLUTION (Con Padding) ---
+    // --- GPU FULL EVOLUTION ---
     private IManningResult processGpuFullEvolution(float[] fullInflowProfile, RiverState initialState, long startTime) {
         int totalSteps = fullInflowProfile.length;
         int batchSize = config.getCpuTimeBatchSize();
         int stride = config.getGpuFullEvolutionStride();
 
-        // Validación inicial de config
+        // Validación estricta: Los lotes intermedios NO pueden tener padding
         if (batchSize % stride != 0) {
-            throw new IllegalArgumentException("Configuración inválida: cpuTimeBatchSize debe ser múltiplo de gpuFullEvolutionStride.");
+            throw new IllegalArgumentException("Configuración inválida: cpuTimeBatchSize (" + batchSize + ") debe ser múltiplo de gpuFullEvolutionStride (" + stride + ").");
         }
 
         List<float[]> dChunks = new ArrayList<>();
@@ -104,37 +96,29 @@ public class ManningBatchProcessor implements AutoCloseable {
         float[] currentQ = initialState.discharge(geometry);
         float[] initialDepths = initialState.waterDepth();
 
-        try (ManningGpuSolver solver = new ManningGpuSolver(geometry)) {
+        try (ManningGpuSolver solver = createGpuSolver(geometry)) {
             int processedSteps = 0;
 
             while (processedSteps < totalSteps) {
-                // 1. Determinar tamaño lógico restante
                 int remainingSteps = totalSteps - processedSteps;
                 int logicalBatchSize = Math.min(batchSize, remainingSteps);
 
-                // 2. Cálculo de Padding (Relleno)
-                // Si el lote no llena el stride, extendemos el input para evitar perder datos.
-                // Esto garantiza que el kernel siempre reciba múltiplo de stride.
+                // Cálculo de Padding (Solo aplica al ÚLTIMO lote si logicalBatchSize < batchSize)
                 int remainder = logicalBatchSize % stride;
                 int paddingNeeded = (remainder == 0) ? 0 : (stride - remainder);
                 int effectiveBatchSize = logicalBatchSize + paddingNeeded;
 
-                // 3. Construcción del Input Array (Con Padding si es necesario)
                 float[] batchInflows = new float[effectiveBatchSize];
-
-                // Copiar datos reales
                 System.arraycopy(fullInflowProfile, processedSteps, batchInflows, 0, logicalBatchSize);
 
-                // Rellenar padding con el último valor válido (proyección constante)
                 if (paddingNeeded > 0) {
                     float lastVal = batchInflows[logicalBatchSize - 1];
                     for (int k = 0; k < paddingNeeded; k++) {
                         batchInflows[logicalBatchSize + k] = lastVal;
                     }
-                    log.debug("Batch final extendido con {} pasos de padding para alineación de stride.", paddingNeeded);
+                    log.debug("Batch final extendido con {} pasos de padding.", paddingNeeded);
                 }
 
-                // 4. Ejecución
                 ManningGpuSolver.RawGpuResult res = solver.solveFullEvolutionBatch(
                         initialDepths, batchInflows, currentQ, stride
                 );
@@ -142,7 +126,7 @@ public class ManningBatchProcessor implements AutoCloseable {
                 dChunks.add(res.depths());
                 vChunks.add(res.velocities());
 
-                processedSteps += logicalBatchSize; // Solo avanzamos lo que realmente procesamos del input original
+                processedSteps += logicalBatchSize;
             }
 
             long execTime = System.currentTimeMillis() - startTime;
@@ -159,14 +143,11 @@ public class ManningBatchProcessor implements AutoCloseable {
         }
     }
 
-    // --- ESTRATEGIA 3: CPU (Legacy / Reference) ---
-
+    // --- CPU IMPLEMENTATION (legacy) ---
     private IManningResult processCpu(float[] fullInflowProfile, RiverState initialState, long startTime) {
-        // En modo CPU, procesamos todo de una vez (o podríamos chunkear también, pero mantenemos lógica original)
-        // La implementación original usaba 'processBatch' para un bloque. Aquí adaptamos para procesar todo.
-        // Si el perfil es muy grande, esto podría dar OOM, pero es el comportamiento esperado "Legacy".
-
         int totalSteps = fullInflowProfile.length;
+
+        // 1. Pre-calcular matriz de caudales (Memoria intensiva, comportamiento legacy aceptado)
         float[][] allDischargeProfiles = createDischargeProfiles(totalSteps, fullInflowProfile, initialState.discharge(geometry));
         float[] initialWaterDepth = initialState.waterDepth();
 
@@ -184,14 +165,13 @@ public class ManningBatchProcessor implements AutoCloseable {
         }
 
         List<RiverState> states = new ArrayList<>(totalSteps);
-        float[] zeroArr = new float[cellCount]; // Optimización memoria para vars no calculadas
+        float[] zeroArr = new float[cellCount]; // Optimización
 
         for (int i = 0; i < totalSteps; i++) {
             try {
                 ManningProfileCalculatorTask task = futures.get(i).get();
-                // Construimos RiverState inmediatamente
                 states.add(RiverState.builder()
-                        .waterDepth(task.getCalculatedWaterDepth()) // El task devuelve un nuevo array
+                        .waterDepth(task.getCalculatedWaterDepth())
                         .velocity(task.getCalculatedVelocity())
                         .temperature(zeroArr)
                         .ph(zeroArr)
@@ -224,16 +204,11 @@ public class ManningBatchProcessor implements AutoCloseable {
             System.arraycopy(v, 0, finalV, ptr, v.length);
             ptr += d.length;
         }
-
         return SimulationResultFactory.createStridedGpuResult(
-                config, geometry,
-                finalD, finalV,
-                logicalSteps,
-                time
+                config, geometry, finalD, finalV, logicalSteps, time
         );
     }
 
-    // Helper lógica CPU original
     private float[][] createDischargeProfiles(int batchSize, float[] newDischarges, float[] initialDischarges) {
         float[][] dischargeProfiles = new float[batchSize][cellCount];
         for (int j = 0; j < batchSize; j++) {
@@ -251,9 +226,6 @@ public class ManningBatchProcessor implements AutoCloseable {
 
     @Override
     public void close() {
-        if (threadPool != null && !threadPool.isShutdown()) {
-            threadPool.shutdown();
-        }
-        log.info("ManningBatchProcessor cerrado.");
+        if (threadPool != null) threadPool.shutdown();
     }
 }
