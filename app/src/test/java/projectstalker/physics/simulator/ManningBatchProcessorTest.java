@@ -66,23 +66,19 @@ class ManningBatchProcessorTest {
     @DisplayName("Padding Logic: Input final irregular debe rellenarse para cumplir Stride")
     void process_FullEvolution_ShouldApplyPadding() {
         // ARRANGE
-        // BatchSize = 12, Stride = 4.
-        // Input = 15 pasos.
-        // Lote 1: 12 pasos (Exacto). OK. Quedan 3.
-        // Lote 2: 3 pasos. 3 < 4 (Stride). Necesita 1 padding.
-
         float[] inputs = new float[15];
         RiverState state = createSteadyState(1f, 1f);
 
+        // CORRECCIÓN: Añadido 4º argumento (activeWidth) al constructor de RawGpuResult
+        // En Full Evolution, activeWidth = cellCount
         when(mockGpuSolver.solveFullEvolutionBatch(any(), any(), any(), anyInt()))
-                .thenReturn(new ManningGpuSolver.RawGpuResult(new float[0], new float[0], 0));
+                .thenReturn(new ManningGpuSolver.RawGpuResult(new float[0], new float[0], 0, cellCount));
 
         // ACT
         batchProcessor.process(inputs, state);
 
         // ASSERT
         // Verificamos que se llamó al solver con un array de tamaño 4 para el último lote
-        // (El primer lote fue de 12, el segundo real era de 3, pero se mandaron 4).
         verify(mockGpuSolver, atLeastOnce()).solveFullEvolutionBatch(
                 any(),
                 argThat(arr -> arr.length == 4), // Verifica que llegó el lote con padding
@@ -98,11 +94,12 @@ class ManningBatchProcessorTest {
         float[] inputs = new float[24];
         RiverState state = createSteadyState(1f, 1f);
 
-        int storedSteps = 3; // Simulado (12/4)
+        int storedSteps = 6; // Simulado (24/4 = 6)
         float[] rawData = new float[storedSteps * cellCount];
 
+        // CORRECCIÓN: Añadido activeWidth
         when(mockGpuSolver.solveFullEvolutionBatch(any(), any(), any(), anyInt()))
-                .thenReturn(new ManningGpuSolver.RawGpuResult(rawData, rawData, storedSteps));
+                .thenReturn(new ManningGpuSolver.RawGpuResult(rawData, rawData, storedSteps / 2, cellCount)); // storedSteps per batch = 3
 
         // ACT
         IManningResult result = batchProcessor.process(inputs, state);
@@ -118,15 +115,16 @@ class ManningBatchProcessorTest {
         when(mockConfig.getGpuStrategy()).thenReturn(GpuStrategy.SMART_SAFE);
 
         RiverState state = createSteadyState(1f, 1f);
-        float[] inputs = new float[12]; // Exacto para evitar padding issues en fallback
+        float[] inputs = new float[12];
 
         // 1. Simular fallo
         when(mockGpuSolver.solveSmartBatch(any(), any(), any(), eq(false)))
                 .thenThrow(new IllegalStateException("Unstable"));
 
         // 2. Simular éxito en Full
+        // CORRECCIÓN: Añadido activeWidth
         when(mockGpuSolver.solveFullEvolutionBatch(any(), any(), any(), anyInt()))
-                .thenReturn(new ManningGpuSolver.RawGpuResult(new float[0], new float[0], 0));
+                .thenReturn(new ManningGpuSolver.RawGpuResult(new float[0], new float[0], 0, cellCount));
 
         // ACT
         batchProcessor.process(inputs, state);
