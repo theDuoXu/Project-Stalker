@@ -7,12 +7,12 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import projectstalker.config.RiverConfig;
 import projectstalker.config.SimulationConfig;
+import projectstalker.config.SimulationConfig.GpuStrategy;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
+import projectstalker.factory.RiverFactory;
 import projectstalker.factory.RiverGeometryFactory;
-import projectstalker.physics.impl.ManningProfileCalculatorTask;
 import projectstalker.physics.simulator.ManningBatchProcessor;
-import projectstalker.config.SimulationConfig.GpuStrategy;
 
 import java.util.Arrays;
 
@@ -22,14 +22,14 @@ public class ManningGpuBenchmark {
 
     private RiverGeometry geometry;
     private RiverState initialState;
-    private SimulationConfig cpuConfig;
-    private SimulationConfig gpuConfig;
+    private SimulationConfig baseConfig;
 
     // --- CONFIGURACIÓN DE CARGA ---
     // 50k celdas para saturar la GPU y ver el speedup real vs CPU
     private final int CELL_COUNT = 50_000;
 
     // Umbral de Batch Size para dejar de ejecutar CPU real e interpolar.
+    // 50 pasos en CPU para 50k celdas ya tardan bastante (~segundos).
     private final int CPU_EXECUTION_THRESHOLD_BATCH = 50;
 
     private final float BASE_DISCHARGE = 50.0f; // Caudal base para equilibrio
@@ -53,36 +53,18 @@ public class ManningGpuBenchmark {
                     this.geometry.getCellCount(), CELL_COUNT);
         }
 
-        // 2. Configuraciones
-        SimulationConfig baseConfig = SimulationConfig.builder()
+        // 2. Configuración Base (Sin estrategia definida aún)
+        this.baseConfig = SimulationConfig.builder()
                 .cpuProcessorCount(8)
                 .useGpuAccelerationOnTransport(false)
+                .gpuFullEvolutionStride(1) // Stride 1 para comparar manzanas con manzanas
                 .build();
 
-        this.cpuConfig = baseConfig.withUseGpuAccelerationOnManning(false);
-        this.gpuConfig = baseConfig.withUseGpuAccelerationOnManning(true);
+        // 3. WARM-UP HIDRÁULICO INSTANTÁNEO (Analítico)
+        log.info("Generando estado inicial estable para {} celdas (Newton-Raphson)...", CELL_COUNT);
+        this.initialState = RiverFactory.createSteadyState(this.geometry, BASE_DISCHARGE);
 
-        // 3. WARM-UP HIDRÁULICO (Estado Estable)
-        log.info("Generando estado inicial estable para {} celdas...", CELL_COUNT);
-
-        float[] qProfile = new float[this.geometry.getCellCount()];
-        Arrays.fill(qProfile, BASE_DISCHARGE);
-        float[] seedDepth = new float[this.geometry.getCellCount()];
-        Arrays.fill(seedDepth, 1.0f);
-
-        ManningProfileCalculatorTask calculator = new ManningProfileCalculatorTask(
-                qProfile, seedDepth, this.geometry
-        );
-        calculator.call();
-
-        float[] zeros = new float[this.geometry.getCellCount()];
-        this.initialState = new RiverState(
-                calculator.getCalculatedWaterDepth(),
-                calculator.getCalculatedVelocity(),
-                zeros, zeros, zeros
-        );
-
-        log.info("Setup Benchmark completado. VRAM Estimada (Batch 10k): ~8 GB.");
+        log.info("Setup Benchmark completado. VRAM Estimada (Batch 5k): ~2 GB.");
     }
 
     @Test
@@ -145,34 +127,35 @@ public class ManningGpuBenchmark {
 
     /**
      * Ejecuta una iteración midiendo tiempo de Cómputo + DMA.
-     * Excluye setup de VRAM.
+     * Excluye setup de VRAM (en la medida de lo posible, aunque el procesador gestiona el ciclo de vida).
      */
     private double runBatchIteration(int batchSize, boolean useGpu, GpuStrategy strategy) {
-        float[] newInflows = new float[batchSize];
-        Arrays.fill(newInflows, 150.0f);
+        // Generar Hidrograma de Input
+        float[] inputs = new float[batchSize];
+        Arrays.fill(inputs, 150.0f);
 
-        int n = this.geometry.getCellCount();
-        float[] sharedDummyData = new float[n];
-        float[][][] phTmp = new float[batchSize][2][];
-        for(int k=0; k<batchSize; k++) {
-            phTmp[k][0] = sharedDummyData;
-            phTmp[k][1] = sharedDummyData;
-        }
+        // Configurar Iteración Específica
+        SimulationConfig iterationConfig = baseConfig
+                .withUseGpuAccelerationOnManning(useGpu)
+                .withGpuStrategy(strategy)
+                .withCpuTimeBatchSize(batchSize); // Vital para que el Processor sepa cortar (Full Evolution)
 
-        SimulationConfig config = useGpu ? gpuConfig : cpuConfig;
+        // Instanciar Procesador
+        try (ManningBatchProcessor processor = new ManningBatchProcessor(geometry, iterationConfig)) {
 
-        try (ManningBatchProcessor processor = new ManningBatchProcessor(geometry, config)) {
-
-            // GPU WARM-UP (Alloc VRAM + Pinned Buffers)
+            // WARM-UP INTERNO (Alloc VRAM + Pinned Buffers)
+            // Si usamos GPU, ejecutamos una vez "en falso" para que los buffers DMA se reserven.
+            // Esto es necesario porque ManningBatchProcessor crea el solver dentro del try-with-resources,
+            // pero ManningGpuSolver tiene lazy init.
             if (useGpu) {
-                // Ejecutamos un batch falso con la MISMA estrategia para preparar buffers del tamaño correcto
-                processor.processBatch(batchSize, initialState, newInflows, phTmp, true, strategy);
+                processor.process(inputs, initialState);
             }
 
             // MEASUREMENT
             long start = System.nanoTime();
 
-            processor.processBatch(batchSize, initialState, newInflows, phTmp, useGpu, strategy);
+            // La llamada 'process' ahora maneja todo internamente
+            processor.process(inputs, initialState);
 
             long end = System.nanoTime();
             return (end - start) / 1_000_000.0;
