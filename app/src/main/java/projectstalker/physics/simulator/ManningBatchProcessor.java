@@ -74,7 +74,7 @@ public class ManningBatchProcessor implements AutoCloseable {
             }
             return SimulationResultFactory.createSmartGpuResult(
                     config, geometry, initialState,
-                    rawResult.depths(), rawResult.velocities(), null,
+                    rawResult.depths(), rawResult.velocities(), null, rawResult.activeWidth(),
                     System.currentTimeMillis() - startTime
             );
         }

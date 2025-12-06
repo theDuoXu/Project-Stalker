@@ -7,6 +7,7 @@ import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.domain.simulation.*;
 
+import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.List;
 
@@ -16,8 +17,9 @@ import static org.mockito.Mockito.when;
 
 /**
  * Test unitario para {@link SimulationResultFactory}.
- * Verifica que la fábrica encapsula correctamente los datos en el DTO correspondiente
- * y propaga la configuración (especialmente el Stride) correctamente.
+ * <p>
+ * Verifica que la fábrica encapsula correctamente los datos en el DTO correspondiente,
+ * propaga la configuración (Stride, ActiveWidth) y conecta los arrays de datos crudos.
  */
 class SimulationResultFactoryTest {
 
@@ -43,42 +45,51 @@ class SimulationResultFactoryTest {
     }
 
     @Test
-    @DisplayName("Smart GPU Result: Debe crear FlyweightManningResult con arrays planos")
+    @DisplayName("Smart GPU Result: Debe crear FlyweightManningResult extrayendo arrays y propagando activeWidth")
     void createSmartGpuResult_shouldReturnFlyweightResult() {
         // ARRANGE
         RiverState initialState = mock(RiverState.class);
-        float[] packedH = new float[100]; // Dummy data
+
+        // Arrays dummy que simulan el estado interno del río
+        float[] initialH = new float[10];
+        float[] initialV = new float[10];
+
+        // Configuramos el mock para devolver estos arrays específicos
+        when(initialState.waterDepth()).thenReturn(initialH);
+        when(initialState.velocity()).thenReturn(initialV);
+
+        float[] packedH = new float[100];
         float[] packedV = new float[100];
         float[][][] auxData = new float[1][1][1];
+
+        int activeWidth = 50; // Ancho del triángulo activo
         long time = 200L;
 
         // ACT
+        // Llamada actualizada con el nuevo parámetro activeWidth
         FlyweightManningResult result = SimulationResultFactory.createSmartGpuResult(
                 mockConfig, mockGeometry, initialState,
-                packedH, packedV, auxData, time
+                packedH, packedV, auxData,
+                activeWidth,
+                time
         );
 
         // ASSERT
         assertNotNull(result);
-        // Usamos reflection o getters si están expuestos (Flyweight usa @Getter de Lombok)
-        // Verificamos identidad de referencias
-        assertSame(initialState, extractField(result, "initialDepths") == null ? initialState : extractField(result, "initialDepths"));
-        // Nota: Como Flyweight extrae arrays primitivos del initialState en el constructor,
-        // verificamos propiedades públicas:
-
         assertEquals(mockGeometry, result.getGeometry());
         assertEquals(time, result.getSimulationTime());
-        // Flyweight calcula sus timesteps basándose en packedData length / cellCount.
-        // Si cellCount es 0 en el mock, podría dar 0 o excepción, pero aquí probamos la construcción.
-    }
 
-    // Helper sucio para acceder a campos privados si es necesario validar la extracción interna
-    private Object extractField(Object target, String name) {
-        try {
-            var f = target.getClass().getDeclaredField(name);
-            f.setAccessible(true);
-            return f.get(target);
-        } catch (Exception e) { return null; }
+        // Verificación Interna (Reflexión):
+        // 1. Comprobar que extrajo los arrays del estado inicial
+        assertSame(initialH, extractField(result, "initialDepths"));
+        assertSame(initialV, extractField(result, "initialVelocities"));
+
+        // 2. Comprobar que guardó los arrays packed de la GPU
+        assertSame(packedH, extractField(result, "packedDepths"));
+        assertSame(packedV, extractField(result, "packedVelocities"));
+
+        // 3. Comprobar que guardó el activeWidth
+        assertEquals(activeWidth, extractField(result, "activeWidth"));
     }
 
     @Test
@@ -102,7 +113,7 @@ class SimulationResultFactoryTest {
 
         // ASSERT
         assertNotNull(result);
-        assertEquals(expectedStride, result.getStrideFactor(), "El stride factor debe venir de la configuración");
+        assertEquals(expectedStride, result.getStrideFactor(), "El stride debe venir de la configuración");
         assertEquals(logicSteps, result.getLogicTimestepCount());
         assertSame(packedH, result.getPackedDepths());
         assertSame(packedV, result.getPackedVelocities());
@@ -134,5 +145,16 @@ class SimulationResultFactoryTest {
         assertSame(dChunks, result.getDepthChunks());
         assertSame(vChunks, result.getVelocityChunks());
         assertEquals(stepsPerChunk, result.getStepsPerChunk());
+    }
+
+    // --- Helper de Reflexión Robusto ---
+    private Object extractField(Object target, String fieldName) {
+        try {
+            Field field = target.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (Exception e) {
+            throw new RuntimeException("Error en test: No se pudo extraer el campo '" + fieldName + "' de " + target.getClass().getSimpleName(), e);
+        }
     }
 }

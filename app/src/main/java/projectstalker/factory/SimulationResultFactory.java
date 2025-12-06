@@ -38,12 +38,10 @@ public class SimulationResultFactory {
     /**
      * Crea un resultado FLYWEIGHT optimizado para la estrategia GPU SMART.
      * <p>
-     * Se usa cuando el solver devuelve "Deltas" (Olas) sobre un río estacionario.
-     * Requiere el estado inicial para poder reconstruir la simulación.
-     */
-    /**
-     * Crea un resultado FLYWEIGHT optimizado.
-     * MODIFICADO: Ahora acepta arrays planos (packed) directamente.
+     * Se usa cuando el solver devuelve datos compactos ("Deltas" o triángulos) sobre un río estacionario.
+     * Requiere el ancho activo para mapear correctamente los índices compactos al espacio real.
+     *
+     * @param activeWidth El ancho real de los datos en los arrays packed (ej. ancho del triángulo).
      */
     public static FlyweightManningResult createSmartGpuResult(
             SimulationConfig config,
@@ -52,6 +50,7 @@ public class SimulationResultFactory {
             float[] packedDepths,
             float[] packedVelocities,
             float[][][] auxData,
+            int activeWidth,
             long executionTimeMs) {
 
         return FlyweightManningResult.builder()
@@ -61,6 +60,7 @@ public class SimulationResultFactory {
                 .packedDepths(packedDepths)
                 .packedVelocities(packedVelocities)
                 .auxData(auxData)
+                .activeWidth(activeWidth)
                 .build();
     }
 

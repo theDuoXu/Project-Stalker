@@ -11,8 +11,12 @@ import java.util.Arrays;
  * Implementación "Flyweight" (Lazy) de los resultados de la simulación.
  * Esta compresión solo funciona con ríos con caudal equilibrado (en estado de reposo).
  * <p>
- * REFACTORIZADO: Ahora utiliza arrays planos (Packed) al igual que las implementaciones Strided,
- * evitando la sobrecarga de arrays 3D y conversiones innecesarias.
+ * Pure Flyweight: Utiliza arrays planos COMPACTOS.
+ * Los arrays {@code packedDepths} y {@code packedVelocities} no tienen el ancho completo
+ * del río, sino solo el {@code activeWidth} (triángulo de cálculo).
+ * <p>
+ * Esta clase reconstruye el estado completo fusionando la "onda" compacta con el
+ * "fondo" estático bajo demanda.
  */
 public class FlyweightManningResult implements IManningResult {
 
@@ -26,12 +30,18 @@ public class FlyweightManningResult implements IManningResult {
     private final float[] initialDepths;
     private final float[] initialVelocities;
 
-    // --- ESTADO EXTRÍNSECO (Deltas de GPU - PLANOS) ---
-    // Layout: [t0_c0...t0_cn | t1_c0...t1_cn]
+    // --- ESTADO EXTRÍNSECO (Deltas de GPU - COMPACTOS) ---
+    // Layout: Rectángulo de [Timesteps * activeWidth]
     private final float[] packedDepths;
     private final float[] packedVelocities;
 
     private final int timestepCount;
+
+    /**
+     * El ancho de los datos válidos en los arrays packed.
+     * Generalmente es min(BatchSize, CellCount).
+     */
+    private final int activeWidth;
 
     // Datos auxiliares (Mantenemos estructura original para compatibilidad con módulos químicos CPU)
     private final float[][][] auxData;
@@ -42,7 +52,8 @@ public class FlyweightManningResult implements IManningResult {
                                   RiverState initialState,
                                   float[] packedDepths,
                                   float[] packedVelocities,
-                                  float[][][] auxData) {
+                                  float[][][] auxData,
+                                  int activeWidth) { // <--- Nuevo parámetro crítico
         this.geometry = geometry;
         this.simulationTime = simulationTime;
 
@@ -53,10 +64,11 @@ public class FlyweightManningResult implements IManningResult {
         this.packedDepths = packedDepths;
         this.packedVelocities = packedVelocities;
         this.auxData = auxData;
+        this.activeWidth = activeWidth;
 
-        // Calculamos timesteps basándonos en geometría
-        this.timestepCount = (geometry.getCellCount() > 0)
-                ? packedDepths.length / geometry.getCellCount()
+        // Calculamos timesteps basándonos en el ancho activo, no en la geometría total
+        this.timestepCount = (activeWidth > 0)
+                ? packedDepths.length / activeWidth
                 : 0;
     }
 
@@ -78,30 +90,38 @@ public class FlyweightManningResult implements IManningResult {
     }
 
     /**
-     * Helper centralizado para construir el array híbrido desde fuentes PLANAS.
-     * Combina la ola dinámica (GPU) con el estado base (Initial).
+     * Helper centralizado para construir el array híbrido desde fuentes COMPACTAS.
+     * Combina la ola dinámica (GPU Compacta) con el estado base (Initial Full).
      */
     private float[] buildCompositeArray(int t, float[] packedSource, float[] initialBackground) {
         int cellCount = geometry.getCellCount();
         float[] result = new float[cellCount];
 
-        // 1. Calcular Offset en el array plano
-        int offset = t * cellCount;
+        // 1. Calcular Offset en el array COMPACTO
+        // El salto de fila es 'activeWidth', no 'cellCount'.
+        int srcOffset = t * activeWidth;
 
-        // 2. Determinar Frente de Onda (Lógica Smart: 1 celda por paso de tiempo)
-        // La GPU nos devuelve datos válidos hasta el frente de onda.
-        int copyLength = Math.min(t + 1, cellCount);
+        // 2. Determinar Frente de Onda (Intersección de Lógica Física y Buffer)
+        // La onda llega hasta t+1, pero no puede exceder el ancho del buffer (activeWidth).
+        // Tampoco puede exceder el tamaño físico del río (cellCount).
+        int waveFront = Math.min(t + 1, activeWidth);
 
-        // 3. Copiar ZONA NUEVA (Desde array plano con offset)
-        System.arraycopy(packedSource, offset, result, 0, copyLength);
+        // Protección extra: waveFront nunca puede ser mayor que cellCount
+        // (aunque activeWidth ya debería estar acotado por cellCount, es defensivo).
+        waveFront = Math.min(waveFront, cellCount);
+
+        // 3. Copiar ZONA NUEVA (Desde array compacto)
+        // Copiamos solo hasta donde llega la onda o el buffer.
+        System.arraycopy(packedSource, srcOffset, result, 0, waveFront);
 
         // 4. Copiar ZONA ANTIGUA (Estado Base Estacionario)
-        int remainingCells = cellCount - copyLength;
+        // Rellenamos el resto del río con el estado inicial.
+        int remainingCells = cellCount - waveFront;
 
         if (remainingCells > 0) {
             // Preservamos el estado inicial en la zona que la ola aún no ha alcanzado.
-            // Copiamos desde copyLength hacia copyLength para mantener coherencia espacial.
-            System.arraycopy(initialBackground, copyLength, result, copyLength, remainingCells);
+            // Copiamos desde waveFront hacia waveFront para mantener coherencia espacial.
+            System.arraycopy(initialBackground, waveFront, result, waveFront, remainingCells);
         }
 
         return result;
@@ -111,7 +131,7 @@ public class FlyweightManningResult implements IManningResult {
 
     @Override
     public RiverState getStateAt(int t) {
-        // Reutilizamos la lógica del Fast Path para obtener H y V
+        // Reutilizamos la lógica del Fast Path para obtener H y V reconstruidos
         float[] h = getRawWaterDepthAt(t);
         float[] v = getRawVelocityAt(t);
 

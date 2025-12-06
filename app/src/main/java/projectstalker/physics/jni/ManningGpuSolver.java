@@ -13,10 +13,10 @@ import java.nio.FloatBuffer;
  * 1. Smart/Lazy: Optimizado para alertas (recorte triangular). Requiere estado estable.
  * 2. Full Evolution: Robusto para ciencia (matriz completa con Stride). Sin restricciones.
  * <p>
- * Ahora devuelve resultados crudos (Raw Arrays) para optimizar el paso de mensajes
+ * MODIFICADO: Ahora devuelve resultados crudos (Raw Arrays) para optimizar el paso de mensajes
  * y permitir la construcción flexible de DTOs (Strided, Chunked, Flyweight).
  * <p>
- * Implementa desempaquetado inteligente para manejar la discrepancia
+ * CORRECCIÓN IMPORTANTE: Implementa desempaquetado inteligente para manejar la discrepancia
  * de alineación entre los datos "compactos" que envía C++ (Smart Kernel) y los arrays
  * "full width" que espera la capa de dominio Java.
  */
@@ -24,10 +24,10 @@ import java.nio.FloatBuffer;
 public final class ManningGpuSolver implements AutoCloseable {
 
     /**
-     * DTO interno para transporte de datos crudos desde la GPU.
-     * depths y velocities son arrays planos concatenados (Time * Cells).
+     * DTO de transporte.
+     * @param activeWidth El ancho real de los datos en las filas de los arrays (stride espacial).
      */
-    public record RawGpuResult(float[] depths, float[] velocities, int storedSteps) {}
+    public record RawGpuResult(float[] depths, float[] velocities, int storedSteps, int activeWidth) {}
 
     private final INativeManningSolver nativeSolver;
     private long sessionHandle = 0;
@@ -117,81 +117,43 @@ public final class ManningGpuSolver implements AutoCloseable {
                                             int batchSize,
                                             int mode,
                                             int stride) {
-        if (sessionHandle == 0) {
-            initializeSession(initialDepths, initialQ);
-        }
+        if (sessionHandle == 0) initializeSession(initialDepths, initialQ);
 
-        // Cálculo de pasos guardados
         int savedSteps = batchSize / stride;
         if (savedSteps == 0 && batchSize > 0) savedSteps = 1;
 
-        // 1. DETERMINAR ANCHO DE LECTURA (Lo que C++ envía realmente)
-        // En Smart, C++ compacta el output al 'activeWidth' para ahorrar PCIe.
-        // En Full, C++ envía 'cellCount' completo.
-        // Lógica C++ espejo: activeWidth = min(batchSize, cellCount) para Smart.
-        int readWidth = (mode == INativeManningSolver.MODE_SMART_LAZY)
+        // 1. CALCULAR ANCHO ACTIVO (Lo que C++ envía)
+        // Smart: Triángulo/Rectángulo compacto. Full: Todo el río.
+        int activeWidth = (mode == INativeManningSolver.MODE_SMART_LAZY)
                 ? Math.min(batchSize, cellCount)
                 : cellCount;
 
-        // 2. DIMENSIONAR BUFFER DE LECTURA (Compacto)
-        // Solo reservamos lo que C++ va a escribir.
-        int floatsToRead = savedSteps * readWidth * 2; // *2 por H y V
-
+        // 2. DIMENSIONAR Y EJECUTAR
+        int floatsToRead = savedSteps * activeWidth * 2;
         ensureBuffersCapacity(batchSize, floatsToRead);
 
-        this.inputBuffer.clear();
-        this.inputBuffer.put(sanitizeInflows(newInflows));
+        inputBuffer.clear();
+        inputBuffer.put(sanitizeInflows(newInflows));
 
-        int status = nativeSolver.runBatch(
-                sessionHandle,
-                inputBuffer,
-                outputBuffer,
-                batchSize,
-                mode,
-                stride
-        );
+        int status = nativeSolver.runBatch(sessionHandle, inputBuffer, outputBuffer, batchSize, mode, stride);
+        if (status != 0) throw new RuntimeException("GPU Error: " + status);
 
-        if (status != 0) {
-            throw new RuntimeException("Error nativo en Manning GPU. Código: " + status);
-        }
+        // 3. EXTRACCIÓN RÁPIDA (Solo separar H y V)
+        // No expandimos a ceros. Devolvemos los datos densos tal cual vienen de C++.
 
-        // 3. LEER DATOS COMPACTOS DEL BUFFER
-        float[] compactData = new float[floatsToRead];
-        this.outputBuffer.clear();
-        this.outputBuffer.get(compactData);
+        float[] allData = new float[floatsToRead];
+        outputBuffer.clear();
+        outputBuffer.get(allData);
 
-        // 4. EXPANSIÓN A FORMATO COMPLETO (Full Width) PARA JAVA
-        // Java espera arrays alineados al ancho total [savedSteps * cellCount].
-        // Si readWidth == cellCount (Full Evolution), esto es una copia 1:1.
-        // Si readWidth < cellCount (Smart), esto coloca los datos en su sitio y deja ceros en el resto.
+        int elementsPerVar = floatsToRead / 2;
+        float[] compactH = new float[elementsPerVar];
+        float[] compactV = new float[elementsPerVar];
 
-        int totalElementsPerVar = savedSteps * cellCount;
-        float[] fullDepths = new float[totalElementsPerVar];
-        float[] fullVelocities = new float[totalElementsPerVar];
+        // Copia en bloque (Muy rápido)
+        System.arraycopy(allData, 0, compactH, 0, elementsPerVar);
+        System.arraycopy(allData, elementsPerVar, compactV, 0, elementsPerVar);
 
-        // Punteros para leer del array compacto (SoA en origen)
-        // Bloque H Compacto: [0 ... savedSteps * readWidth]
-        // Bloque V Compacto: [savedSteps * readWidth ... end]
-        int compactBlockSize = savedSteps * readWidth;
-
-        // Loop de expansión / copia
-        for (int t = 0; t < savedSteps; t++) {
-            // Offset Destino (Fila completa en el array final Java)
-            int destOffset = t * cellCount;
-
-            // Offset Origen (Fila compacta en el array leído de C++)
-            int srcOffsetH = t * readWidth;
-            int srcOffsetV = compactBlockSize + (t * readWidth);
-
-            // Copiar H
-            System.arraycopy(compactData, srcOffsetH, fullDepths, destOffset, readWidth);
-            // El resto de la fila (desde readWidth hasta cellCount) ya son ceros por defecto en Java.
-
-            // Copiar V
-            System.arraycopy(compactData, srcOffsetV, fullVelocities, destOffset, readWidth);
-        }
-
-        return new RawGpuResult(fullDepths, fullVelocities, savedSteps);
+        return new RawGpuResult(compactH, compactV, savedSteps, activeWidth);
     }
 
     // --- Helpers ---
