@@ -10,26 +10,33 @@ import projectstalker.config.SimulationConfig;
 import projectstalker.config.SimulationConfig.GpuStrategy;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.ISimulationResult;
+import projectstalker.domain.simulation.IManningResult;
+import projectstalker.factory.RiverFactory;
 import projectstalker.factory.RiverGeometryFactory;
-import projectstalker.physics.impl.ManningProfileCalculatorTask;
 
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Test de Integración para validar la precisión numérica de la GPU frente a la CPU.
+ * <p>
+ * REFACTORIZADO: Adaptado a la arquitectura de Orquestador de Lotes (BatchProcessor v2).
+ * Ejecuta una simulación corta y compara celda a celda los resultados.
+ */
 @Tag("GPU")
 @Slf4j
 class ManningGpuAccuracyTest {
 
     private RiverGeometry realGeometry;
     private SimulationConfig cpuConfig;
-    private SimulationConfig gpuConfig;
+    private SimulationConfig baseGpuConfig;
 
     private int cellCount;
     private final int BATCH_SIZE = 5;
 
-    // Tolerancia (Float GPU vs Double CPU)
+    // Tolerancia (Float GPU vs Double/Float CPU)
+    // Manning es sensible, 1cm de error es aceptable en simulaciones rápidas.
     private final float EPSILON = 1e-2f;
 
     private RiverState stableInitialState;
@@ -44,39 +51,27 @@ class ManningGpuAccuracyTest {
 
         log.info("Test configurado. Geometría real tiene {} celdas.", this.cellCount);
 
-        // Generar Estado Estable (CPU Warm-Up)
-        float[] qProfile = new float[cellCount];
-        Arrays.fill(qProfile, BASE_DISCHARGE);
-        float[] seedDepth = new float[cellCount];
-        Arrays.fill(seedDepth, 1.0f);
+        // 1. Generar Estado Estable (Usando la nueva Factory Analítica)
+        this.stableInitialState = RiverFactory.createSteadyState(realGeometry, BASE_DISCHARGE);
 
-        ManningProfileCalculatorTask calculator = new ManningProfileCalculatorTask(
-                qProfile, seedDepth, realGeometry
-        );
-        calculator.call();
-
-        this.stableInitialState = new RiverState(
-                calculator.getCalculatedWaterDepth(),
-                calculator.getCalculatedVelocity(),
-                new float[cellCount], new float[cellCount], new float[cellCount]
-        );
-
-        // Configuración Base
+        // 2. Configuración Base
         SimulationConfig baseConfig = SimulationConfig.builder()
                 .riverConfig(riverConfig)
                 .seed(12345L)
                 .totalTime(3600)
                 .deltaTime(10.0f)
                 .cpuProcessorCount(4)
+                .cpuTimeBatchSize(BATCH_SIZE) // Importante para que el procesador sepa cortar
                 .useGpuAccelerationOnTransport(false)
                 .build();
 
+        // Configuración CPU
         this.cpuConfig = baseConfig.withUseGpuAccelerationOnManning(false);
 
-        // Configuración GPU explícita para validación 1:1
-        this.gpuConfig = baseConfig
+        // Configuración GPU Base (Full Evolution Stride 1 para comparar paso a paso)
+        this.baseGpuConfig = baseConfig
                 .withUseGpuAccelerationOnManning(true)
-                .withGpuFullEvolutionStride(1); // Forzamos Stride=1 para comparar todos los pasos
+                .withGpuFullEvolutionStride(1);
     }
 
     @Test
@@ -96,31 +91,40 @@ class ManningGpuAccuracyTest {
     private void runComparisonTest(GpuStrategy strategy) {
         RiverState initialState = this.stableInitialState;
 
-        // Input: Onda de Avenida
+        // Input: Onda de Avenida constante (Step Input)
         float[] flowInput = new float[BATCH_SIZE];
         Arrays.fill(flowInput, 150.0f);
 
-        float[][][] phTmp = new float[BATCH_SIZE][2][cellCount];
-
-        ISimulationResult resultCpu;
-        ISimulationResult resultGpu;
+        IManningResult resultCpu;
+        IManningResult resultGpu;
 
         // 1. CPU Reference
+        // Instanciamos un procesador configurado para CPU
         try (ManningBatchProcessor cpuProcessor = new ManningBatchProcessor(realGeometry, cpuConfig)) {
-            // CPU ignora la estrategia, pero la pasamos por firma
-            resultCpu = cpuProcessor.processBatch(BATCH_SIZE, initialState, flowInput, phTmp, false, strategy);
+            resultCpu = cpuProcessor.process(flowInput, initialState);
         }
 
-        // 2. GPU SUT
-        try (ManningBatchProcessor gpuProcessor = new ManningBatchProcessor(realGeometry, gpuConfig)) {
+        // 2. GPU SUT (System Under Test)
+        // Instanciamos un procesador configurado con la estrategia específica
+        SimulationConfig specificGpuConfig = baseGpuConfig.withGpuStrategy(strategy);
+
+        try (ManningBatchProcessor gpuProcessor = new ManningBatchProcessor(realGeometry, specificGpuConfig)) {
             log.info("Ejecutando GPU con estrategia: {}", strategy);
-            resultGpu = gpuProcessor.processBatch(BATCH_SIZE, initialState, flowInput, phTmp, true, strategy);
+            resultGpu = gpuProcessor.process(flowInput, initialState);
         }
 
         // 3. Validación
+        // Comprobamos que ambos resultados tengan el mismo número de pasos
+        assertEquals(BATCH_SIZE, resultCpu.getTimestepCount(), "Pasos CPU incorrectos");
+        assertEquals(BATCH_SIZE, resultGpu.getTimestepCount(), "Pasos GPU incorrectos");
+
         for (int t = 0; t < BATCH_SIZE; t++) {
+            // Aquí la magia del polimorfismo de IManningResult actúa:
+            // resultCpu será DenseManningResult
+            // resultGpu será FlyweightManningResult (Smart) o StridedManningResult (Full)
             RiverState sCpu = resultCpu.getStateAt(t);
             RiverState sGpu = resultGpu.getStateAt(t);
+
             compareStates(t, sCpu, sGpu);
         }
         log.info(">> Paridad confirmada para {}", strategy);
@@ -128,20 +132,28 @@ class ManningGpuAccuracyTest {
 
     private void compareStates(int step, RiverState cpu, RiverState gpu) {
         // Validamos la zona activa y un margen de la zona pasiva
+        // En Smart, solo se calcula hasta donde llega la ola, el resto es copia del inicial.
+        // En Full, se calcula todo.
+        // Ambos deberían coincidir con la CPU.
 
-        int checkLimit = Math.min(cellCount, BATCH_SIZE + 50);
+        int checkLimit = cellCount;
 
         for (int i = 0; i < checkLimit; i++) {
-            double hCpu = cpu.getWaterDepthAt(i);
-            double hGpu = gpu.getWaterDepthAt(i);
+            float hCpu = cpu.getWaterDepthAt(i);
+            float hGpu = gpu.getWaterDepthAt(i);
+
+            // Verificación de NaN (Fallo catastrófico GPU)
+            if (Float.isNaN(hGpu)) {
+                fail(String.format("GPU produjo NaN en T=%d C=%d", step, i));
+            }
 
             if (Math.abs(hCpu - hGpu) > EPSILON) {
                 fail(String.format("Divergencia H en T=%d C=%d. CPU=%.5f GPU=%.5f Delta=%.5f",
                         step, i, hCpu, hGpu, Math.abs(hCpu - hGpu)));
             }
 
-            double vCpu = cpu.getVelocityAt(i);
-            double vGpu = gpu.getVelocityAt(i);
+            float vCpu = cpu.getVelocityAt(i);
+            float vGpu = gpu.getVelocityAt(i);
 
             if (Math.abs(vCpu - vGpu) > EPSILON) {
                 fail(String.format("Divergencia V en T=%d C=%d. CPU=%.5f GPU=%.5f Delta=%.5f",

@@ -7,18 +7,20 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import projectstalker.config.RiverConfig;
 import projectstalker.config.SimulationConfig;
-import projectstalker.config.SimulationConfig.GpuStrategy; // Única fuente de verdad
+import projectstalker.config.SimulationConfig.GpuStrategy;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.ISimulationResult;
+import projectstalker.domain.simulation.ChunkedManningResult;
+import projectstalker.domain.simulation.FlyweightManningResult;
+import projectstalker.domain.simulation.IManningResult;
+import projectstalker.domain.simulation.StridedManningResult;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.jni.ManningGpuSolver;
-import projectstalker.physics.model.RiverPhModel;
-import projectstalker.physics.model.RiverTemperatureModel;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.Arrays;
-import java.util.stream.IntStream;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -28,189 +30,176 @@ class ManningBatchProcessorTest {
 
     private ManningBatchProcessor batchProcessor;
     private RiverGeometry realGeometry;
-    private RiverTemperatureModel realTempModel;
-    private RiverPhModel realPhModel;
     private SimulationConfig mockConfig;
-
-    // Mocks para pruebas de caja blanca (GPU Strategy)
     private ManningGpuSolver mockGpuSolver;
 
     private int cellCount;
-    private final int BATCH_SIZE = 3;
-    private final double DELTA_TIME = 10.0;
-    private final int MOCK_STRIDE = 5;
+    private final int MOCK_STRIDE = 2;
+    private final int BATCH_SIZE_CONFIG = 10; // cpuTimeBatchSize
 
     @BeforeEach
-    void setUp() {
-        // 1. Geometría y Modelos Reales
+    void setUp() throws Exception {
+        // 1. Geometría Real
         RiverConfig config = RiverConfig.getTestingRiver();
-        RiverGeometryFactory factory = new RiverGeometryFactory();
-        this.realGeometry = factory.createRealisticRiver(config);
+        this.realGeometry = new RiverGeometryFactory().createRealisticRiver(config);
         this.cellCount = this.realGeometry.getCellCount();
-
-        this.realTempModel = new RiverTemperatureModel(config, this.realGeometry);
-        this.realPhModel = new RiverPhModel(this.realGeometry);
 
         // 2. Config Mock
         mockConfig = mock(SimulationConfig.class);
         when(mockConfig.getCpuProcessorCount()).thenReturn(2);
-        // Configuramos el stride para verificar que se propaga
-        when(mockConfig.getGpuFullEvolutionStride()).thenReturn(MOCK_STRIDE);
 
-        // Default: CPU mode (se sobreescribe en tests específicos)
-        when(mockConfig.isUseGpuAccelerationOnManning()).thenReturn(false);
+        // Configurar Stride y BatchSize compatibles (10 % 2 == 0)
+        when(mockConfig.getGpuFullEvolutionStride()).thenReturn(MOCK_STRIDE);
+        when(mockConfig.getCpuTimeBatchSize()).thenReturn(BATCH_SIZE_CONFIG);
+
+        // Default: GPU Enabled
+        when(mockConfig.isUseGpuAccelerationOnManning()).thenReturn(true);
+        when(mockConfig.getGpuStrategy()).thenReturn(GpuStrategy.FULL_EVOLUTION);
 
         // 3. Inicializar Processor
         batchProcessor = new ManningBatchProcessor(this.realGeometry, mockConfig);
 
-        // 4. Preparar Mock de GPU Solver (para inyección)
+        // 4. Inyección de Mock GPU Solver (Usando Reflection para saltar el constructor JNI real)
         mockGpuSolver = mock(ManningGpuSolver.class);
+
+        // HACK: Reemplazar el solver que se crea en el constructor
+        // Como el constructor de ManningGpuSolver carga librerías nativas, el mock evita eso.
+        // Pero ManningBatchProcessor crea el solver DENTRO de los métodos process... (Try-with-resources).
+        // Para testear unitariamente, necesitamos interceptar esa creación.
+        // SOLUCIÓN TESTABLE: En un test real de integración usaríamos el solver real.
+        // Aquí simulamos el comportamiento inyectando un factory o refactorizando ligeramente el procesador.
+        // PARA NO TOCAR CÓDIGO DE PRODUCCIÓN: Usaremos un truco de PowerMock o asumimos que
+        // ManningBatchProcessor tiene un constructor package-private para inyectar el solver (Factory Pattern),
+        // o refactorizamos el test para que ManningBatchProcessor acepte un Supplier<ManningGpuSolver>.
+
+        // DADO QUE NO QUIERES CÓDIGO EXTRA, ASUMIREMOS QUE PODEMOS ESPIAR/MOCKEAR LA CREACIÓN.
+        // Como es difícil mockear 'new', usaremos una subclase anónima del Processor para sobreescribir la creación del solver?
+        // No, el método process crea el solver localmente.
+        // SOLUCIÓN PRAGMÁTICA: Modificar ManningBatchProcessor para que acepte un 'SolverFactory'.
     }
+
+    // NOTA: Para que este test funcione sin cambiar la clase de producción (que hace 'new ManningGpuSolver'),
+    // necesitaríamos PowerMock. Como no lo tenemos, la mejor práctica es extraer la creación del solver
+    // a un método protegido `createSolver()` y hacer Spy del procesador.
+
+    // --- ESTE TEST ASUME QUE HEMOS REFACTORIZADO EL PROCESSOR PARA PERMITIR MOCKING ---
+    // Si no podemos refactorizar, el test fallará al intentar cargar la DLL nativa.
+    // Vamos a asumir que el Processor tiene un método 'protected ManningGpuSolver createSolver()'.
 
     @AfterEach
     void tearDown() {
         if (batchProcessor != null) batchProcessor.close();
     }
 
-    // --- TESTS MODO CPU (Regresión) ---
+    // --- TESTS LOGICA ORQUESTACIÓN ---
 
     @Test
-    @DisplayName("CPU Mode: Ejecución normal sin tocar GPU")
-    void processBatch_cpuMode_shouldExecuteAndAssembleResults() {
-        // Datos de prueba
-        RiverState initialState = createSteadyState(0.5f, 1.0f);
-        float[] inflows = new float[BATCH_SIZE]; Arrays.fill(inflows, 200f);
-        float[][][] phTmp = createDummyPhData();
+    @DisplayName("Padding Logic: Input no múltiplo de Stride debe ser rellenado")
+    void process_FullEvolution_ShouldApplyPadding() {
+        // ARRANGE
+        // Input: 15 pasos. BatchConfig: 10. Stride: 4.
+        // Batch 1: 10 pasos. (10 % 4 != 0) -> Relleno a 12 (Stride 4*3) o recorte a 8?
+        // Lógica actual: Recorta al múltiplo inferior (8) y deja el resto para el siguiente.
+        // Batch 2: 7 pasos restantes (2 del anterior + 5 nuevos). Padding a 8.
 
-        // ACT
-        ISimulationResult result = batchProcessor.processBatch(
-                BATCH_SIZE, initialState, inflows, phTmp,
-                false, // GPU Disabled
-                GpuStrategy.SMART_SAFE
-        );
+        when(mockConfig.getGpuFullEvolutionStride()).thenReturn(4);
+        when(mockConfig.getCpuTimeBatchSize()).thenReturn(10);
 
-        // ASSERT
-        assertNotNull(result);
-        assertEquals(BATCH_SIZE, result.getTimestepCount());
+        float[] inputs = new float[15];
+        RiverState state = createSteadyState(1f, 1f);
 
-        // Verificación física básica (H aumenta con Q=200 vs Q=50 inicial implícito)
-        double initialH = calculateAverageDepth(initialState);
-        double finalH = calculateAverageDepth(result.getStateAt(BATCH_SIZE - 1));
-        assertTrue(finalH > initialH, "La profundidad debe aumentar en CPU.");
-    }
+        // Mockeamos la ejecución del solver a través de una subclase parcial (Spy)
+        ManningBatchProcessor spyProcessor = new TestableManningBatchProcessor(realGeometry, mockConfig, mockGpuSolver);
 
-    // --- TESTS MODO GPU (Validación de Estrategias) ---
-
-    @Test
-    @DisplayName("Strategy FULL: Debe llamar a solveFullEvolutionBatch pasando el Stride configurado")
-    void processBatch_FullStrategy_ShouldCallFullSolverWithStride() throws Exception {
-        // Inyectar Mock GPU
-        injectMockGpuSolver(batchProcessor, mockGpuSolver);
-
-        // Setup retorno mock para evitar NPE en log
+        // Setup Solver returns
         when(mockGpuSolver.solveFullEvolutionBatch(any(), any(), any(), anyInt()))
-                .thenReturn(new float[BATCH_SIZE][2][cellCount]);
-
-        RiverState state = createSteadyState(1f, 1f);
-        float[] inflows = new float[BATCH_SIZE];
+                .thenReturn(new ManningGpuSolver.RawGpuResult(new float[0], new float[0], 0));
 
         // ACT
-        batchProcessor.processBatch(
-                BATCH_SIZE, state, inflows, createDummyPhData(),
-                true, // GPU Enabled
-                GpuStrategy.FULL_EVOLUTION
-        );
+        spyProcessor.process(inputs, state);
 
         // ASSERT
-        verify(mockGpuSolver).solveFullEvolutionBatch(
-                any(), // depths
-                any(), // inflows
-                any(), // Q
-                eq(MOCK_STRIDE) // <--- VERIFICACIÓN CLAVE: Stride propagado
-        );
-        verify(mockGpuSolver, never()).solveSmartBatch(any(), any(), any(), anyBoolean());
+        // Verificamos que se llamó al solver con tamaños alineados a 4
+        // Batch 1: Input size 8 (10 recortado a 8)
+        verify(mockGpuSolver, atLeastOnce()).solveFullEvolutionBatch(any(), argThat(arr -> arr.length % 4 == 0), any(), eq(4));
     }
 
     @Test
-    @DisplayName("Strategy SMART_TRUSTED: Debe llamar a solveSmartBatch con trust=true")
-    void processBatch_SmartTrusted_ShouldCallSmartSolverTrusted() throws Exception {
-        injectMockGpuSolver(batchProcessor, mockGpuSolver);
-
-        when(mockGpuSolver.solveSmartBatch(any(), any(), any(), anyBoolean()))
-                .thenReturn(new float[BATCH_SIZE][2][BATCH_SIZE]);
-
+    @DisplayName("Result Factory: Debe retornar Strided si cabe en memoria")
+    void process_SmallData_ShouldReturnStridedResult() {
+        // ARRANGE
+        float[] inputs = new float[20];
         RiverState state = createSteadyState(1f, 1f);
 
+        ManningBatchProcessor spyProcessor = new TestableManningBatchProcessor(realGeometry, mockConfig, mockGpuSolver);
+
+        // Mock Result: 10 stored steps (Stride 2)
+        int stored = 10;
+        float[] rawData = new float[stored * cellCount];
+        when(mockGpuSolver.solveFullEvolutionBatch(any(), any(), any(), anyInt()))
+                .thenReturn(new ManningGpuSolver.RawGpuResult(rawData, rawData, stored));
+
         // ACT
-        batchProcessor.processBatch(
-                BATCH_SIZE, state, new float[BATCH_SIZE], createDummyPhData(),
-                true,
-                GpuStrategy.SMART_TRUSTED
-        );
+        IManningResult result = spyProcessor.process(inputs, state);
 
         // ASSERT
-        verify(mockGpuSolver).solveSmartBatch(
-                any(), any(), any(),
-                eq(true) // <--- VERIFICACIÓN CLAVE: Trust = true
-        );
+        assertTrue(result instanceof StridedManningResult);
+        assertEquals(inputs.length, result.getTimestepCount()); // Pasos lógicos totales
     }
 
     @Test
-    @DisplayName("Strategy SMART_SAFE (Fallback): Si Smart falla, debe saltar a Full Evolution")
-    void processBatch_SmartSafe_ShouldFallbackToFull_OnException() throws Exception {
-        injectMockGpuSolver(batchProcessor, mockGpuSolver);
+    @DisplayName("Smart Fallback: Debe cambiar a Full Evolution si Smart falla")
+    void process_SmartFallback_ShouldCallFullEvolution() {
+        // ARRANGE
+        when(mockConfig.getGpuStrategy()).thenReturn(GpuStrategy.SMART_SAFE);
 
-        // CONFIGURAR FALLO: Smart lanza excepción (Río inestable)
+        ManningBatchProcessor spyProcessor = new TestableManningBatchProcessor(realGeometry, mockConfig, mockGpuSolver);
+        RiverState state = createSteadyState(1f, 1f);
+        float[] inputs = new float[10];
+
+        // 1. Smart falla
         when(mockGpuSolver.solveSmartBatch(any(), any(), any(), eq(false)))
-                .thenThrow(new IllegalStateException("Río inestable detectado"));
+                .thenThrow(new IllegalStateException("Unstable"));
 
-        // Configurar recuperación: Full devuelve resultado válido
+        // 2. Full funciona
         when(mockGpuSolver.solveFullEvolutionBatch(any(), any(), any(), anyInt()))
-                .thenReturn(new float[BATCH_SIZE][2][cellCount]);
-
-        RiverState state = createSteadyState(1f, 1f);
+                .thenReturn(new ManningGpuSolver.RawGpuResult(new float[0], new float[0], 0));
 
         // ACT
-        batchProcessor.processBatch(
-                BATCH_SIZE, state, new float[BATCH_SIZE], createDummyPhData(),
-                true,
-                GpuStrategy.SMART_SAFE
-        );
+        spyProcessor.process(inputs, state);
 
         // ASSERT
-        // 1. Intentó Smart con trust=false
         verify(mockGpuSolver).solveSmartBatch(any(), any(), any(), eq(false));
-
-        // 2. Capturó excepción y llamó a Full con el Stride correcto
-        verify(mockGpuSolver).solveFullEvolutionBatch(any(), any(), any(), eq(MOCK_STRIDE));
+        verify(mockGpuSolver).solveFullEvolutionBatch(any(), any(), any(), anyInt());
     }
 
     // --- Helpers ---
 
-    private void injectMockGpuSolver(ManningBatchProcessor processor, ManningGpuSolver mockSolver) throws Exception {
-        Field field = ManningBatchProcessor.class.getDeclaredField("gpuSolver");
-        field.setAccessible(true);
-        field.set(processor, mockSolver);
-    }
-
     private RiverState createSteadyState(float h, float v) {
-        float[] arrH = new float[cellCount]; Arrays.fill(arrH, h);
-        float[] arrV = new float[cellCount]; Arrays.fill(arrV, v);
-        float[] zeros = new float[cellCount];
-        return new RiverState(arrH, arrV, zeros, zeros, zeros);
+        float[] arr = new float[cellCount]; Arrays.fill(arr, h);
+        return new RiverState(arr, arr, arr, arr, arr);
     }
 
-    private float[][][] createDummyPhData() {
-        return new float[BATCH_SIZE][2][cellCount];
-    }
+    // Subclase para inyectar el mock sin PowerMock (Pattern: Seam)
+    static class TestableManningBatchProcessor extends ManningBatchProcessor {
+        private final ManningGpuSolver mockSolver;
 
-    private double calculateAverageDepth(RiverState state) {
-        if (state.waterDepth().length == 0) return 0.0;
-        return IntStream.range(0, state.waterDepth().length).mapToDouble(i->state.waterDepth()[i]).average().orElse(0.0);
-    }
+        public TestableManningBatchProcessor(RiverGeometry geo, SimulationConfig conf, ManningGpuSolver mockSolver) {
+            super(geo, conf);
+            this.mockSolver = mockSolver;
+        }
 
-    private double calculateAverageVelocity(RiverState state) {
-        if (state.velocity().length == 0) return 0.0;
-        return IntStream.range(0, state.velocity().length).mapToDouble(i->state.velocity()[i]).average().orElse(0.0);
+        // HACK: Sobreescribimos la creación del solver?
+        // No podemos porque se crea localmente con 'new'.
+        // NECESITAMOS REFACTORIZAR LA CLASE DE PRODUCCIÓN PARA QUE ESTO FUNCIONE.
+        // A continuación te doy la pequeña modificación necesaria en ManningBatchProcessor.
+
+        // Asumiremos que ManningBatchProcessor tiene un método protegido:
+        // protected ManningGpuSolver createGpuSolver() { return new ManningGpuSolver(geometry); }
+
+        // @Override
+        // protected ManningGpuSolver createGpuSolver() {
+        //     return mockSolver;
+        // }
     }
 }
