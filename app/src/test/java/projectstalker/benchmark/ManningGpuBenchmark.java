@@ -129,32 +129,40 @@ public class ManningGpuBenchmark {
      * Ejecuta una iteración midiendo tiempo de Cómputo + DMA.
      * Excluye setup de VRAM (en la medida de lo posible, aunque el procesador gestiona el ciclo de vida).
      */
-    private double runBatchIteration(int batchSize, boolean useGpu, GpuStrategy strategy) {
-        // Generar Hidrograma de Input
-        float[] inputs = new float[batchSize];
+    private double runBatchIteration(int totalStepsToSimulate, boolean useGpu, GpuStrategy strategy) {
+        // Generar Hidrograma de Input (Simulación Larga)
+        float[] inputs = new float[totalStepsToSimulate];
         Arrays.fill(inputs, 150.0f);
 
-        // Configurar Iteración Específica
+        // CALCULAR BATCH SIZE SEGURO (Límite de Buffer Java ~2GB)
+        // 50k celdas * 2 floats * 4 bytes = 400KB por paso.
+        // 2GB / 400KB = ~5000 pasos max teóricos.
+        // Usamos 2000 como límite seguro para dejar margen al driver y overhead.
+
+        int safeBatchSize = Math.min(totalStepsToSimulate, 2000);
+
+        // Configurar Iteración
         SimulationConfig iterationConfig = baseConfig
                 .withUseGpuAccelerationOnManning(useGpu)
                 .withGpuStrategy(strategy)
-                .withCpuTimeBatchSize(batchSize); // Vital para que el Processor sepa cortar (Full Evolution)
+                .withCpuTimeBatchSize(safeBatchSize) // <--- USAMOS EL TAMAÑO SEGURO
+                .withGpuFullEvolutionStride(1);      // Stride 1 para estrés máximo
 
         // Instanciar Procesador
         try (ManningBatchProcessor processor = new ManningBatchProcessor(geometry, iterationConfig)) {
 
-            // WARM-UP INTERNO (Alloc VRAM + Pinned Buffers)
-            // Si usamos GPU, ejecutamos una vez "en falso" para que los buffers DMA se reserven.
-            // Esto es necesario porque ManningBatchProcessor crea el solver dentro del try-with-resources,
-            // pero ManningGpuSolver tiene lazy init.
+            // WARM-UP (Solo la primera vez para alojar buffers)
             if (useGpu) {
-                processor.process(inputs, initialState);
+                // Hacemos un warm-up con un input pequeño para no gastar tiempo
+                float[] warmupInput = new float[Math.min(10, totalStepsToSimulate)];
+                processor.process(warmupInput, initialState);
             }
 
             // MEASUREMENT
             long start = System.nanoTime();
 
-            // La llamada 'process' ahora maneja todo internamente
+            // Si totalStepsToSimulate (5000) > safeBatchSize (2000),
+            // el procesador hará 3 llamadas internas a la GPU (2000, 2000, 1000).
             processor.process(inputs, initialState);
 
             long end = System.nanoTime();
