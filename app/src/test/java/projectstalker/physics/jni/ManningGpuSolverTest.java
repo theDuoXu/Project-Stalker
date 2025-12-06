@@ -13,14 +13,14 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Test unitario para ManningGpuSolver.
+ * Test unitario para ManningGpuSolver (Versión Pure Flyweight / Zero-Copy).
  * <p>
  * Verifica:
  * 1. Lazy Initialization.
  * 2. Flujo DMA correcto.
  * 3. Selección de Estrategia.
  * 4. Lógica de Stride y Alineación.
- * 5. Expansión Inteligente (Unpacking) de datos compactos a full-width.
+ * 5. RETORNO COMPACTO (Sin expansión innecesaria en esta capa).
  */
 class ManningGpuSolverTest {
 
@@ -79,37 +79,34 @@ class ManningGpuSolverTest {
     }
 
     @Test
-    @DisplayName("Smart Mode: Debe usar MODE_SMART_LAZY y expandir datos compactos a full width")
+    @DisplayName("Smart Mode: Debe usar MODE_SMART_LAZY y devolver datos COMPACTOS (sin expandir)")
     void solveSmartBatch_shouldUseSmartMode() {
         // --- ARRANGE ---
-        int batchSize = 2; // ReadWidth será min(2, 50) = 2.
+        int batchSize = 2;
+        // ReadWidth será min(batchSize, cellCount) = 2.
         float[] newInflows = {100f, 150f};
         float[] dummy = new float[CELL_COUNT];
 
         // DATOS COMPACTOS SIMULADOS (Lo que devuelve C++)
         // Tamaño = BatchSize (2) * ReadWidth (2) * Vars (2) = 8 floats.
-        // Bloque H (4 floats): [H_t0_c0, H_t0_c1, H_t1_c0, H_t1_c1]
-        // Bloque V (4 floats): [V_t0_c0, V_t0_c1, V_t1_c0, V_t1_c1]
-
         int readWidth = 2;
         int compactSize = batchSize * readWidth * 2;
         float[] gpuCompactData = new float[compactSize];
 
         // Llenamos valores conocidos para verificar posición
-        gpuCompactData[0] = 1.1f; // H[t=0, c=0]
-        gpuCompactData[1] = 1.2f; // H[t=0, c=1]
-        gpuCompactData[2] = 1.3f; // H[t=1, c=0]
+        // H: [1.1, 1.2, 1.3, 1.4]
+        gpuCompactData[0] = 1.1f;
+        gpuCompactData[1] = 1.2f;
+        gpuCompactData[2] = 1.3f;
 
-        // Bloque V empieza en index 4
-        gpuCompactData[4] = 2.1f; // V[t=0, c=0]
+        // V: [2.1, ... ] (Empieza en offset 4)
+        gpuCompactData[4] = 2.1f;
 
         doAnswer(inv -> {
             FloatBuffer out = inv.getArgument(2);
-
-            // Verificación crítica: El buffer que pasa Java debe ser PEQUEÑO (optimizado)
-            // No debe ser de tamaño 200 (Batch * CellCount * 2)
-            assertTrue(out.capacity() < 200, "El buffer debe estar dimensionado para datos compactos");
-            assertTrue(out.capacity() >= compactSize, "El buffer debe tener espacio suficiente");
+            // Verificamos optimización de buffer
+            assertTrue(out.capacity() < 200, "El buffer debe ser pequeño (optimizado)");
+            assertTrue(out.capacity() >= compactSize);
 
             out.clear();
             out.put(gpuCompactData);
@@ -121,45 +118,36 @@ class ManningGpuSolverTest {
         );
 
         // --- ACT ---
-        // Java leerá los 8 floats y los expandirá a matrices de ancho 50 (rellenando ceros)
         ManningGpuSolver.RawGpuResult result = gpuSolver.solveSmartBatch(dummy, newInflows, dummy, true);
 
         // --- ASSERT ---
         verify(mockNativeSolver).runBatch(anyLong(), any(), any(), eq(batchSize), eq(INativeManningSolver.MODE_SMART_LAZY), eq(1));
 
         assertEquals(2, result.storedSteps());
-        assertEquals(2, result.activeWidth()); // readWidth era 2
-        // 1. Verificamos EXPANSIÓN
-        // El array resultante debe tener el ancho completo del río (50 celdas)
-        assertEquals(batchSize * CELL_COUNT, result.depths().length);
+        assertEquals(readWidth, result.activeWidth()); // ActiveWidth debe ser 2
 
-        // 2. Verificamos POSICIONAMIENTO
-        // t=0, c=0 -> Index 0
+        // 1. Verificamos que NO HUBO EXPANSIÓN (Pure Flyweight)
+        // El array debe tener el tamaño compacto (2*2 = 4 floats por variable), NO el ancho completo (2*50=100)
+        int expectedSizePerVar = batchSize * readWidth;
+        assertEquals(expectedSizePerVar, result.depths().length, "El array devuelto debe ser compacto");
+
+        // 2. Verificamos Integridad de Datos
         assertEquals(1.1f, result.depths()[0], 1e-6f);
-        // t=0, c=1 -> Index 1
         assertEquals(1.2f, result.depths()[1], 1e-6f);
+        assertEquals(1.3f, result.depths()[2], 1e-6f);
 
-        // t=1, c=0 -> Index 50 (Inicio de la segunda fila completa)
-        // Si no hubiera expansión, esto estaría en index 2 (compacto).
-        assertEquals(1.3f, result.depths()[CELL_COUNT], 1e-6f);
-
-        // 3. Verificamos PADDING (Ceros)
-        // t=0, c=5 (Fuera del triángulo activo) debe ser 0.0
-        assertEquals(0.0f, result.depths()[5], 1e-6f);
-
-        // Verificamos Velocidad t=0, c=0
         assertEquals(2.1f, result.velocities()[0], 1e-6f);
     }
 
     @Test
-    @DisplayName("Full Mode (Stride=1): Debe descargar todo el bloque")
+    @DisplayName("Full Mode (Stride=1): Debe descargar todo el bloque (ActiveWidth = CellCount)")
     void solveFullEvolutionBatch_Default_shouldDownloadEverything() {
         // --- ARRANGE ---
         int batchSize = 1;
         float[] newInflows = {100f};
         float[] dummy = new float[CELL_COUNT];
 
-        // 1 paso x 50 celdas x 2 vars = 100 floats (Full Width)
+        // 1 paso x 50 celdas x 2 vars = 100 floats
         float[] gpuData = new float[CELL_COUNT * 2];
         gpuData[0] = 9.9f;
 
@@ -181,6 +169,7 @@ class ManningGpuSolverTest {
 
         // --- ASSERT ---
         assertEquals(1, result.storedSteps());
+        assertEquals(CELL_COUNT, result.activeWidth()); // ActiveWidth = Full Width
         assertEquals(CELL_COUNT, result.depths().length);
         assertEquals(9.9f, result.depths()[0], 1e-6f);
     }
@@ -216,7 +205,6 @@ class ManningGpuSolverTest {
             assertEquals(stride, passedStride);
             assertTrue(out.capacity() >= expectedTotalFloats);
 
-            // Verificamos reducción vs full size sin stride
             int originalFullSize = batchSize * CELL_COUNT * 2;
             assertTrue(out.capacity() < originalFullSize);
             return 0;
