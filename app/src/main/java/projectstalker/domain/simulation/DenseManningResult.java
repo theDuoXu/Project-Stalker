@@ -22,7 +22,7 @@ import java.util.Optional;
 @Value
 @With
 @Builder
-public class DenseManningResult implements ISimulationResult {
+public class DenseManningResult implements IManningResult {
 
     /**
      * La geometría estática sobre la cual se ejecutó la simulación.
@@ -98,5 +98,15 @@ public class DenseManningResult implements ISimulationResult {
         }
         this.appendNewStates(newResult.getStates());
         return this;
+    }
+
+    @Override
+    public float[] getRawWaterDepthAt(int logicalT) {
+        return states.get(logicalT).waterDepth();
+    }
+
+    @Override
+    public float[] getRawVelocityAt(int logicalT) {
+        return states.get(logicalT).velocity();
     }
 }
