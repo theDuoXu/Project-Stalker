@@ -4,7 +4,7 @@
 #include <cmath>
 
 // --- Constantes de Simulación ---
-#define MAX_ITERATIONS 20
+#define MAX_ITERATIONS 5
 #define SAFE_EPSILON 1e-7f
 #define MIN_DEPTH 0.001f
 
