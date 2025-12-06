@@ -12,9 +12,18 @@ import java.nio.FloatBuffer;
  * Soporta dos estrategias:
  * 1. Smart/Lazy: Optimizado para alertas (recorte triangular). Requiere estado estable.
  * 2. Full Evolution: Robusto para ciencia (matriz completa con Stride). Sin restricciones.
+ * <p>
+ * MODIFICADO: Ahora devuelve resultados crudos (Raw Arrays) para optimizar el paso de mensajes
+ * y permitir la construcción flexible de DTOs (Strided, Chunked, Flyweight).
  */
 @Slf4j
 public final class ManningGpuSolver implements AutoCloseable {
+
+    /**
+     * DTO interno para transporte de datos crudos desde la GPU.
+     * depths y velocities son arrays planos concatenados (Time * Cells).
+     */
+    public record RawGpuResult(float[] depths, float[] velocities, int storedSteps) {}
 
     private final INativeManningSolver nativeSolver;
     private long sessionHandle = 0;
@@ -39,71 +48,86 @@ public final class ManningGpuSolver implements AutoCloseable {
 
     // --- MÉTODOS PÚBLICOS ---
 
-    public float[][][] solveSmartBatch(float[] initialDepths,
-                                       float[] newInflows,
-                                       float[] initialRiverStateQ,
-                                       boolean trustOptimization) {
+    /**
+     * Ejecuta la estrategia SMART.
+     * Devuelve los datos crudos. Stride siempre es 1.
+     */
+    public RawGpuResult solveSmartBatch(float[] initialDepths,
+                                        float[] newInflows,
+                                        float[] initialRiverStateQ,
+                                        boolean trustOptimization) {
         if (!trustOptimization) {
             validateSteadyStateCondition(initialRiverStateQ);
         }
 
         int batchSize = newInflows.length;
-        int activeWidth = Math.min(batchSize, cellCount);
+        // En la nueva arquitectura, aunque Smart calcule un triángulo,
+        // pedimos/manejamos el ancho completo para simplificar la estructura de arrays planos.
+        // El kernel optimizado simplemente no escribirá fuera del triángulo, quedando los valores a 0 o NaN
+        // (Flyweight se encarga luego de gestionar eso con la "ola").
 
         return executeNativeBatch(
                 initialDepths, newInflows, initialRiverStateQ,
-                activeWidth,
+                batchSize,
                 INativeManningSolver.MODE_SMART_LAZY,
                 1 // Stride siempre es 1 en Smart (Triángulo denso)
         );
     }
 
-    public float[][][] solveFullEvolutionBatch(float[] initialDepths,
-                                               float[] newInflows,
-                                               float[] initialRiverStateQ,
-                                               int stride) { // <--- STRIDE EXPLICITO
+    /**
+     * Ejecuta la estrategia FULL EVOLUTION.
+     * Requiere que el batchSize sea múltiplo del stride.
+     */
+    public RawGpuResult solveFullEvolutionBatch(float[] initialDepths,
+                                                float[] newInflows,
+                                                float[] initialRiverStateQ,
+                                                int stride) { // <--- STRIDE EXPLICITO
         int batchSize = newInflows.length;
-        int fullWidth = cellCount;
+
+        // --- VALIDACIÓN DE ALINEACIÓN ---
+        if (stride > 1 && batchSize % stride != 0) {
+            throw new IllegalArgumentException(String.format(
+                    "Error de Alineación GPU: El tamaño del lote (%d) NO es múltiplo del stride (%d). " +
+                            "Esto provocaría discontinuidades temporales en la salida.",
+                    batchSize, stride));
+        }
 
         return executeNativeBatch(
                 initialDepths, newInflows, initialRiverStateQ,
-                fullWidth,
+                batchSize,
                 INativeManningSolver.MODE_FULL_EVOLUTION,
                 stride
         );
     }
 
     // Sobrecarga por defecto (Stride = 1)
-    public float[][][] solveFullEvolutionBatch(float[] initialDepths,
-                                               float[] newInflows,
-                                               float[] initialRiverStateQ) {
+    public RawGpuResult solveFullEvolutionBatch(float[] initialDepths,
+                                                float[] newInflows,
+                                                float[] initialRiverStateQ) {
         return solveFullEvolutionBatch(initialDepths, newInflows, initialRiverStateQ, 1);
     }
 
     // --- Lógica Común ---
 
-    private float[][][] executeNativeBatch(float[] initialDepths,
-                                           float[] newInflows,
-                                           float[] initialQ,
-                                           int targetOutputWidth,
-                                           int mode,
-                                           int stride) { // <--- STRIDE
+    private RawGpuResult executeNativeBatch(float[] initialDepths,
+                                            float[] newInflows,
+                                            float[] initialQ,
+                                            int batchSize,
+                                            int mode,
+                                            int stride) { // <--- STRIDE
         if (sessionHandle == 0) {
             initializeSession(initialDepths, initialQ);
         }
 
-        int batchSize = newInflows.length;
+        // Cálculo de pasos guardados.
+        // Como validamos batchSize % stride == 0, la división es exacta.
+        int savedSteps = batchSize / stride;
 
-        // Cálculo de tamaño de salida teniendo en cuenta el Stride
-        // Total steps = ceil(batchSize / stride)
-        int savedSteps = (batchSize + stride - 1) / stride;
+        // Protección para caso borde batch < stride (si ocurriera)
+        if (savedSteps == 0 && batchSize > 0) savedSteps = 1;
 
-        // En Smart, targetOutputWidth es pequeño (triángulo). En Full es cellCount.
-        // Pero en Full, la dimensión temporal se reduce por el stride.
-        // En Smart, el stride es 1, así que savedSteps == batchSize.
-        int outputHeight = savedSteps;
-
-        int neededOutputFloats = outputHeight * targetOutputWidth * 2;
+        // Tamaño total de salida: (PasosGuardados * Celdas * 2 variables)
+        int neededOutputFloats = savedSteps * cellCount * 2;
 
         ensureBuffersCapacity(batchSize, neededOutputFloats);
 
@@ -123,11 +147,22 @@ public final class ManningGpuSolver implements AutoCloseable {
             throw new RuntimeException("Error nativo en Manning GPU. Código: " + status);
         }
 
-        float[] tempResults = new float[neededOutputFloats];
+        // Extracción de Resultados (Device -> Host)
+        // Copiamos del buffer directo a un array temporal
+        float[] allData = new float[neededOutputFloats];
         this.outputBuffer.clear();
-        this.outputBuffer.get(tempResults);
+        this.outputBuffer.get(allData);
 
-        return unpackGpuResults(tempResults, outputHeight, targetOutputWidth);
+        // Separación de H y V (SoA Unpacking)
+        // Asumiendo layout: [Todas las H] seguido de [Todas las V]
+        int elementsPerVar = savedSteps * cellCount;
+        float[] depths = new float[elementsPerVar];
+        float[] velocities = new float[elementsPerVar];
+
+        System.arraycopy(allData, 0, depths, 0, elementsPerVar);
+        System.arraycopy(allData, elementsPerVar, velocities, 0, elementsPerVar);
+
+        return new RawGpuResult(depths, velocities, savedSteps);
     }
 
     // --- Helpers ---
@@ -173,33 +208,6 @@ public final class ManningGpuSolver implements AutoCloseable {
     private FloatBuffer allocateDirectFloatBuffer(int floats) {
         if (floats < 1) floats = 1;
         return ByteBuffer.allocateDirect(floats * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
-    }
-
-    /**
-     * Desempaqueta los resultados planos.
-     * outputHeight = número de pasos guardados (batchSize / stride).
-     */
-    private float[][][] unpackGpuResults(float[] gpuResults, int outputHeight, int activeWidth) {
-        int expectedSize = outputHeight * activeWidth * 2;
-
-        if (gpuResults == null || gpuResults.length != expectedSize) {
-            throw new IllegalArgumentException(String.format(
-                    "Error GPU Unpack: Tamaño incorrecto. Esperado: %d, Recibido: %d",
-                    expectedSize, (gpuResults != null ? gpuResults.length : 0)));
-        }
-
-        float[][][] results = new float[outputHeight][2][activeWidth];
-
-        int ptrH = 0;
-        int ptrV = outputHeight * activeWidth; // Inicio del bloque V
-
-        for (int t = 0; t < outputHeight; t++) {
-            for (int c = 0; c < activeWidth; c++) {
-                results[t][0][c] = gpuResults[ptrH++];
-                results[t][1][c] = gpuResults[ptrV++];
-            }
-        }
-        return results;
     }
 
     @Override
