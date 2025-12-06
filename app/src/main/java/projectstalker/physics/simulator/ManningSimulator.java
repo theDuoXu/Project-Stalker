@@ -7,135 +7,114 @@ import projectstalker.config.RiverConfig;
 import projectstalker.config.SimulationConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.ISimulationResult;
+import projectstalker.domain.simulation.IManningResult;
 import projectstalker.factory.RiverGeometryFactory;
+import projectstalker.factory.RiverFactory;
 import projectstalker.physics.model.FlowProfileModel;
 import projectstalker.physics.model.RiverPhModel;
 import projectstalker.physics.model.RiverTemperatureModel;
-import projectstalker.config.SimulationConfig.GpuStrategy;
 
 /**
  * Orquesta la simulación hidrológica del río.
- * Facade de alto nivel sobre {@link ManningBatchProcessor}.
+ * Facade de alto nivel que prepara los datos iniciales y delega la ejecución
+ * intensiva al {@link ManningBatchProcessor}.
+ * <p>
+ * REFACTORIZADO: Ahora actúa como un lanzador de "Ejecución Completa" en lugar de un stepper,
+ * aprovechando la capacidad del BatchProcessor para gestionar la memoria y la GPU internamente.
  */
 @Slf4j
 public class ManningSimulator implements AutoCloseable {
 
-    private final RiverConfig config;
     @Getter
     private final RiverGeometry geometry;
+    private final SimulationConfig simulationConfig;
 
     private final FlowProfileModel flowGenerator;
-    private final RiverTemperatureModel temperatureModel;
-    private final RiverPhModel phModel;
+    private final RiverTemperatureModel temperatureModel; // (Mantenido para futura integración)
+    private final RiverPhModel phModel;                   // (Mantenido para futura integración)
 
     private final ManningBatchProcessor batchProcessor;
 
     @Getter @Setter
-    private RiverState currentState;
-    @Getter @Setter
-    private double currentTimeInSeconds;
-    @Getter @Setter
-    private boolean isGpuAccelerated;
+    private RiverState initialState;
 
-    // Configuración de Estrategia por defecto
-    private final GpuStrategy defaultGpuStrategy;
+    public ManningSimulator(RiverConfig riverConfig, SimulationConfig simulationConfig) {
+        this.simulationConfig = simulationConfig;
 
-    public ManningSimulator(RiverConfig config, SimulationConfig simulationConfig) {
-        this.config = config;
-        this.geometry = new RiverGeometryFactory().createRealisticRiver(config);
+        // 1. Construcción del Dominio Físico
+        this.geometry = new RiverGeometryFactory().createRealisticRiver(riverConfig);
 
-        this.flowGenerator = new FlowProfileModel((int) config.seed(), simulationConfig.getFlowConfig());
-        this.temperatureModel = new RiverTemperatureModel(config, this.geometry);
+        // 2. Modelos Auxiliares (Condiciones de Frontera)
+        this.flowGenerator = new FlowProfileModel((int) riverConfig.seed(), simulationConfig.getFlowConfig());
+        this.temperatureModel = new RiverTemperatureModel(riverConfig, this.geometry);
         this.phModel = new RiverPhModel(this.geometry);
 
-        int cellCount = geometry.getCellCount();
-        this.currentState = new RiverState(new float[cellCount], new float[cellCount], new float[cellCount], new float[cellCount], new float[cellCount]);
-        this.currentTimeInSeconds = 0.0;
+        // 3. Estado Inicial (t=0)
+        // Usamos la factoría para crear un río estable o vacío según se requiera
+        this.initialState = RiverFactory.createSteadyState(this.geometry, simulationConfig.getFlowConfig().getBaseDischarge());
 
-        this.isGpuAccelerated = simulationConfig.isUseGpuAccelerationOnManning();
-
-        // MAPEO DE CONFIGURACIÓN -> ESTRATEGIA INTERNA
-        // Convertimos el Enum de Configuración (DTO) al Enum del Procesador (Lógica)
-        this.defaultGpuStrategy = mapConfigStrategy(simulationConfig.getGpuStrategy());
-
+        // 4. Inicialización del Motor Físico (Orquestador)
         this.batchProcessor = new ManningBatchProcessor(this.geometry, simulationConfig);
 
-        log.info("ManningSimulator inicializado. GPU={}, Strategy={}", isGpuAccelerated, defaultGpuStrategy);
+        log.info("ManningSimulator listo. (GPU: {}, Strategy: {})",
+                simulationConfig.isUseGpuAccelerationOnManning(),
+                simulationConfig.getGpuStrategy());
     }
 
     /**
-     * Mapea el Enum de configuración al Enum interno del procesador.
-     * Esto desacopla la capa de configuración de la capa física.
+     * Ejecuta la simulación completa basada en la configuración temporal.
+     * <p>
+     * Genera el hidrograma de entrada completo y lo envía al procesador.
+     * El procesador decidirá internamente cómo dividir el trabajo (Chunks/Strides)
+     * y retornará un resultado optimizado en memoria.
+     * * @return El resultado completo de la simulación (IManningResult).
      */
-    private GpuStrategy mapConfigStrategy(SimulationConfig.GpuStrategy configStrategy) {
-        if (configStrategy == null) return GpuStrategy.SMART_SAFE;
+    public IManningResult runFullSimulation() {
+        log.info("Iniciando simulación completa...");
 
-        switch (configStrategy) {
-            case FULL_EVOLUTION: return GpuStrategy.FULL_EVOLUTION;
-            case SMART_TRUSTED:  return GpuStrategy.SMART_TRUSTED;
-            case SMART_SAFE:
-            default:             return GpuStrategy.SMART_SAFE;
-        }
-    }
+        // 1. Generación del Perfil de Entrada (Hidrograma)
+        // Calculamos Q_inflow para cada delta_t de toda la simulación.
+        float[] fullInflowProfile = generateFullInflowProfile();
 
-    public void advanceTimeStep(double deltaTimeInSeconds) {
-        advanceBatchTimeStep(deltaTimeInSeconds, 1);
-    }
+        log.info("Hidrograma generado: {} pasos de tiempo.", fullInflowProfile.length);
 
-    public ISimulationResult advanceBatchTimeStep(double deltaTimeInSeconds, int batchSize) {
-        // Usa la estrategia definida en SimulationConfig
-        return advanceBatchTimeStep(deltaTimeInSeconds, batchSize, this.defaultGpuStrategy);
-    }
+        // 2. Delegación al Núcleo Físico
+        // El procesador gestiona la complejidad de GPU, memoria y paginación.
+        IManningResult result = batchProcessor.process(fullInflowProfile, this.initialState);
 
-    public ISimulationResult advanceBatchTimeStep(double deltaTimeInSeconds, int batchSize, GpuStrategy strategy) {
-        if (batchSize <= 0) throw new IllegalArgumentException("BatchSize debe ser > 0");
-
-        int cellCount = geometry.getCellCount();
-
-        float[] newDischarges = new float[batchSize];
-        float[][][] phTmp = new float[batchSize][2][cellCount];
-
-        double tempTime = currentTimeInSeconds;
-
-        for (int i = 0; i < batchSize; i++) {
-            newDischarges[i] = flowGenerator.getDischargeAt(tempTime);
-
-            phTmp[i][0] = temperatureModel.calculate(tempTime);
-            phTmp[i][1] = phModel.getPhProfile();
-
-            tempTime += deltaTimeInSeconds;
-        }
-
-        ISimulationResult result = batchProcessor.processBatch(
-                batchSize,
-                this.currentState,
-                newDischarges,
-                phTmp,
-                this.isGpuAccelerated,
-                strategy // Pasamos la estrategia seleccionada (Full/Smart)
-        );
-
-        this.currentTimeInSeconds = tempTime;
-
-        if (result.getFinalState().isPresent()) {
-            this.currentState = result.getFinalState().get();
-        } else {
-            this.currentState = result.getStateAt(batchSize - 1);
-        }
-
+        log.info("Simulación finalizada. Tiempo de cómputo: {}ms", result.getSimulationTime());
         return result;
     }
 
-    public float getCurrentInputDischarge() {
-        return flowGenerator.getDischargeAt(currentTimeInSeconds);
+    /**
+     * Genera el array de caudales de entrada para toda la duración configurada.
+     */
+    private float[] generateFullInflowProfile() {
+        long totalSteps = simulationConfig.getTotalTimeSteps();
+
+        // Validación de seguridad de memoria para el perfil de entrada
+        if (totalSteps > Integer.MAX_VALUE - 100) {
+            throw new IllegalArgumentException("La simulación es demasiado larga para indexar en un array Java (Max ~2B pasos).");
+        }
+
+        int steps = (int) totalSteps;
+        float[] inflows = new float[steps];
+        float dt = simulationConfig.getDeltaTime();
+        double time = 0.0;
+
+        for (int i = 0; i < steps; i++) {
+            inflows[i] = flowGenerator.getDischargeAt(time);
+            time += dt;
+        }
+
+        return inflows;
     }
 
     @Override
     public void close() {
         if (batchProcessor != null) {
             batchProcessor.close();
-            log.info("ManningSimulator cerrado.");
         }
+        log.info("ManningSimulator cerrado y recursos liberados.");
     }
 }

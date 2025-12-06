@@ -8,14 +8,11 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import projectstalker.config.RiverConfig;
 import projectstalker.config.SimulationConfig;
-// Importación correcta del Enum de Estrategia
 import projectstalker.config.SimulationConfig.GpuStrategy;
-import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.ISimulationResult;
+import projectstalker.domain.simulation.IManningResult;
 
 import java.lang.reflect.Field;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -23,169 +20,116 @@ import static org.mockito.Mockito.*;
 /**
  * Test unitario para ManningSimulator.
  * <p>
- * REFACTORIZADO: Adaptado a la nueva arquitectura con GpuStrategy.
+ * REFACTORIZADO: Adaptado a la nueva arquitectura de "Orquestación Completa".
+ * Verifica que el simulador genera el hidrograma completo y lo delega al BatchProcessor.
  */
 @Slf4j
 class ManningSimulatorTest {
 
     private ManningSimulator simulator;
-    private RiverConfig mockConfig;
+    private RiverConfig mockRiverConfig;
     private SimulationConfig mockSimConfig;
-    private RiverGeometry mockGeometry;
     private ManningBatchProcessor mockBatchProcessor;
 
-    private final int CELL_COUNT = 5;
-    private final double DELTA_TIME = 10.0;
+    private final float DELTA_TIME = 10.0f;
+    private final long TOTAL_TIME = 1000L; // 100 pasos
+    private final int EXPECTED_STEPS = 100;
 
     @BeforeEach
-    void setUp() throws NoSuchFieldException, IllegalAccessException {
-        // --- 1. Mocks Base ---
-        mockConfig = mock(RiverConfig.class);
-        when(mockConfig.totalLength()).thenReturn(25.0f);
-        when(mockConfig.spatialResolution()).thenReturn(5.0f);
-        when(mockConfig.seed()).thenReturn(12345L);
-        when(mockConfig.baseManning()).thenReturn(0.035f);
-        when(mockConfig.baseWidth()).thenReturn(10.0f);
-        when(mockConfig.basePh()).thenReturn(7.0f);
-        when(mockConfig.baseTemperature()).thenReturn(20.0f);
-        when(mockConfig.noiseFrequency()).thenReturn(0.1f);
+    void setUp() throws Exception {
+        // --- 1. Mocks de Configuración ---
+        mockRiverConfig = mock(RiverConfig.class);
+        // Valores necesarios para que RiverGeometryFactory (interna) no falle
+        when(mockRiverConfig.totalLength()).thenReturn(100.0f);
+        when(mockRiverConfig.spatialResolution()).thenReturn(10.0f); // 10 celdas
+        when(mockRiverConfig.seed()).thenReturn(12345L);
+        when(mockRiverConfig.baseManning()).thenReturn(0.035f);
+        when(mockRiverConfig.baseWidth()).thenReturn(10.0f);
+        when(mockRiverConfig.averageSlope()).thenReturn(0.001f);
+        when(mockRiverConfig.baseSideSlope()).thenReturn(1.0f);
 
+        // Mocks para modelos químicos (aunque no se usen en simulación pura, se instancian)
+        when(mockRiverConfig.basePh()).thenReturn(7.0f);
+        when(mockRiverConfig.baseTemperature()).thenReturn(20.0f);
+        when(mockRiverConfig.noiseFrequency()).thenReturn(0.1f);
+
+        // Simulation Config
         mockSimConfig = mock(SimulationConfig.class);
+        when(mockSimConfig.getTotalTimeSteps()).thenReturn(TOTAL_TIME / (long)DELTA_TIME);
+        when(mockSimConfig.getDeltaTime()).thenReturn(DELTA_TIME);
+
+        // Flow Config
         SimulationConfig.FlowConfig mockFlowConfig = mock(SimulationConfig.FlowConfig.class);
         when(mockFlowConfig.getBaseDischarge()).thenReturn(10.0f);
         when(mockSimConfig.getFlowConfig()).thenReturn(mockFlowConfig);
 
-        // Configuración GPU
-        when(mockSimConfig.isUseGpuAccelerationOnManning()).thenReturn(false);
-        // Configuramos una estrategia por defecto para el mock
-        when(mockSimConfig.getGpuStrategy()).thenReturn(GpuStrategy.SMART_SAFE);
+        // Config GPU
+        when(mockSimConfig.isUseGpuAccelerationOnManning()).thenReturn(true);
+        when(mockSimConfig.getGpuStrategy()).thenReturn(GpuStrategy.FULL_EVOLUTION);
+        when(mockSimConfig.getCpuProcessorCount()).thenReturn(1);
 
-        // --- 2. Mock de Geometría ---
-        mockGeometry = mock(RiverGeometry.class);
-        when(mockGeometry.getCellCount()).thenReturn(CELL_COUNT);
-        when(mockGeometry.clonePhProfile()).thenReturn(new float[CELL_COUNT]);
+        // --- 2. Instanciación ---
+        // Al hacer new, el simulador crea internamente un BatchProcessor real y un RiverGeometry real.
+        // También llama a RiverFactory.createSteadyState (que es estático y rápido, así que lo dejamos correr).
+        simulator = new ManningSimulator(mockRiverConfig, mockSimConfig);
 
-        // --- 3. Instanciación e Inyección de Dependencias ---
-        // El constructor llamará a mockSimConfig.getGpuStrategy() internamente
-        simulator = new ManningSimulator(mockConfig, mockSimConfig);
-
-        // Inyección de campo privado geometry (final)
-        Field geometryField = ManningSimulator.class.getDeclaredField("geometry");
-        geometryField.setAccessible(true);
-        geometryField.set(simulator, mockGeometry);
-
-        // Inyección de campo privado batchProcessor (final)
+        // --- 3. Inyección de Mock BatchProcessor ---
+        // Necesitamos interceptar la llamada al process() para verificar la orquestación.
         mockBatchProcessor = mock(ManningBatchProcessor.class);
+
         Field batchProcessorField = ManningSimulator.class.getDeclaredField("batchProcessor");
         batchProcessorField.setAccessible(true);
+        // Reemplazamos el procesador real (que se creó en el constructor) por el mock
         batchProcessorField.set(simulator, mockBatchProcessor);
 
-        // --- 4. Estado Inicial ---
-        simulator.setCurrentState(createDummyState(CELL_COUNT));
-        simulator.setCurrentTimeInSeconds(100.0);
-        log.info("ManningSimulator inicializado para pruebas.");
+        log.info("ManningSimulator inicializado con Mock Processor inyectado.");
     }
 
     @AfterEach
     void tearDown() {
-        simulator.close();
+        if (simulator != null) simulator.close();
     }
 
     // --------------------------------------------------------------------------
-    // TEST 1: Avance de Paso Único (Delegación a Batch=1)
+    // TEST: Ejecución Completa (RunFullSimulation)
     // --------------------------------------------------------------------------
 
     @Test
-    @DisplayName("advanceTimeStep debe delegar a advanceBatchTimeStep(batchSize=1)")
-    void advanceTimeStep_shouldDelegateToBatchProcessor() {
-        log.info("Ejecutando test: advanceTimeStep (Single Step).");
+    @DisplayName("runFullSimulation: Debe generar hidrograma completo y delegar al processor")
+    void runFullSimulation_ShouldGenerateHydrographAndDelegate() {
+        // ARRANGE
+        // Configuramos el mock processor para devolver un resultado dummy
+        IManningResult mockResult = mock(IManningResult.class);
+        when(mockResult.getSimulationTime()).thenReturn(50L);
 
-        double initialTime = simulator.getCurrentTimeInSeconds();
-
-        // Mock respuesta del processor (Interfaz Genérica)
-        ISimulationResult mockResult = createMockResult(1);
-
-        // ACTUALIZADO: verify/when con argumento de Estrategia
-        when(mockBatchProcessor.processBatch(
-                eq(1), any(), any(), any(), anyBoolean(), any(GpuStrategy.class))
-        ).thenReturn(mockResult);
+        when(mockBatchProcessor.process(any(float[].class), any(RiverState.class)))
+                .thenReturn(mockResult);
 
         // ACT
-        simulator.advanceTimeStep(DELTA_TIME);
+        IManningResult result = simulator.runFullSimulation();
 
         // ASSERT
-        verify(mockBatchProcessor, times(1)).processBatch(
-                eq(1),
-                any(RiverState.class),
-                any(float[].class),
-                any(float[][][].class),
-                anyBoolean(),
-                any(GpuStrategy.class) // Verificamos que se pasa una estrategia
-        );
+        assertNotNull(result);
 
-        assertEquals(initialTime + DELTA_TIME, simulator.getCurrentTimeInSeconds(), 0.001);
-    }
-
-    // --------------------------------------------------------------------------
-    // TEST 2: Avance por Lote (Batch)
-    // --------------------------------------------------------------------------
-
-    @Test
-    @DisplayName("advanceBatchTimeStep debe generar inputs 1D y delegar al Processor")
-    void advanceBatchTimeStep_shouldGenerate1DInputs_andDelegate() {
-        log.info("Ejecutando test: advanceBatchTimeStep.");
-        int batchSize = 3;
-        double initialTime = simulator.getCurrentTimeInSeconds();
-
-        // 1. Configurar Mock Resultado
-        ISimulationResult mockResult = createMockResult(batchSize);
-        RiverState finalState = createDummyState(CELL_COUNT);
-        when(mockResult.getFinalState()).thenReturn(Optional.of(finalState));
-
-        // ACTUALIZADO: Firma con Estrategia
-        when(mockBatchProcessor.processBatch(
-                eq(batchSize), any(), any(), any(), anyBoolean(), any(GpuStrategy.class))
-        ).thenReturn(mockResult);
-
-        RiverState stateBeforeExecution = simulator.getCurrentState();
-
-        // ACT
-        ISimulationResult result = simulator.advanceBatchTimeStep(DELTA_TIME, batchSize);
-
-        // ASSERT
+        // 1. Capturamos los argumentos pasados al procesador
         ArgumentCaptor<float[]> inflowCaptor = ArgumentCaptor.forClass(float[].class);
+        ArgumentCaptor<RiverState> stateCaptor = ArgumentCaptor.forClass(RiverState.class);
 
-        // 1. Verificar Delegación con parámetros correctos
-        verify(mockBatchProcessor, times(1)).processBatch(
-                eq(batchSize),
-                eq(stateBeforeExecution),
-                inflowCaptor.capture(),
-                any(float[][][].class),
-                eq(false),
-                any(GpuStrategy.class) // Matcher para el Enum
-        );
+        verify(mockBatchProcessor, times(1)).process(inflowCaptor.capture(), stateCaptor.capture());
 
-        // 2. Verificar Inputs Generados
-        float[] capturedInflows = inflowCaptor.getValue();
-        assertEquals(batchSize, capturedInflows.length);
-        assertEquals(10.0f, capturedInflows[0], 0.1f);
+        // 2. Verificamos el hidrograma generado
+        float[] generatedInflows = inflowCaptor.getValue();
+        assertEquals(EXPECTED_STEPS, generatedInflows.length,
+                "El simulador debe generar un array de inputs para todos los pasos de tiempo.");
 
-        // 3. Verificar Actualización de Estado Final
-        assertEquals(finalState, simulator.getCurrentState());
-        assertEquals(initialTime + (batchSize * DELTA_TIME), simulator.getCurrentTimeInSeconds(), 0.001);
-    }
+        // Verificamos que el generador de flujo se usó (no es todo cero)
+        // Como baseDischarge es 10.0, deberíamos tener valores cercanos a 10
+        assertEquals(10.0f, generatedInflows[0], 2.0f);
 
-    // --- Helpers ---
-
-    private RiverState createDummyState(int n) {
-        float[] data = new float[n];
-        return new RiverState(data, data, data, data, data);
-    }
-
-    private ISimulationResult createMockResult(int batchSize) {
-        ISimulationResult result = mock(ISimulationResult.class);
-        when(result.getTimestepCount()).thenReturn(batchSize);
-        when(result.getFinalState()).thenReturn(Optional.of(createDummyState(CELL_COUNT)));
-        return result;
+        // 3. Verificamos el estado inicial
+        RiverState passedState = stateCaptor.getValue();
+        assertNotNull(passedState, "Debe pasar un estado inicial válido");
+        // El estado inicial debe haber sido creado por RiverFactory (Steady State)
+        assertTrue(passedState.getWaterDepthAt(0) > 0, "El estado inicial debe tener agua (Steady State)");
     }
 }
