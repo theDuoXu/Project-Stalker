@@ -1,0 +1,60 @@
+plugins {
+    // Gestión de versiones para Spring Boot (no se aplica al root, solo gestión)
+    id 'org.springframework.boot' version '3.2.4' apply false
+    id 'io.spring.dependency-management' version '1.1.4' apply false
+    // Plugin JMH (solo gestión de versión aquí)
+    id 'me.champeau.jmh' version '0.7.2' apply false
+    // JavaFX (solo gestión)
+    id 'org.openjfx.javafxplugin' version '0.1.0' apply false
+}
+
+allprojects {
+    group = 'projectstalker'
+    version = '0.5.0-HPC'
+
+    repositories {
+        mavenCentral()
+    }
+}
+
+subprojects {
+    // Aplicamos configuración Java a todos menos a la librería nativa C++
+    if (name != 'native-lib') {
+        apply plugin: 'java'
+        apply plugin: 'io.spring.dependency-management'
+
+        java {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(21)
+            }
+        }
+
+        dependencies {
+            // --- UTILIDADES COMUNES ---
+            // Lombok (Compilación)
+            compileOnly 'org.projectlombok:lombok:1.18.32'
+            annotationProcessor 'org.projectlombok:lombok:1.18.32'
+            testCompileOnly 'org.projectlombok:lombok:1.18.32'
+            testAnnotationProcessor 'org.projectlombok:lombok:1.18.32'
+
+            // Logging (API solamente - permite compilar log.info(...))
+            implementation 'org.slf4j:slf4j-api:2.0.13'
+
+            // Dotenv (Configuración de entorno común)
+            implementation 'io.github.cdimascio:dotenv-java:3.0.0'
+
+            // --- STACK DE PRUEBAS (Común para todos) ---
+            testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+            testImplementation 'org.assertj:assertj-core:3.25.3'
+            testImplementation 'org.mockito:mockito-core:5.12.0'
+            testImplementation 'org.mockito:mockito-junit-jupiter:5.12.0'
+        }
+
+        test {
+            useJUnitPlatform {
+                // Exclusión global. Los módulos específicos habilitarán sus tags si los necesitan.
+                excludeTags 'GPU', 'Benchmark'
+            }
+        }
+    }
+}

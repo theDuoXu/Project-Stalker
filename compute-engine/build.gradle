@@ -1,0 +1,120 @@
+plugins {
+    id 'org.springframework.boot'
+    id 'me.champeau.jmh' // Benchmarks viven aquí
+}
+
+dependencies {
+    // Dependencia del Dominio
+    implementation project(':core-domain')
+
+    // --- SPRING BOOT STACK ---
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server' // Validación JWT
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis' // Caché rápida
+
+    // --- BASE DE DATOS (Solo el backend accede a la DB) ---
+    implementation 'org.postgresql:postgresql:42.7.3'
+    implementation 'com.zaxxer:HikariCP:5.1.0'
+    implementation 'org.jdbi:jdbi3-core:3.45.2'
+    implementation 'org.jdbi:jdbi3-postgres:3.45.2'
+
+    // --- LOGGING IMPLEMENTATION (Backend) ---
+    runtimeOnly 'ch.qos.logback:logback-classic:1.5.13'
+
+    // --- JMH (Benchmarks) ---
+    jmhImplementation 'org.openjdk.jmh:jmh-core:1.37'
+    jmhAnnotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
+}
+
+// ===================================================================
+// --- CONFIGURACIÓN JNI & TASKS PERSONALIZADAS ---
+// ===================================================================
+
+// Tarea para copiar la librería nativa al build de este módulo
+def copyNativeLib = tasks.register('copyNativeLib', Copy) {
+    from project(':native-lib').tasks.named('linkDebug').map { it.linkedFile }
+    into layout.buildDirectory.dir('libs/native')
+}
+
+// Asegurar que Spring Boot tenga la librería al arrancar
+bootRun {
+    dependsOn copyNativeLib
+    systemProperty "java.library.path", layout.buildDirectory.dir('libs/native').get().asFile.absolutePath
+    systemProperty "projectstalker.native.enabled", "true"
+}
+
+// Configuración de JMH
+jmh {
+    fork = 1
+    warmupIterations = 2
+    iterations = 3
+    resultFormat = 'JSON'
+    // Importante: JMH necesita ver la librería nativa también
+    jvmArgs = [
+            "-Djava.library.path=${layout.buildDirectory.dir('libs/native').get().asFile.absolutePath}",
+            "-Dprojectstalker.native.enabled=true"
+    ]
+}
+// Asegurar que JMH copie la librería antes de correr
+tasks.named('jmh').configure {
+    dependsOn copyNativeLib
+}
+
+// Tarea personalizada: GPU Tests
+tasks.register('gpuTest', Test) {
+    description = 'Ejecuta los tests de integración que requieren hardware de GPU.'
+    group = 'verification'
+    dependsOn copyNativeLib
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    jvmArgs "-Djava.library.path=${layout.buildDirectory.dir('libs/native').get().asFile.absolutePath}"
+    systemProperty 'projectstalker.native.enabled', 'true'
+
+    useJUnitPlatform {
+        includeTags 'GPU'
+    }
+    testLogging {
+        events "passed", "skipped", "failed", "standardOut", "standardError"
+        showStandardStreams = true
+        showExceptions true
+        showCauses true
+        showStackTraces true
+        exceptionFormat "full"
+    }
+}
+
+// Tarea personalizada: Benchmark Manual (JUnit based)
+tasks.register('benchmark', Test) {
+    description = 'Ejecuta las pruebas de rendimiento masivo CPU vs GPU.'
+    group = 'verification'
+    dependsOn copyNativeLib
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    jvmArgs "-Djava.library.path=${layout.buildDirectory.dir('libs/native').get().asFile.absolutePath}"
+    systemProperty 'projectstalker.native.enabled', 'true'
+
+    minHeapSize = "4G"
+    maxHeapSize = "24G"
+    jvmArgs "-XX:+UseG1GC"
+    jvmArgs "-XX:+AlwaysPreTouch"
+    jvmArgs "-XX:MaxGCPauseMillis=500"
+
+    outputs.upToDateWhen { false }
+
+    useJUnitPlatform {
+        includeTags 'Benchmark'
+    }
+    testLogging {
+        events "passed", "skipped", "failed", "standardOut", "standardError"
+        showStandardStreams = true
+        showExceptions true
+        showCauses true
+        showStackTraces true
+        exceptionFormat "full"
+    }
+}

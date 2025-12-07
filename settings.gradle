@@ -1,3 +1,5 @@
 rootProject.name = 'projectstalker'
-
-include 'app', 'native-lib'
+include 'core-domain'
+include 'compute-engine'
+include 'desktop-ui'
+include 'native-lib'
