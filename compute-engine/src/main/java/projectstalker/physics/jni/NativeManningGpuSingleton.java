@@ -87,4 +87,7 @@ public class NativeManningGpuSingleton implements INativeManningSolver {
 
     @Override
     public native void destroySession(long sessionHandle);
+
+    @Override
+    public native int getDeviceCount();
 }

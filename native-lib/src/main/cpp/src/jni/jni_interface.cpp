@@ -231,4 +231,36 @@ Java_projectstalker_physics_jni_NativeTransportGpuSingleton_solveTransportEvolut
     }
 }
 
+// =============================================================================
+// SECCIÓN 4: FUNCIONALIDADES DE VERIFICACIÓN
+// =============================================================================
+/*
+ * Class:     projectstalker_physics_jni_NativeManningGpuSingleton
+ * Method:    getDeviceCount
+ * Signature: ()I
+ */
+JNIEXPORT jint JNICALL Java_projectstalker_physics_jni_NativeManningGpuSingleton_getDeviceCount
+  (JNIEnv *env, jobject obj) {
+
+    int deviceCount = 0;
+    cudaError_t error_id = cudaGetDeviceCount(&deviceCount);
+
+    if (error_id != cudaSuccess) {
+        printf("CUDA Error: %s\n", cudaGetErrorString(error_id));
+        return 0;
+    }
+
+    //Intentar obtener propiedades del dispositivo 0 para asegurar que está vivo
+    if (deviceCount > 0) {
+        cudaDeviceProp deviceProp;
+        if (cudaGetDeviceProperties(&deviceProp, 0) != cudaSuccess) {
+            return 0;
+        }
+        // Imprimir nombre de la gráfica en logs nativos
+        printf("Detectada GPU: %s\n", deviceProp.name);
+    }
+
+    return deviceCount;
+}
+
 } // extern "C"

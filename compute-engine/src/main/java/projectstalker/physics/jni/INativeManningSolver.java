@@ -50,4 +50,10 @@ public interface INativeManningSolver {
 
     // Lifecycle: Destroy
     void destroySession(long sessionHandle);
+
+    /**
+     * Consulta al driver de NVIDIA cuántos dispositivos compatibles con CUDA hay disponibles.
+     * @return Número de GPUs (0 si no hay ninguna o el driver falla).
+     */
+    int getDeviceCount();
 }
