@@ -5,7 +5,11 @@ import org.junit.jupiter.api.Test;
 import projectstalker.config.SimulationConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.*;
+
+import projectstalker.domain.simulation.DenseManningResult;
+import projectstalker.domain.simulation.FlyweightManningResult;
+import projectstalker.domain.simulation.StridedManningResult;
+import projectstalker.domain.simulation.ChunkedManningResult;
 
 import java.lang.reflect.Field;
 import java.util.Collections;

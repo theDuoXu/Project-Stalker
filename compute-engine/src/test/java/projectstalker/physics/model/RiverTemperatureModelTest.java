@@ -5,8 +5,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import projectstalker.config.RiverConfig; // Asegúrate de importar tus clases
-import projectstalker.domain.river.RiverGeometry; // Asegúrate de importar tus clases
+import projectstalker.config.RiverConfig;
+import projectstalker.domain.river.RiverGeometry;
 import projectstalker.factory.RiverGeometryFactory;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -36,21 +36,21 @@ class RiverTemperatureModelTest {
         log.debug("RiverGeometry creada satisfactoriamente por la fábrica.");
     }
 
-    @Disabled("Desactivado para permitir tests sin intervención humana, ya que la ventana bloquea hasta que se cierre")
-    @Test
-    @DisplayName("Visual Test: Debería mostrar el perfil de temperatura en un gráfico")
-    void displayProfileChart_shouldShowGraphAndWait() throws InterruptedException {
-        // --- 1. Arrange ---
-        RiverTemperatureModel model = new RiverTemperatureModel(defaultConfig, defaultGeometry);
-
-        // Simular las 3 PM (15:00) en un día de verano (día 180)
-        double summerAfternoon = (180 * 24 * 3600) + (15 * 3600);
-
-        // --- 2. Act & Assert ---
-        // Este método mostrará el gráfico y bloqueará el hilo del test
-        // hasta que la ventana sea cerrada por el usuario. No se necesita un assert.
-        assertDoesNotThrow(() -> model.displayProfileChart(summerAfternoon));
-    }
+//    @Disabled("Desactivado para permitir tests sin intervención humana, ya que la ventana bloquea hasta que se cierre")
+//    @Test
+//    @DisplayName("Visual Test: Debería mostrar el perfil de temperatura en un gráfico")
+//    void displayProfileChart_shouldShowGraphAndWait() throws InterruptedException {
+//        // --- 1. Arrange ---
+//        RiverTemperatureModel model = new RiverTemperatureModel(defaultConfig, defaultGeometry);
+//
+//        // Simular las 3 PM (15:00) en un día de verano (día 180)
+//        double summerAfternoon = (180 * 24 * 3600) + (15 * 3600);
+//
+//        // --- 2. Act & Assert ---
+//        // Este método mostrará el gráfico y bloqueará el hilo del test
+//        // hasta que la ventana sea cerrada por el usuario. No se necesita un assert.
+//        assertDoesNotThrow(() -> model.displayProfileChart(summerAfternoon));
+//    }
 
     @Test
     @DisplayName("Logic Test: El perfil calculado debe tener la misma longitud que las celdas de la geometría")

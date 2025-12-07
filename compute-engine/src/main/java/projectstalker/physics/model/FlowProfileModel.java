@@ -3,10 +3,6 @@ package projectstalker.physics.model;
 import lombok.RequiredArgsConstructor;
 import lombok.With;
 import lombok.extern.slf4j.Slf4j;
-import org.knowm.xchart.SwingWrapper;
-import org.knowm.xchart.XYChart;
-import org.knowm.xchart.XYChartBuilder;
-import org.knowm.xchart.style.Styler;
 import projectstalker.config.SimulationConfig;
 import projectstalker.utils.FastNoiseLite;
 
@@ -166,58 +162,58 @@ public class FlowProfileModel {
         return maxDischarge;
     }
 
-    /**
-     * Genera y muestra un gráfico interactivo del perfil de caudal para un intervalo de tiempo.
-     * <p>
-     * El method bloquea el hilo desde el que se llama hasta que el usuario cierra la ventana del gráfico.
-     * Esto es útil para visualizaciones rápidas durante pruebas o desde un method main.
-     *
-     * @param startTimeInSeconds El tiempo de inicio del perfil a visualizar (en segundos).
-     * @param endTimeInSeconds   El tiempo final del perfil a visualizar (en segundos).
-     * @param timeStepInSeconds  El incremento de tiempo entre cada punto del perfil (en segundos).
-     * @throws InterruptedException si el hilo es interrumpido mientras espera.
-     */
-    public void displayProfileChart(double startTimeInSeconds, double endTimeInSeconds, double timeStepInSeconds) throws InterruptedException {
-        // --- 1. Generación de Datos ---
-        double[] dischargeProfile = this.generateProfile(startTimeInSeconds, endTimeInSeconds, timeStepInSeconds);
-        // El eje X se muestra en horas para facilitar la lectura
-        double[] timeInHours = DoubleStream.iterate(startTimeInSeconds / 3600.0, t -> t + timeStepInSeconds / 3600.0)
-                .limit(dischargeProfile.length)
-                .toArray();
-
-        // --- 2. Creación del Gráfico con XChart ---
-        XYChart chart = new XYChartBuilder()
-                .width(800)
-                .height(600)
-                .title("Hidrograma Generado (Flow Profile)")
-                .xAxisTitle("Tiempo (horas)")
-                .yAxisTitle("Caudal (m³/s)")
-                .build();
-
-        chart.getStyler().setLegendPosition(Styler.LegendPosition.InsideNW);
-        chart.getStyler().setMarkerSize(0);
-        chart.getStyler().setYAxisMin(0.0);
-
-        chart.addSeries(
-                String.format("Caudal (Base: %.1f, Amplitud: %.1f)", this.baseDischarge, this.noiseAmplitude),
-                timeInHours,
-                dischargeProfile
-        );
-
-        // --- 3. Visualización Sincronizada con CountDownLatch ---
-        final CountDownLatch latch = new CountDownLatch(1);
-        JFrame frame = new SwingWrapper<>(chart).displayChart();
-
-        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Importante para que se active windowClosed
-        frame.addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosed(WindowEvent e) {
-                log.info("Ventana del gráfico cerrada. Se libera el bloqueo.");
-                latch.countDown();
-            }
-        });
-
-        log.info("Mostrando gráfico. El hilo actual esperará hasta que la ventana se cierre.");
-        latch.await();
-    }
+//    /**
+//     * Genera y muestra un gráfico interactivo del perfil de caudal para un intervalo de tiempo.
+//     * <p>
+//     * El method bloquea el hilo desde el que se llama hasta que el usuario cierra la ventana del gráfico.
+//     * Esto es útil para visualizaciones rápidas durante pruebas o desde un method main.
+//     *
+//     * @param startTimeInSeconds El tiempo de inicio del perfil a visualizar (en segundos).
+//     * @param endTimeInSeconds   El tiempo final del perfil a visualizar (en segundos).
+//     * @param timeStepInSeconds  El incremento de tiempo entre cada punto del perfil (en segundos).
+//     * @throws InterruptedException si el hilo es interrumpido mientras espera.
+//     */
+//    public void displayProfileChart(double startTimeInSeconds, double endTimeInSeconds, double timeStepInSeconds) throws InterruptedException {
+//        // --- 1. Generación de Datos ---
+//        double[] dischargeProfile = this.generateProfile(startTimeInSeconds, endTimeInSeconds, timeStepInSeconds);
+//        // El eje X se muestra en horas para facilitar la lectura
+//        double[] timeInHours = DoubleStream.iterate(startTimeInSeconds / 3600.0, t -> t + timeStepInSeconds / 3600.0)
+//                .limit(dischargeProfile.length)
+//                .toArray();
+//
+//        // --- 2. Creación del Gráfico con XChart ---
+//        XYChart chart = new XYChartBuilder()
+//                .width(800)
+//                .height(600)
+//                .title("Hidrograma Generado (Flow Profile)")
+//                .xAxisTitle("Tiempo (horas)")
+//                .yAxisTitle("Caudal (m³/s)")
+//                .build();
+//
+//        chart.getStyler().setLegendPosition(Styler.LegendPosition.InsideNW);
+//        chart.getStyler().setMarkerSize(0);
+//        chart.getStyler().setYAxisMin(0.0);
+//
+//        chart.addSeries(
+//                String.format("Caudal (Base: %.1f, Amplitud: %.1f)", this.baseDischarge, this.noiseAmplitude),
+//                timeInHours,
+//                dischargeProfile
+//        );
+//
+//        // --- 3. Visualización Sincronizada con CountDownLatch ---
+//        final CountDownLatch latch = new CountDownLatch(1);
+//        JFrame frame = new SwingWrapper<>(chart).displayChart();
+//
+//        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Importante para que se active windowClosed
+//        frame.addWindowListener(new WindowAdapter() {
+//            @Override
+//            public void windowClosed(WindowEvent e) {
+//                log.info("Ventana del gráfico cerrada. Se libera el bloqueo.");
+//                latch.countDown();
+//            }
+//        });
+//
+//        log.info("Mostrando gráfico. El hilo actual esperará hasta que la ventana se cierre.");
+//        latch.await();
+//    }
 }

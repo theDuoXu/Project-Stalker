@@ -9,7 +9,6 @@ import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverSectionType;
 import projectstalker.domain.river.RiverState;
-import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.i.ITransportSolver;
 import projectstalker.physics.impl.CpuFusedTransportSolver; // <--- NUEVO IMPORT
 import projectstalker.physics.impl.SplitOperatorTransportSolver;

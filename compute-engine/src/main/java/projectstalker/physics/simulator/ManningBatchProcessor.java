@@ -6,7 +6,6 @@ import projectstalker.config.SimulationConfig.GpuStrategy;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.domain.simulation.IManningResult;
-import projectstalker.domain.river.RiverState; // Asegurar import
 import projectstalker.factory.SimulationResultFactory;
 import projectstalker.physics.impl.ManningProfileCalculatorTask;
 import projectstalker.physics.jni.ManningGpuSolver;

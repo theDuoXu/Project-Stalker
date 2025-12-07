@@ -2,10 +2,29 @@ plugins {
     id 'org.springframework.boot'
     id 'me.champeau.jmh' // Benchmarks viven aquí
 }
+test {
+    // 1. Depender de la copia de la lib
+    dependsOn 'copyNativeLib'
+
+    // 2. Establecer la propiedad del sistema para que la JVM encuentre el .so / .dll
+    systemProperty "java.library.path", layout.buildDirectory.dir('libs/native').get().asFile.absolutePath
+    systemProperty "projectstalker.native.enabled", "true" // Si usas este flag en tu código
+
+    useJUnitPlatform {
+        excludeTags 'GPU', 'Benchmark'
+    }
+
+    // Opcional: Ayuda a ver el error real si no es ClassNotFound
+    testLogging {
+        exceptionFormat "full"
+        showCauses true
+    }
+}
 
 dependencies {
     // Dependencia del Dominio
     implementation project(':core-domain')
+    testImplementation project(':core-domain')
 
     // --- SPRING BOOT STACK ---
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -20,7 +39,7 @@ dependencies {
     implementation 'org.jdbi:jdbi3-postgres:3.45.2'
 
     // --- LOGGING IMPLEMENTATION (Backend) ---
-    runtimeOnly 'ch.qos.logback:logback-classic:1.5.13'
+    implementation 'org.springframework.boot:spring-boot-starter-logging'
 
     // --- JMH (Benchmarks) ---
     jmhImplementation 'org.openjdk.jmh:jmh-core:1.37'

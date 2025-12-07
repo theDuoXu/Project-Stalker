@@ -15,6 +15,7 @@ application {
 dependencies {
     // Dependencia del Dominio
     implementation project(':core-domain')
+    testImplementation project(':core-domain')
 
     // --- CLIENTE HTTP & SERIALIZACIÓN ---
     // Usamos Java 21 HttpClient (Nativo)

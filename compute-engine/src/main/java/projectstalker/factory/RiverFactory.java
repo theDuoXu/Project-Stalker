@@ -6,8 +6,6 @@ import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.physics.solver.ManningEquationSolver;
 
-import java.util.Arrays;
-
 public class RiverFactory {
 
     private static final float MIN_DEPTH = 0.001f; // 1mm de agua mínima para evitar div/0

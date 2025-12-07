@@ -1,16 +1,10 @@
 package projectstalker.physics.model;
 
-import lombok.extern.slf4j.Slf4j; 
-import org.knowm.xchart.SwingWrapper; 
-import org.knowm.xchart.XYChart; 
-import org.knowm.xchart.XYChartBuilder; 
+import lombok.extern.slf4j.Slf4j;
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.utils.FastNoiseLite;
 
-import javax.swing.*; 
-import java.awt.event.WindowAdapter; 
-import java.awt.event.WindowEvent; 
 import java.util.concurrent.CountDownLatch; 
 import java.util.stream.DoubleStream;
 import java.util.stream.IntStream;
@@ -119,51 +113,51 @@ public class RiverTemperatureModel {
     private float calculateNoiseEffect(int cellIndex) {
         return tempNoise.GetNoise(cellIndex, 0) * config.temperatureNoiseAmplitude();
     }
-    /**
-     * Genera y muestra un gráfico interactivo del perfil de temperaturas a lo largo del río
-     * para un instante de tiempo específico.
-     * <p>
-     * El método bloquea el hilo que lo llama hasta que el usuario cierra la ventana.
-     *
-     * @param currentTimeInSeconds El instante de tiempo para el cual se calculará y mostrará el perfil.
-     * @throws InterruptedException si el hilo es interrumpido mientras espera.
-     */
-    public void displayProfileChart(double currentTimeInSeconds) throws InterruptedException {
-        // --- 1. Generación de Datos ---
-        float[] fTemperatureProfile = this.calculate(currentTimeInSeconds);
-        double[] temperatureProfile = IntStream.range(0, fTemperatureProfile.length)
-                .mapToDouble(i -> fTemperatureProfile[i])
-                .toArray(); // Y-Axis cast to double
-        double[] distanceInMeters = DoubleStream.iterate(0, d -> d + geometry.getSpatialResolution())
-                .limit(temperatureProfile.length)
-                .toArray(); // X-Axis
-
-        // --- 2. Creación del Gráfico con XChart ---
-        XYChart chart = new XYChartBuilder()
-                .width(900)
-                .height(600)
-                .title("Perfil de Temperatura del Río")
-                .xAxisTitle("Distancia desde la cabecera (m)")
-                .yAxisTitle("Temperatura (°C)")
-                .build();
-
-        chart.getStyler().setMarkerSize(0);
-        chart.addSeries("Temperatura", distanceInMeters, temperatureProfile);
-
-        // --- 3. Visualización Sincronizada ---
-        final CountDownLatch latch = new CountDownLatch(1);
-        JFrame frame = new SwingWrapper<>(chart).displayChart();
-
-        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        frame.addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosed(WindowEvent e) {
-                log.info("Ventana del gráfico de temperatura cerrada. Se libera el bloqueo.");
-                latch.countDown();
-            }
-        });
-
-        log.info("Mostrando gráfico de temperatura. El hilo esperará al cierre de la ventana.");
-        latch.await();
-    }
+//    /**
+//     * Genera y muestra un gráfico interactivo del perfil de temperaturas a lo largo del río
+//     * para un instante de tiempo específico.
+//     * <p>
+//     * El método bloquea el hilo que lo llama hasta que el usuario cierra la ventana.
+//     *
+//     * @param currentTimeInSeconds El instante de tiempo para el cual se calculará y mostrará el perfil.
+//     * @throws InterruptedException si el hilo es interrumpido mientras espera.
+//     */
+//    public void displayProfileChart(double currentTimeInSeconds) throws InterruptedException {
+//        // --- 1. Generación de Datos ---
+//        float[] fTemperatureProfile = this.calculate(currentTimeInSeconds);
+//        double[] temperatureProfile = IntStream.range(0, fTemperatureProfile.length)
+//                .mapToDouble(i -> fTemperatureProfile[i])
+//                .toArray(); // Y-Axis cast to double
+//        double[] distanceInMeters = DoubleStream.iterate(0, d -> d + geometry.getSpatialResolution())
+//                .limit(temperatureProfile.length)
+//                .toArray(); // X-Axis
+//
+//        // --- 2. Creación del Gráfico con XChart ---
+//        XYChart chart = new XYChartBuilder()
+//                .width(900)
+//                .height(600)
+//                .title("Perfil de Temperatura del Río")
+//                .xAxisTitle("Distancia desde la cabecera (m)")
+//                .yAxisTitle("Temperatura (°C)")
+//                .build();
+//
+//        chart.getStyler().setMarkerSize(0);
+//        chart.addSeries("Temperatura", distanceInMeters, temperatureProfile);
+//
+//        // --- 3. Visualización Sincronizada ---
+//        final CountDownLatch latch = new CountDownLatch(1);
+//        JFrame frame = new SwingWrapper<>(chart).displayChart();
+//
+//        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+//        frame.addWindowListener(new WindowAdapter() {
+//            @Override
+//            public void windowClosed(WindowEvent e) {
+//                log.info("Ventana del gráfico de temperatura cerrada. Se libera el bloqueo.");
+//                latch.countDown();
+//            }
+//        });
+//
+//        log.info("Mostrando gráfico de temperatura. El hilo esperará al cierre de la ventana.");
+//        latch.await();
+//    }
 }

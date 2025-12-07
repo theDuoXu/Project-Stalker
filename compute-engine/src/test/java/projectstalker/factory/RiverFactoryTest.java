@@ -10,7 +10,6 @@ import projectstalker.domain.river.InitialRiver;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 
-import java.util.Arrays;
 import java.util.DoubleSummaryStatistics;
 import java.util.stream.IntStream;
 

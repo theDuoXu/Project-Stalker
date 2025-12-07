@@ -6,7 +6,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.config.RiverConfig;
-import projectstalker.factory.RiverGeometryFactory;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;

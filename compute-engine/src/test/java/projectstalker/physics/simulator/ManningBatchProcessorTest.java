@@ -10,15 +10,12 @@ import projectstalker.config.SimulationConfig;
 import projectstalker.config.SimulationConfig.GpuStrategy;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.domain.simulation.ChunkedManningResult;
 import projectstalker.domain.simulation.IManningResult;
 import projectstalker.domain.simulation.StridedManningResult;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.physics.jni.ManningGpuSolver;
 
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;

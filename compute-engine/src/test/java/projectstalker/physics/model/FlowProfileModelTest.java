@@ -12,25 +12,25 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @Slf4j
 class FlowProfileModelTest {
-    @Disabled("Desactivado para permitir tests sin intervención humana, ya que la ventana bloquea hasta que se cierre")
-    @Test
-    @DisplayName("Visual Test: Debería mostrar una gráfica del perfil de caudales")
-    void visualizeProfile() throws InterruptedException {
-        // --- 1. Configuración ---
-        final FlowProfileModel generator = new FlowProfileModel(
-                12345,      // seed
-                150.0,      // baseDischarge
-                75.0,       // noiseAmplitude
-                0.00005f    // noiseFrequency
-        );
-
-        // --- 2. Simulación y Visualización ---
-        final double totalDays = 10;
-        final double endTimeInSeconds = totalDays * 24 * 3600;
-        final double timeStepInSeconds = 3600; // Cada hora
-
-        generator.displayProfileChart(0, endTimeInSeconds, timeStepInSeconds);
-    }
+//    @Disabled("Desactivado para permitir tests sin intervención humana, ya que la ventana bloquea hasta que se cierre")
+//    @Test
+//    @DisplayName("Visual Test: Debería mostrar una gráfica del perfil de caudales")
+//    void visualizeProfile() throws InterruptedException {
+//        // --- 1. Configuración ---
+//        final FlowProfileModel generator = new FlowProfileModel(
+//                12345,      // seed
+//                150.0,      // baseDischarge
+//                75.0,       // noiseAmplitude
+//                0.00005f    // noiseFrequency
+//        );
+//
+//        // --- 2. Simulación y Visualización ---
+//        final double totalDays = 10;
+//        final double endTimeInSeconds = totalDays * 24 * 3600;
+//        final double timeStepInSeconds = 3600; // Cada hora
+//
+//        generator.displayProfileChart(0, endTimeInSeconds, timeStepInSeconds);
+//    }
 
     @Test
     @DisplayName("Logic Test: Should generate a profile with the correct number of steps")

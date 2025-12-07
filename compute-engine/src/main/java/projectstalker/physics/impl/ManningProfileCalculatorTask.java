@@ -3,7 +3,6 @@ package projectstalker.physics.impl;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import lombok.With;
 import lombok.extern.slf4j.Slf4j;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.physics.solver.ManningEquationSolver;
