@@ -3,6 +3,7 @@
 *.xlsx
 *.csv
 *.xml
+*.sqlite
 # ignorar configuración de jetbrains
 .idea/
 .gradle/
