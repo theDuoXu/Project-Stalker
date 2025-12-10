@@ -12,7 +12,7 @@ HEADERS = {
     'Referer': 'https://saihtajo.chtajo.es/'
 }
 # Pequeña pausa entre peticiones para no saturar el servidor
-REQUEST_DELAY_SECONDS = 0.5
+REQUEST_DELAY_SECONDS = 0.2
 
 # --- SCRIPT ---
 
