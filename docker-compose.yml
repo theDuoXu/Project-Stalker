@@ -1,0 +1,115 @@
+version: '3.9'
+
+services:
+
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: stalker-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: stalker_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: stalker_is_an_academic_project
+    volumes:
+      # Persistencia real en disco local para configs y usuarios
+      - ./infra/postgres_data:/var/lib/postgresql/data
+    networks:
+      - stalker-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: stalker-redis
+    restart: always
+    # OPTIMIZACIÓN HPC:
+    # 1. --maxmemory 8gb: Reservamos 8GB de RAM para resultados
+    #    Queremos que quepan 2 o 3 simulaciones de 2GB enteras.
+    # 2. --maxmemory-policy allkeys-lru: Si se llena, borra lo más viejo.
+    # 3. --save "": DESACTIVAR persistencia a disco. Velocidad pura.
+    command: >
+      --maxmemory 8gb
+      --maxmemory-policy allkeys-lru
+      --save "" 
+      --appendonly no
+    networks:
+      - stalker-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 3
+
+  # ==========================================
+  # 2. CAPA DE INTELIGENCIA (Python)
+  # ==========================================
+
+  inference-engine:
+    build:
+      context: ./python
+      dockerfile: Dockerfile.inference.inference
+    container_name: stalker-inference
+    restart: unless-stopped
+    volumes:
+      # Montamos los datos (Censo UNED) para lectura en tiempo real
+      - ./data:/app/data
+    environment:
+      - DATA_PATH=/app/data/censo_vertidos.json
+    networks:
+      - stalker-net
+    # No exponemos puertos al host, solo es accesible por compute-engine
+
+  # ==========================================
+  # 3. CAPA DE CÓMPUTO (Java + CUDA)
+  # ==========================================
+
+  compute-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.inference.compute
+    container_name: stalker-compute
+    restart: unless-stopped
+    ports:
+      - "8080:8080" # El puerto que atacarás desde la UI o el Túnel
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, compute, utility]
+    environment:
+      # Conexión Base de Datos
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/stalker_db
+      SPRING_DATASOURCE_USERNAME: admin
+      SPRING_DATASOURCE_PASSWORD: this_is_just_an_academic_project
+
+      # Conexión Redis
+      SPRING_DATA_REDIS_HOST: redis-cache
+      SPRING_DATA_REDIS_PORT: 6379
+
+      # Conexión Microservicio Inferencia
+      APP_INFERENCE_SERVICE_URL: http://inference-engine:8000
+
+      # SEGURIDAD (Conexión a tu VPS Keycloak)
+      # Spring validará los tokens contra tu servidor público
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: https://auth.protonenergyindustries.com/realms/project-stalker
+
+      # Configuración HPC
+      PROJECTSTALKER_NATIVE_ENABLED: "true"
+
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      inference-engine:
+        condition: service_started
+    networks:
+      - stalker-net
+
+networks:
+  stalker-net:
+    driver: bridge
