@@ -4,7 +4,7 @@ import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.InitialRiver;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.physics.solver.ManningEquationSolver;
+import projectstalker.physics.solver.impl.ManningEquationSolver;
 
 public class RiverFactory {
 

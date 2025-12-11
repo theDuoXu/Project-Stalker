@@ -1,14 +1,14 @@
-package projectstalker.physics.impl;
+package projectstalker.physics.solver.impl;
 
 import lombok.Builder;
 import lombok.With;
 import projectstalker.domain.river.RiverGeometry;
-import projectstalker.physics.i.IReactionSolver;
+import projectstalker.physics.solver.ReactionSolver;
 import java.util.stream.IntStream;
 
 @Builder
 @With
-public class FirstOrderReactionSolver implements IReactionSolver {
+public class FirstOrderReactionSolver implements ReactionSolver {
 
     // Configuración inmutable
     private final double thetaArrhenius;

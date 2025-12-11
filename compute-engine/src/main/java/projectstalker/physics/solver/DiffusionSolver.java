@@ -1,8 +1,8 @@
-package projectstalker.physics.i;
+package projectstalker.physics.solver;
 
 import projectstalker.domain.river.RiverGeometry;
 
-public interface IDiffusionSolver extends ISolverComponent {
+public interface DiffusionSolver extends SolverComponent {
     /**
      * Calcula la nueva concentración considerando SOLO la dispersión.
      * @param concentration Array actual de concentraciones [mg/L]

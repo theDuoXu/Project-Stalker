@@ -1,4 +1,4 @@
-package projectstalker.physics.impl;
+package projectstalker.physics.solver.impl;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,7 +27,7 @@ class SequentialManningHydrologySolverTest {
 
     private RiverConfig config;
     private RiverGeometry riverGeometry;
-    private SequentialManningHydrologySolver solver;
+    private projectstalker.physics.solver.impl.SequentialManningHydrologySolver solver;
 
     @BeforeEach
     void setUp() {
@@ -35,7 +35,7 @@ class SequentialManningHydrologySolverTest {
         config = RiverConfig.getTestingRiver();
         RiverGeometryFactory factory = new RiverGeometryFactory();
         riverGeometry = factory.createRealisticRiver(config);
-        solver = new SequentialManningHydrologySolver();
+        solver = new projectstalker.physics.solver.impl.SequentialManningHydrologySolver();
         log.debug("Entorno de prueba para ManningHydrologySolver inicializado.");
     }
 

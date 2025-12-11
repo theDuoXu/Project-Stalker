@@ -1,13 +1,13 @@
-package projectstalker.physics.impl;
+package projectstalker.physics.solver.impl;
 
 import lombok.Builder;
 import lombok.With;
 import projectstalker.domain.river.RiverGeometry;
-import projectstalker.physics.i.IAdvectionSolver;
+import projectstalker.physics.solver.AdvectionSolver;
 
 @Builder
 @With
-public class MusclAdvectionSolver implements IAdvectionSolver {
+public class MusclAdvectionSolver implements AdvectionSolver {
 
     public enum Limiter { MINMOD, SUPERBEE, VAN_LEER }
 

@@ -3,7 +3,7 @@ package projectstalker.physics.jni;
 import lombok.extern.slf4j.Slf4j;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.physics.i.ITransportSolver;
+import projectstalker.physics.solver.TransportSolver;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -16,7 +16,7 @@ import java.nio.FloatBuffer;
  * Gestiona una caché de Direct Buffers para minimizar el overhead de transferencia de memoria.
  */
 @Slf4j
-public class GpuMusclTransportSolver implements ITransportSolver {
+public class GpuMusclTransportSolver implements TransportSolver {
 
     private final INativeTransportSolver nativeSolver;
     private double cflSafetyFactor = 0.9; // Mismo factor que en CPU

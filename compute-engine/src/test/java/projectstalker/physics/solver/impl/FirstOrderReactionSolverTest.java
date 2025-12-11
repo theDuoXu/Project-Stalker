@@ -1,4 +1,4 @@
-package projectstalker.physics.impl;
+package projectstalker.physics.solver.impl;
 
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,7 +12,7 @@ import static org.mockito.Mockito.*;
 @Slf4j
 class FirstOrderReactionSolverTest {
 
-    private FirstOrderReactionSolver solver;
+    private projectstalker.physics.solver.impl.FirstOrderReactionSolver solver;
     private RiverGeometry mockGeometry;
 
     // Constantes para verificación manual
@@ -23,7 +23,7 @@ class FirstOrderReactionSolverTest {
     @BeforeEach
     void setUp() {
         // Solver configurado explícitamente
-        solver = new FirstOrderReactionSolver(THETA, REF_TEMP, false);
+        solver = new projectstalker.physics.solver.impl.FirstOrderReactionSolver(THETA, REF_TEMP, false);
 
         mockGeometry = mock(RiverGeometry.class);
         when(mockGeometry.getBaseDecayAt(anyInt())).thenReturn(K_BASE);

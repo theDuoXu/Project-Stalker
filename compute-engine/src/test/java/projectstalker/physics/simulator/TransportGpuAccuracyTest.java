@@ -5,13 +5,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverSectionType;
 import projectstalker.domain.river.RiverState;
-import projectstalker.physics.i.ITransportSolver;
-import projectstalker.physics.impl.CpuFusedTransportSolver; // <--- NUEVO IMPORT
-import projectstalker.physics.impl.SplitOperatorTransportSolver;
+import projectstalker.physics.solver.TransportSolver;
+import projectstalker.physics.solver.impl.CpuFusedTransportSolver; // <--- NUEVO IMPORT
+import projectstalker.physics.solver.impl.SplitOperatorTransportSolver;
 import projectstalker.physics.jni.GpuMusclTransportSolver;
 
 import java.util.Arrays;
@@ -22,9 +21,9 @@ import static org.junit.jupiter.api.Assertions.fail;
 @Slf4j
 class TransportGpuAccuracyTest {
 
-    private ITransportSolver cpuSplitSolver; // Solver Clásico (Secuencial)
-    private ITransportSolver cpuFusedSolver; // Solver Referencia (Simultáneo)
-    private ITransportSolver gpuSolver;
+    private TransportSolver cpuSplitSolver; // Solver Clásico (Secuencial)
+    private TransportSolver cpuFusedSolver; // Solver Referencia (Simultáneo)
+    private TransportSolver gpuSolver;
 
     private final int CELL_COUNT = 50;
     private final float DX = 10.0f;
@@ -89,7 +88,7 @@ class TransportGpuAccuracyTest {
 
     // --- HELPERS ---
 
-    private void runParityTest(RiverState initialState, RiverGeometry geometry, float dt, String testName, ITransportSolver cpuReference) {
+    private void runParityTest(RiverState initialState, RiverGeometry geometry, float dt, String testName, TransportSolver cpuReference) {
         log.info("[{}] Ejecutando CPU ({}) ...", testName, cpuReference.getSolverName());
         long t1 = System.nanoTime();
         RiverState resCpu = cpuReference.solve(initialState, geometry, dt);

@@ -1,11 +1,11 @@
-package projectstalker.physics.impl;
+package projectstalker.physics.solver.impl;
 
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import projectstalker.domain.river.RiverGeometry;
-import projectstalker.physics.impl.MusclAdvectionSolver.Limiter;
+import projectstalker.physics.solver.impl.MusclAdvectionSolver.Limiter;
 
 import java.util.Arrays;
 
@@ -15,7 +15,7 @@ import static org.mockito.Mockito.*;
 @Slf4j
 class MusclAdvectionSolverTest {
 
-    private MusclAdvectionSolver solver;
+    private projectstalker.physics.solver.impl.MusclAdvectionSolver solver;
     private RiverGeometry mockGeometry;
 
     // Configuración física simple
@@ -25,7 +25,7 @@ class MusclAdvectionSolverTest {
     @BeforeEach
     void setUp() {
         // Usamos MinMod (el más estable) y entrada limpia (0.0)
-        solver = new MusclAdvectionSolver(0.0f, Limiter.MINMOD);
+        solver = new projectstalker.physics.solver.impl.MusclAdvectionSolver(0.0f, Limiter.MINMOD);
 
         mockGeometry = mock(RiverGeometry.class);
         when(mockGeometry.getSpatialResolution()).thenReturn(DX);

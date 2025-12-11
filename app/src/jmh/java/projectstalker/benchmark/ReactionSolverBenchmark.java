@@ -3,7 +3,7 @@ package projectstalker.benchmark;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 import projectstalker.domain.river.RiverGeometry;
-import projectstalker.physics.impl.FirstOrderReactionSolver;
+import projectstalker.physics.solver.impl.FirstOrderReactionSolver;
 
 import java.util.concurrent.TimeUnit;
 import java.util.Random;

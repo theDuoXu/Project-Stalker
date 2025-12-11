@@ -1,11 +1,11 @@
-package projectstalker.physics.i;
+package projectstalker.physics.solver;
 
 /**
  * Contrato base para cualquier componente numérico del sistema.
  * Permite tratar a todos los solvers de forma polimórfica para tareas
  * de logging, identificación y depuración, sin importar su física.
  */
-public interface ISolverComponent {
+public interface SolverComponent {
     /**
      * Nombre corto del algoritmo (ej: "MUSCL-Hancock", "Crank-Nicolson").
      */

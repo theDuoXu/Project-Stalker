@@ -7,7 +7,7 @@ import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.domain.simulation.IManningResult;
 import projectstalker.factory.SimulationResultFactory;
-import projectstalker.physics.impl.ManningProfileCalculatorTask;
+import projectstalker.physics.solver.impl.ManningProfileCalculatorTask;
 import projectstalker.physics.jni.ManningGpuSolver;
 
 import java.util.ArrayList;

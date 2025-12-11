@@ -1,11 +1,8 @@
-package projectstalker.physics.impl;
+package projectstalker.physics.solver.impl;
 
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.physics.i.IAdvectionSolver;
-import projectstalker.physics.i.IDiffusionSolver;
-import projectstalker.physics.i.IReactionSolver;
-import projectstalker.physics.i.ITransportSolver;
+import projectstalker.physics.solver.*;
 
 /**
  * Implementación de referencia en CPU que imita el comportamiento del Kernel CUDA "Fused".
@@ -16,19 +13,19 @@ import projectstalker.physics.i.ITransportSolver;
  * <p>
  * La Reacción se aplica secuencialmente al final, igual que en el Kernel v2.
  */
-public class CpuFusedTransportSolver implements ITransportSolver {
+public class CpuFusedTransportSolver implements TransportSolver {
 
-    private final IAdvectionSolver advectionSolver;
-    private final IDiffusionSolver diffusionSolver;
-    private final IReactionSolver reactionSolver;
+    private final AdvectionSolver advectionSolver;
+    private final DiffusionSolver diffusionSolver;
+    private final ReactionSolver reactionSolver;
 
     public CpuFusedTransportSolver() {
-        this(new MusclAdvectionSolver(), new CentralDiffusionSolver(), new FirstOrderReactionSolver());
+        this(new projectstalker.physics.solver.impl.MusclAdvectionSolver(), new projectstalker.physics.solver.impl.CentralDiffusionSolver(), new FirstOrderReactionSolver());
     }
 
-    public CpuFusedTransportSolver(IAdvectionSolver advectionSolver,
-                                   IDiffusionSolver diffusionSolver,
-                                   IReactionSolver reactionSolver) {
+    public CpuFusedTransportSolver(AdvectionSolver advectionSolver,
+                                   DiffusionSolver diffusionSolver,
+                                   ReactionSolver reactionSolver) {
         this.advectionSolver = advectionSolver;
         this.diffusionSolver = diffusionSolver;
         this.reactionSolver = reactionSolver;

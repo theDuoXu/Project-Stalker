@@ -9,8 +9,11 @@ import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.factory.RiverGeometryFactory;
-import projectstalker.physics.i.ITransportSolver;
-import projectstalker.physics.impl.SplitOperatorTransportSolver;
+import projectstalker.physics.solver.TransportSolver;
+import projectstalker.physics.solver.impl.CentralDiffusionSolver;
+import projectstalker.physics.solver.impl.FirstOrderReactionSolver;
+import projectstalker.physics.solver.impl.MusclAdvectionSolver;
+import projectstalker.physics.solver.impl.SplitOperatorTransportSolver;
 import projectstalker.physics.jni.GpuMusclTransportSolver;
 
 import java.util.Arrays;
@@ -22,8 +25,8 @@ public class TransportGpuBenchmark {
     private RiverGeometry geometry;
     private RiverState initialState;
 
-    private ITransportSolver cpuSolver;
-    private ITransportSolver gpuSolver;
+    private TransportSolver cpuSolver;
+    private TransportSolver gpuSolver;
 
     // --- CONFIGURACIÓN DE CARGA ---
     // 1 Millón de celdas para saturar la GPU y ver el speedup real
@@ -52,9 +55,9 @@ public class TransportGpuBenchmark {
         // 2. Solvers
         // Forzamos CFL 0.9 en ambos para garantizar paridad algorítmica
         this.cpuSolver = new SplitOperatorTransportSolver(
-                new projectstalker.physics.impl.MusclAdvectionSolver(),
-                new projectstalker.physics.impl.CentralDiffusionSolver(),
-                new projectstalker.physics.impl.FirstOrderReactionSolver(),
+                new MusclAdvectionSolver(),
+                new CentralDiffusionSolver(),
+                new FirstOrderReactionSolver(),
                 0.9
         );
 
@@ -151,7 +154,7 @@ public class TransportGpuBenchmark {
         }
     }
 
-    private double runIteration(ITransportSolver solver, float duration) {
+    private double runIteration(TransportSolver solver, float duration) {
         long start = System.nanoTime();
         solver.solve(initialState, geometry, duration);
         long end = System.nanoTime();

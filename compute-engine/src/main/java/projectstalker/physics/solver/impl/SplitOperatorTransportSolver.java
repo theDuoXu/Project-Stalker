@@ -1,14 +1,14 @@
-package projectstalker.physics.impl;
+package projectstalker.physics.solver.impl;
 
 import lombok.Builder;
 import lombok.With;
 import lombok.extern.slf4j.Slf4j;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.physics.i.IAdvectionSolver;
-import projectstalker.physics.i.IDiffusionSolver;
-import projectstalker.physics.i.IReactionSolver;
-import projectstalker.physics.i.ITransportSolver;
+import projectstalker.physics.solver.AdvectionSolver;
+import projectstalker.physics.solver.DiffusionSolver;
+import projectstalker.physics.solver.ReactionSolver;
+import projectstalker.physics.solver.TransportSolver;
 
 /**
  * Orquestador principal del transporte de contaminantes en CPU.
@@ -21,11 +21,11 @@ import projectstalker.physics.i.ITransportSolver;
 @Slf4j
 @With
 @Builder
-public class SplitOperatorTransportSolver implements ITransportSolver {
+public class SplitOperatorTransportSolver implements TransportSolver {
 
-    private final IAdvectionSolver advectionSolver;
-    private final IDiffusionSolver diffusionSolver;
-    private final IReactionSolver reactionSolver;
+    private final AdvectionSolver advectionSolver;
+    private final DiffusionSolver diffusionSolver;
+    private final ReactionSolver reactionSolver;
 
     // Factor de seguridad CFL (Courant-Friedrichs-Lewy).
     // Para esquemas explícitos, debe ser <= 1.0.
@@ -42,9 +42,9 @@ public class SplitOperatorTransportSolver implements ITransportSolver {
      * @param reactionSolver  Solver de reacción.
      * @param cflSafetyFactor Factor de seguridad CFL (típicamente 0.9). Si es <= 0, se fuerza a 0.9.
      */
-    public SplitOperatorTransportSolver(IAdvectionSolver advectionSolver,
-                                        IDiffusionSolver diffusionSolver,
-                                        IReactionSolver reactionSolver,
+    public SplitOperatorTransportSolver(AdvectionSolver advectionSolver,
+                                        DiffusionSolver diffusionSolver,
+                                        ReactionSolver reactionSolver,
                                         double cflSafetyFactor) {
         this.advectionSolver = advectionSolver;
         this.diffusionSolver = diffusionSolver;
@@ -57,9 +57,9 @@ public class SplitOperatorTransportSolver implements ITransportSolver {
      * Constructor de conveniencia.
      * Inicializa los solvers dados con el factor CFL por defecto (0.9).
      */
-    public SplitOperatorTransportSolver(IAdvectionSolver advectionSolver,
-                                        IDiffusionSolver diffusionSolver,
-                                        IReactionSolver reactionSolver) {
+    public SplitOperatorTransportSolver(AdvectionSolver advectionSolver,
+                                        DiffusionSolver diffusionSolver,
+                                        ReactionSolver reactionSolver) {
         this(advectionSolver, diffusionSolver, reactionSolver, 0.9);
     }
 
@@ -68,7 +68,7 @@ public class SplitOperatorTransportSolver implements ITransportSolver {
      * Utiliza las implementaciones estándar (MUSCL, Central, 1er Orden) y CFL 0.9.
      */
     public SplitOperatorTransportSolver() {
-        this(new MusclAdvectionSolver(), new CentralDiffusionSolver(), new FirstOrderReactionSolver(), 0.9);
+        this(new projectstalker.physics.solver.impl.MusclAdvectionSolver(), new projectstalker.physics.solver.impl.CentralDiffusionSolver(), new projectstalker.physics.solver.impl.FirstOrderReactionSolver(), 0.9);
     }
 
     @Override

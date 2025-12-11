@@ -1,11 +1,10 @@
-package projectstalker.physics.impl;
+package projectstalker.physics.solver.impl;
 
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
 import projectstalker.physics.model.RiverTemperatureModel;
-import projectstalker.physics.i.IHydrologySolver;
-import projectstalker.physics.solver.ManningEquationSolver;
+import projectstalker.physics.solver.HydrologySolver;
 
 /**
  * Implementación del motor de hidrología que utiliza la Ecuación de Manning
@@ -35,7 +34,7 @@ import projectstalker.physics.solver.ManningEquationSolver;
 
  */
 
-public class SequentialManningHydrologySolver implements IHydrologySolver {
+public class SequentialManningHydrologySolver implements HydrologySolver {
 
     /**
      * Calcula el siguiente estado del río a partir del estado actual.

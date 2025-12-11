@@ -1,13 +1,13 @@
-package projectstalker.physics.impl;
+package projectstalker.physics.solver.impl;
 
 import lombok.Builder;
 import lombok.With;
 import projectstalker.domain.river.RiverGeometry;
-import projectstalker.physics.i.IDiffusionSolver;
+import projectstalker.physics.solver.DiffusionSolver;
 
 @Builder
 @With
-public class CentralDiffusionSolver implements IDiffusionSolver {
+public class CentralDiffusionSolver implements DiffusionSolver {
 
     private final double minDiffusionCoefficient;
 

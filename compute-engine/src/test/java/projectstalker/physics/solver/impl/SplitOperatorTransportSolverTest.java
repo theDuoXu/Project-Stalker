@@ -1,4 +1,4 @@
-package projectstalker.physics.impl;
+package projectstalker.physics.solver.impl;
 
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
@@ -7,9 +7,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
-import projectstalker.physics.i.IAdvectionSolver;
-import projectstalker.physics.i.IDiffusionSolver;
-import projectstalker.physics.i.IReactionSolver;
+import projectstalker.physics.solver.AdvectionSolver;
+import projectstalker.physics.solver.DiffusionSolver;
+import projectstalker.physics.solver.ReactionSolver;
 
 import java.util.Arrays;
 
@@ -23,12 +23,12 @@ import static org.mockito.Mockito.*;
 @Slf4j
 class SplitOperatorTransportSolverTest {
 
-    private SplitOperatorTransportSolver orchestrator;
+    private projectstalker.physics.solver.impl.SplitOperatorTransportSolver orchestrator;
 
     // Mocks de los especialistas
-    private IAdvectionSolver mockAdvection;
-    private IDiffusionSolver mockDiffusion;
-    private IReactionSolver mockReaction;
+    private AdvectionSolver mockAdvection;
+    private DiffusionSolver mockDiffusion;
+    private ReactionSolver mockReaction;
 
     // Datos comunes
     private RiverGeometry mockGeometry;
@@ -39,13 +39,13 @@ class SplitOperatorTransportSolverTest {
     @BeforeEach
     void setUp() {
         // 1. Crear Mocks
-        mockAdvection = mock(IAdvectionSolver.class);
-        mockDiffusion = mock(IDiffusionSolver.class);
-        mockReaction = mock(IReactionSolver.class);
+        mockAdvection = mock(AdvectionSolver.class);
+        mockDiffusion = mock(DiffusionSolver.class);
+        mockReaction = mock(ReactionSolver.class);
         mockGeometry = mock(RiverGeometry.class);
 
         // Configuración del Solver con CFL = 1.0 para facilitar cálculos mentales
-        orchestrator = new SplitOperatorTransportSolver(
+        orchestrator = new projectstalker.physics.solver.impl.SplitOperatorTransportSolver(
                 mockAdvection, mockDiffusion, mockReaction, 1.0
         );
 

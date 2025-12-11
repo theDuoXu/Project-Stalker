@@ -1,11 +1,10 @@
 // Fichero: projectstalker/physics/impl/ManningProfileCalculatorTask.java
-package projectstalker.physics.impl;
+package projectstalker.physics.solver.impl;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import projectstalker.domain.river.RiverGeometry;
-import projectstalker.physics.solver.ManningEquationSolver;
 
 import java.util.concurrent.Callable;
 

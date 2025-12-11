@@ -1,4 +1,4 @@
-package projectstalker.physics.impl;
+package projectstalker.physics.solver.impl;
 
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,7 +14,7 @@ import static org.mockito.Mockito.*;
 @Slf4j
 class CentralDiffusionSolverTest {
 
-    private CentralDiffusionSolver solver;
+    private projectstalker.physics.solver.impl.CentralDiffusionSolver solver;
     private RiverGeometry mockGeometry;
 
     // Parámetros de prueba
@@ -24,7 +24,7 @@ class CentralDiffusionSolverTest {
 
     @BeforeEach
     void setUp() {
-        solver = new CentralDiffusionSolver(MIN_DIFFUSION);
+        solver = new projectstalker.physics.solver.impl.CentralDiffusionSolver(MIN_DIFFUSION);
 
         mockGeometry = mock(RiverGeometry.class);
         when(mockGeometry.getSpatialResolution()).thenReturn(DX);

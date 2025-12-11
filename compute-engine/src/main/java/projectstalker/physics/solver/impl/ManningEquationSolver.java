@@ -1,4 +1,4 @@
-package projectstalker.physics.solver;
+package projectstalker.physics.solver.impl;
 
 import projectstalker.domain.river.RiverGeometry;
 

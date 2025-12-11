@@ -1,8 +1,8 @@
-package projectstalker.physics.i;
+package projectstalker.physics.solver;
 
 import projectstalker.domain.river.RiverGeometry;
 
-public interface IReactionSolver extends ISolverComponent {
+public interface ReactionSolver extends SolverComponent {
     /**
      * Calcula la nueva concentración considerando SOLO la química.
      */

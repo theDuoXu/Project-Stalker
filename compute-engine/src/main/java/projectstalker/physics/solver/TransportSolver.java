@@ -1,4 +1,4 @@
-package projectstalker.physics.i;
+package projectstalker.physics.solver;
 
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.domain.river.RiverState;
@@ -18,7 +18,7 @@ import projectstalker.domain.river.RiverState;
  * @version 1.0
  * @since 2025-10-14
  */
-public interface ITransportSolver {
+public interface TransportSolver {
 
     /**
      * Resuelve la evolución del contaminante para un intervalo de tiempo global {@code dt}.
