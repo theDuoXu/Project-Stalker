@@ -1,25 +1,63 @@
 import requests
 import json
 import os
+import re
 import time
 
 # --- CONFIGURACIÓN ---
 INPUT_FILE = 'saica_stations_master_list.json'
-OUTPUT_DIR = 'data'
+# Directorio base donde se guardarán los batches
+BASE_OUTPUT_DIR = '/home/duo/Projects/proyecto-computacion-I/data/datasets/raw'
 BASE_URL = "https://saihtajo.chtajo.es/"
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     'Referer': 'https://saihtajo.chtajo.es/'
 }
-# Pequeña pausa entre peticiones para no saturar el servidor
 REQUEST_DELAY_SECONDS = 0.2
 
-# --- SCRIPT ---
 
-# 1. Crear el directorio de salida si no existe
-if not os.path.exists(OUTPUT_DIR):
-    os.makedirs(OUTPUT_DIR)
-    print(f"Directorio '{OUTPUT_DIR}' creado.")
+# --- FUNCIONES AUXILIARES ---
+
+def get_next_batch_dir(base_path):
+    """
+    Busca carpetas que empiecen por 'batch' seguido de un número,
+    encuentra el número más alto y devuelve la ruta para el siguiente batch.
+    """
+    # Si el directorio base no existe, lo creamos
+    if not os.path.exists(base_path):
+        os.makedirs(base_path)
+        print(f"Directorio base creado: {base_path}")
+        return os.path.join(base_path, 'batch1')
+
+    # Listar subdirectorios existentes
+    subdirs = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
+
+    # Filtrar solo los que siguen el patrón 'batchN'
+    batch_numbers = []
+    for d in subdirs:
+        match = re.match(r'^batch(\d+)$', d)
+        if match:
+            batch_numbers.append(int(match.group(1)))
+
+    # Determinar el siguiente número
+    if not batch_numbers:
+        next_num = 1
+    else:
+        next_num = max(batch_numbers) + 1
+
+    return os.path.join(base_path, f'batch{next_num}')
+
+
+# --- SCRIPT PRINCIPAL ---
+
+# 1. Determinar y crear el directorio de salida (batch)
+output_dir = get_next_batch_dir(BASE_OUTPUT_DIR)
+
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+    print(f"📂 Carpeta de destino creada: {output_dir}")
+else:
+    print(f"📂 Usando carpeta de destino: {output_dir}")
 
 # 2. Cargar la lista de estaciones
 try:
@@ -76,11 +114,13 @@ for i, station in enumerate(stations):
                     data_response = requests.get(full_export_url, headers=HEADERS)
                     data_response.raise_for_status()
 
-                    # Guardar los datos en un fichero
-                    output_filename = os.path.join(OUTPUT_DIR, f"{station_code}_{metric_name.replace(' ', '_')}.json")
+                    # Guardar los datos en la carpeta del batch correspondiente
+                    filename = f"{station_code}_{metric_name.replace(' ', '_')}.json"
+                    output_filename = os.path.join(output_dir, filename)
+
                     with open(output_filename, 'w', encoding='utf-8') as f:
                         json.dump(data_response.json(), f, ensure_ascii=False, indent=4)
-                    print(f" ✅ Guardado en {output_filename}")
+                    print(f" ✅ Guardado")
                 else:
                     print(f"      -> ⚠️ No se encontró 'urlexportarjson' para la métrica '{metric_name}'.")
 
@@ -97,4 +137,4 @@ for i, station in enumerate(stations):
     print("-" * 20)
 
 print("\n🎉 ¡Proceso de recolección de datos finalizado! 🎉")
-print(f"Revisa la carpeta '{OUTPUT_DIR}' para ver los ficheros JSON descargados.")
+print(f"Los ficheros se han guardado en: '{output_dir}'")
