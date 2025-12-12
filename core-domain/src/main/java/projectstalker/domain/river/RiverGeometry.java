@@ -3,6 +3,7 @@ package projectstalker.domain.river;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
+import lombok.Data;
 import lombok.Getter;
 import lombok.With;
 
@@ -25,25 +26,17 @@ import java.util.Arrays;
  */
 @Builder
 @With
+@Data
 public final class RiverGeometry {
 
-    @Getter
     private final int cellCount;
-    @Getter
     private final float spatialResolution;
-    @Getter
     private final float[] elevationProfile;
-    @Getter
     private final float[] bottomWidth;
-    @Getter
     private final float[] sideSlope;
-    @Getter
     private final float[] manningCoefficient;
-    @Getter
     private final float[] baseDecayCoefficientAt20C;
-    @Getter
     private final float[] phProfile;
-    @Getter
     private final float[] dispersionAlpha;
     private final RiverSectionType[] sectionTypes;
 
@@ -66,7 +59,7 @@ public final class RiverGeometry {
      */
     @JsonCreator
     public RiverGeometry(@JsonProperty("cellCount") int cellCount,
-                         @JsonProperty("dx") float spatialResolution,
+                         @JsonProperty("spatialResolution") float spatialResolution,
                          @JsonProperty("elevationProfile") float[] elevationProfile,
                          @JsonProperty("bottomWidth") float[] bottomWidth,
                          @JsonProperty("sideSlope") float[] sideSlope,
@@ -363,6 +356,8 @@ public final class RiverGeometry {
     public float[] clonePhProfile() {
         return phProfile.clone();
     }
+
+    public float[] cloneDispersionAlpha(){return dispersionAlpha.clone();}
 
     public RiverSectionType[] cloneSectionTypes() {
         return sectionTypes.clone();
