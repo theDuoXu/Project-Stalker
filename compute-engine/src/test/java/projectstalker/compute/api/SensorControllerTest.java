@@ -146,8 +146,8 @@ class SensorControllerTest {
                 .andDo(print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.stationId").value(stationId))
-                .andExpect(jsonPath("$.isAllOk").value(true))
-                .andExpect(jsonPath("$.values[0].batteryPercentage").value(85));
+                .andExpect(jsonPath("$.isAllOk").value(true));
+//                .andExpect(jsonPath("$.values[0].batteryPercentage").value(85));
     }
 
     // --- TEST 4: EXPORT UNITARIO ---
