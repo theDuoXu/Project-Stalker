@@ -10,7 +10,7 @@ import projectstalker.domain.river.RiverState;
 import projectstalker.domain.simulation.IManningResult;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.factory.RiverFactory;
-import projectstalker.physics.model.FlowProfileModel;
+import projectstalker.physics.model.RandomFlowProfileGenerator;
 import projectstalker.physics.model.RiverPhModel;
 import projectstalker.physics.model.RiverTemperatureModel;
 
@@ -29,7 +29,7 @@ public class ManningSimulator implements AutoCloseable {
     private final RiverGeometry geometry;
     private final SimulationConfig simulationConfig;
 
-    private final FlowProfileModel flowGenerator;
+    private final RandomFlowProfileGenerator flowGenerator;
     private final RiverTemperatureModel temperatureModel; // (Mantenido para futura integración)
     private final RiverPhModel phModel;                   // (Mantenido para futura integración)
 
@@ -45,7 +45,7 @@ public class ManningSimulator implements AutoCloseable {
         this.geometry = new RiverGeometryFactory().createRealisticRiver(riverConfig);
 
         // 2. Modelos Auxiliares (Condiciones de Frontera)
-        this.flowGenerator = new FlowProfileModel((int) riverConfig.seed(), simulationConfig.getFlowConfig());
+        this.flowGenerator = new RandomFlowProfileGenerator((int) riverConfig.seed(), simulationConfig.getFlowConfig());
         this.temperatureModel = new RiverTemperatureModel(riverConfig, this.geometry);
         this.phModel = new RiverPhModel(this.geometry);
 
