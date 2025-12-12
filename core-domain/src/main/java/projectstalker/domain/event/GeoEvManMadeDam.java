@@ -1,5 +1,9 @@
 package projectstalker.domain.event;
 
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.With;
 import projectstalker.domain.river.RiverSectionType;
 
 /**
@@ -14,6 +18,10 @@ import projectstalker.domain.river.RiverSectionType;
  * original (presa nueva) y un perfil de colmatación total (presa antigua).</li>
  * </ol>
  */
+@Data
+@NoArgsConstructor // Este es para jackson
+@With
+@Builder
 public final class GeoEvManMadeDam implements GeologicalEvent {
 
     /**
@@ -28,10 +36,10 @@ public final class GeoEvManMadeDam implements GeologicalEvent {
      */
     private static final double TIME_TO_FULL_SEDIMENTATION = 100.0; // en años
 
-    private final float position;
-    private final float crestElevation;
-    private final float reservoirWidth;
-    private final int damAge;
+    private float position;
+    private float crestElevation;
+    private float reservoirWidth;
+    private int damAge;
 
     /**
      * Constructor para un evento de presa artificial.
