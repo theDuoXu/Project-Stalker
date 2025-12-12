@@ -1,5 +1,6 @@
 package projectstalker.factory;
 
+import org.springframework.stereotype.Component;
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.event.GeologicalEvent;
 import projectstalker.domain.river.RiverSectionType;
@@ -43,6 +44,7 @@ import java.util.List;
  * @version 1.2
  * @since 2025-10-13
  */
+@Component
 public class RiverGeometryFactory {
 
     /**
@@ -219,7 +221,11 @@ public class RiverGeometryFactory {
 
         // --- 5. Construir y devolver el nuevo objeto RiverGeometry final ---
         // El constructor validará la consistencia física del resultado final.
-        return baseRiver.withSectionTypes(newSectionTypes);
+        return baseRiver
+                .withSectionTypes(newSectionTypes)
+                .withElevationProfile(newElevationProfile)
+                .withManningCoefficient(newManningCoefficient)
+                .withBottomWidth(newBottomWidth);
     }
 
     /**
