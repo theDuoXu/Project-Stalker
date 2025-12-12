@@ -31,7 +31,15 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server' // Validación JWT
     implementation 'org.springframework.boot:spring-boot-starter-data-redis' // Caché rápida
-    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.18.0'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // --- PARCHE DE SEGURIDAD ---
+    // Forzamos la versión segura de Commons Lang para corregir la vulnerabilidad
+    // de recursión detectada, anulando la versión antigua que trae SpringDoc/Boot.
+    implementation 'org.apache.commons:commons-lang3:3.18.0'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
 
     // --- BASE DE DATOS (Solo el backend accede a la DB) ---
     implementation 'org.postgresql:postgresql:42.7.3'
