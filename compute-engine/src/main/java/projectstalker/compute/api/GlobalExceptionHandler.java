@@ -7,6 +7,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import projectstalker.domain.exception.InvalidExportRequestException;
+import projectstalker.domain.exception.ResourceNotFoundException;
 import projectstalker.domain.exception.SensorBusinessException;
 
 import java.time.LocalDateTime;
@@ -29,6 +30,23 @@ public class GlobalExceptionHandler {
                 "timestamp", LocalDateTime.now(),
                 "status", 400,
                 "error", "Invalid Sensor Request",
+                "message", ex.getMessage()
+        ));
+    }
+
+    /**
+     * Maneja errores de lógica de negocio de gemelos digitales.
+     * Log: WARN (No es un error del sistema, es un error del cliente/petición).
+     */
+    @ExceptionHandler({ResourceNotFoundException.class})
+    public ResponseEntity<Object> handleTwinBusinessException(SensorBusinessException ex) {
+        // Logueamos solo el mensaje, no el stacktrace, para no ensuciar los logs
+        log.warn("Business Rule Violation: {}", ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 404,
+                "error", "Twin not found",
                 "message", ex.getMessage()
         ));
     }
