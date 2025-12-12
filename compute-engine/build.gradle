@@ -117,12 +117,13 @@ tasks.register('gpuTest', Test) {
 tasks.register('integrationTest', Test) {
     description = 'Ejecuta tests de integración (Requiere Docker).'
     group = 'verification'
-    dependsOn copyNativeLib // Por si acaso en el futuro hago alguna integration test de GPU
+    dependsOn copyNativeLib
 
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
 
-    systemProperty "java.library.path", layout.buildDirectory.dir('libs/native').get().asFile.absolutePath
+    jvmArgs "-Djava.library.path=${layout.buildDirectory.dir('libs/native').get().asFile.absolutePath}"
+    systemProperty 'projectstalker.native.enabled', 'true'
 
     useJUnitPlatform {
         includeTags 'Integration'
