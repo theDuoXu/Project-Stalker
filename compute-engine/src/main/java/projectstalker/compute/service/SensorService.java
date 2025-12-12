@@ -1,6 +1,11 @@
 package projectstalker.compute.service;
 
-import projectstalker.domain.sensors.SensorResponseDTO;
+import projectstalker.domain.dto.sensor.SensorHealthResponseDTO;
+import projectstalker.domain.dto.sensor.SensorReadingDTO;
+import projectstalker.domain.dto.sensor.SensorResponseDTO;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 public interface SensorService {
     /**
@@ -10,4 +15,10 @@ public interface SensorService {
      * @return El DTO con la respuesta estructurada
      */
     SensorResponseDTO getHistory(String stationId, String parameter);
+
+    SensorHealthResponseDTO getHealth(String stationId, String parameter);
+
+    List<SensorReadingDTO> getRealtime(String stationId, String parameter);
+
+    public SensorResponseDTO getExportData(String stationId, String parameter, LocalDateTime from, LocalDateTime to);
 }
