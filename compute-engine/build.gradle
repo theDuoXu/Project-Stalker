@@ -11,7 +11,7 @@ test {
     systemProperty "projectstalker.native.enabled", "true" // Si usas este flag en tu código
 
     useJUnitPlatform {
-        excludeTags 'GPU', 'Benchmark'
+        excludeTags 'GPU', 'Benchmark', 'Integration'
     }
 
     // Opcional: Ayuda a ver el error real si no es ClassNotFound
@@ -104,6 +104,30 @@ tasks.register('gpuTest', Test) {
     useJUnitPlatform {
         includeTags 'GPU'
     }
+    testLogging {
+        events "passed", "skipped", "failed", "standardOut", "standardError"
+        showStandardStreams = true
+        showExceptions true
+        showCauses true
+        showStackTraces true
+        exceptionFormat "full"
+    }
+}
+
+tasks.register('integrationTest', Test) {
+    description = 'Ejecuta tests de integración (Requiere Docker).'
+    group = 'verification'
+    dependsOn copyNativeLib // Por si acaso en el futuro hago alguna integration test de GPU
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    systemProperty "java.library.path", layout.buildDirectory.dir('libs/native').get().asFile.absolutePath
+
+    useJUnitPlatform {
+        includeTags 'integration'
+    }
+
     testLogging {
         events "passed", "skipped", "failed", "standardOut", "standardError"
         showStandardStreams = true
