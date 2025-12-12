@@ -1,21 +1,28 @@
 package projectstalker.compute.api;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import projectstalker.compute.service.SensorService;
-import projectstalker.domain.sensors.SensorResponseDTO;
+import projectstalker.domain.dto.sensor.SensorHealthResponseDTO;
+import projectstalker.domain.dto.sensor.SensorReadingDTO;
+import projectstalker.domain.dto.sensor.SensorResponseDTO;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/sensors")
-@RequiredArgsConstructor // Lombok genera el constructor para la inyección de dependencias
+@RequiredArgsConstructor
 public class SensorController {
 
     private final SensorService sensorService;
 
     @GetMapping("/{stationId}/history")
     public ResponseEntity<SensorResponseDTO> getSensorHistory(
-            @PathVariable("stationId") String stationId,
+            @PathVariable String stationId,
             @RequestParam(name = "parameter") String parameter
     ) {
         // Delegamos toda la responsabilidad al servicio
@@ -23,4 +30,50 @@ public class SensorController {
 
         return ResponseEntity.ok(response);
     }
+
+    // GET /api/sensors/C302/realtime                -> Devuelve todo
+    // GET /api/sensors/C302/realtime?parameter=PH   -> Devuelve solo PH
+    @GetMapping("/{stationId}/realtime")
+    public ResponseEntity<List<SensorReadingDTO>> getStationRealtime(
+            @PathVariable String stationId,
+            @RequestParam(name = "parameter", defaultValue = "ALL") String parameter
+    ) {
+        List<SensorReadingDTO> data = sensorService.getRealtime(stationId, parameter);
+        return ResponseEntity.ok(data);
+    }
+
+    // GET /api/sensors/C302/status?parameter=ALL
+    @GetMapping("/{stationId}/status")
+    public ResponseEntity<SensorHealthResponseDTO> getStationStatus(
+            @PathVariable String stationId,
+            @RequestParam(name = "parameter", defaultValue = "ALL") String parameter
+    ) {
+        SensorHealthResponseDTO statusData = sensorService.getHealth(stationId, parameter);
+        return ResponseEntity.ok(statusData);
+    }
+
+    @GetMapping("/export/{stationId}")
+    @PreAuthorize("@sensorExportValidator.canExport(authentication, #from, #to)")
+    public ResponseEntity<SensorResponseDTO> exportReadings(
+            @PathVariable String stationId,
+            @RequestParam(name = "parameter", defaultValue = "ALL") String parameter,
+
+            // Usamos LocalDateTime para precisión
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to
+    ) {
+        // Si entra aquí, Spring Security YA ha verificado las fechas y los roles.
+        // Los roles operativos tienen asignados un rango máximo de 30 días
+        // Roles no operativos solo se le permiten bajar 1 día
+
+        SensorResponseDTO exportData = sensorService.getExportData(stationId, parameter, from, to);
+
+        // Aquí luego podríamos devolver un ByteArrayResource para descargar un CSV real
+        // De momento devolvemos JSON
+        return ResponseEntity.ok(exportData);
+    }
+
 }
