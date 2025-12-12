@@ -5,7 +5,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import projectstalker.domain.river.RiverGeometry;
-import projectstalker.config.RiverConfig;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -38,12 +37,12 @@ class RiverPhModelTest {
 
     @Test
     @DisplayName("El perfil de pH debe ser devuelto como una copia para evitar mutaciones externas")
-    void getPhProfile_shouldReturnClonedProfile() {
+    void generateProfile_shouldReturnClonedProfile() {
         log.info("Ejecutando test: getPhProfile_shouldReturnClonedProfile.");
 
         // ARRANGE
         // Obtenemos el primer perfil
-        float[] phProfile = phModel.getPhProfile();
+        float[] phProfile = phModel.generateProfile();
 
         // ASSERT 1: Verificar el valor inicial antes de la mutación
         assertEquals(BASE_PH_PROFILE[0], phProfile[0], "El valor inicial del pH debe ser 7.0.");
@@ -53,7 +52,7 @@ class RiverPhModelTest {
         phProfile[0] = 99.0f;
 
         // ARRANGE (Obtener un segundo perfil, que DEBE ser una COPIA nueva del original)
-        float[] secondPhProfile = phModel.getPhProfile();
+        float[] secondPhProfile = phModel.generateProfile();
 
         // ASSERT 2: Verificar que el segundo perfil obtenido NO fue afectado por la mutación
         // ESTA ES LA VERIFICACIÓN CLAVE DEL REQUISITO DE CLONACIÓN/INMUTABILIDAD
@@ -68,9 +67,9 @@ class RiverPhModelTest {
 
     @Test
     @DisplayName("Verificación de valores y tamaño del perfil")
-    void getPhProfile_shouldReturnCorrectValuesAndSize() {
+    void generateProfile_shouldReturnCorrectValuesAndSize() {
         // Act
-        float[] phProfile = phModel.getPhProfile();
+        float[] phProfile = phModel.generateProfile();
 
         // Assert
         assertNotNull(phProfile);

@@ -73,7 +73,7 @@ public class SequentialManningHydrologySolver implements HydrologySolver {
 
         // 1. Calcular el perfil de temperaturas usando el nuevo modelo.
         RiverTemperatureModel tempModel = new RiverTemperatureModel(config, geometry);
-        newTemperature = tempModel.calculate(currentTimeInSeconds);
+        newTemperature = tempModel.generateProfile(currentTimeInSeconds);
 
         // 2. Asignar el pH directamente desde la geometría.
         for (int i = 0; i < cellCount; i++) {

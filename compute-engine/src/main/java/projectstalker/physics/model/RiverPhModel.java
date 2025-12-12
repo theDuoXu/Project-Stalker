@@ -9,7 +9,7 @@ import projectstalker.domain.river.RiverGeometry;
  * y no varía con el tiempo.
  */
 @Slf4j
-public class RiverPhModel {
+public class RiverPhModel implements TimeEvolutionModel{
 
     private final RiverGeometry geometry;
 
@@ -30,7 +30,14 @@ public class RiverPhModel {
      *
      * @return Un nuevo array que representa el perfil de pH del río.
      */
-    public float[] getPhProfile() {
+    @Deprecated
+    public float[] generateProfile() {
+        return geometry.clonePhProfile();
+    }
+
+    // TODO This is a stub
+    @Override
+    public float[] generateProfile(double currentTimeInSeconds) {
         return geometry.clonePhProfile();
     }
 }

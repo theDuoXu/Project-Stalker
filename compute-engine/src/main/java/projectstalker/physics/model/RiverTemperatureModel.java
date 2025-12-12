@@ -5,10 +5,6 @@ import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.utils.FastNoiseLite;
 
-import java.util.concurrent.CountDownLatch; 
-import java.util.stream.DoubleStream;
-import java.util.stream.IntStream;
-
 /**
  * Modela la temperatura del agua a lo largo de un río.
  * <p>
@@ -21,7 +17,7 @@ import java.util.stream.IntStream;
  * </ul>
  */
 @Slf4j
-public class RiverTemperatureModel {
+public class RiverTemperatureModel implements TimeEvolutionModel{
 
     private static final double SECONDS_IN_A_DAY = 24.0 * 3600.0;
     private static final double DAYS_IN_A_YEAR = 365.25;
@@ -50,7 +46,8 @@ public class RiverTemperatureModel {
      * @param currentTimeInSeconds El tiempo absoluto de la simulación.
      * @return Un array de doubles con la temperatura para cada celda del río.
      */
-    public float[] calculate(double currentTimeInSeconds) {
+    @Override
+    public float[] generateProfile(double currentTimeInSeconds) {
         final int cellCount = geometry.getCellCount();
         float[] temperatures = new float[cellCount];
 

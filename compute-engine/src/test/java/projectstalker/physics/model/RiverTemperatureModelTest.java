@@ -2,7 +2,6 @@ package projectstalker.physics.model;
 
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import projectstalker.config.RiverConfig;
@@ -54,13 +53,13 @@ class RiverTemperatureModelTest {
 
     @Test
     @DisplayName("Logic Test: El perfil calculado debe tener la misma longitud que las celdas de la geometría")
-    void calculate_shouldReturnProfileWithCorrectLength() {
+    void generateProfile_shouldReturnProfileWithCorrectLength() {
         // --- 1. Arrange ---
         RiverTemperatureModel model = new RiverTemperatureModel(defaultConfig, defaultGeometry);
         double anyTime = 123456.0;
 
         // --- 2. Act ---
-        float[] temperatureProfile = model.calculate(anyTime);
+        float[] temperatureProfile = model.generateProfile(anyTime);
 
         // --- 3. Assert ---
         assertEquals(defaultGeometry.getCellCount(), temperatureProfile.length,
@@ -69,7 +68,7 @@ class RiverTemperatureModelTest {
 
     @Test
     @DisplayName("Logic Test: Con efectos desactivados, la temperatura debe ser uniforme y coincidir con la base")
-    void calculate_shouldReturnBaseTempWhenEffectsAreZero() {
+    void generateProfile_shouldReturnBaseTempWhenEffectsAreZero() {
         // --- 1. Arrange ---
         // Se crea una config SIN EFECTOS ESPACIALES, mapeando cuidadosamente cada parámetro
         // a su posición correcta en el constructor del record.
@@ -82,7 +81,7 @@ class RiverTemperatureModelTest {
         double expectedBaseTemp = 20.0 /* avgAnnual */ + 5.0 /* daily */;
 
         // --- 2. Act ---
-        float[] temperatureProfile = model.calculate(timeAt6AM);
+        float[] temperatureProfile = model.generateProfile(timeAt6AM);
 
         // --- 3. Assert ---
         // Todas las celdas deben tener exactamente la misma temperatura base.

@@ -6,12 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import projectstalker.config.SimulationConfig;
 import projectstalker.utils.FastNoiseLite;
 
-import javax.swing.*;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
-import java.util.concurrent.CountDownLatch;
-import java.util.stream.DoubleStream;
-
 /**
  * Genera un perfil de caudal (hidrograma) variable a lo largo del tiempo utilizando ruido Perlin.
  * Esto permite simular hidrogramas realistas con variaciones suaves y creíbles,
@@ -20,7 +14,7 @@ import java.util.stream.DoubleStream;
 @Slf4j
 @With
 @RequiredArgsConstructor
-public class FlowProfileModel {
+public class RandomFlowProfileGenerator implements TimeSeriesGenerator {
 
     /**
      * El caudal promedio (en m³/s) sobre el cual se aplican las variaciones.
@@ -45,7 +39,7 @@ public class FlowProfileModel {
      * @param noiseAmplitude Magnitud de la variación en m³/s.
      * @param noiseFrequency Frecuencia de la variación (valores bajos para cambios lentos).
      */
-    public FlowProfileModel(int seed, double baseDischarge, double noiseAmplitude, float noiseFrequency) {
+    public RandomFlowProfileGenerator(int seed, double baseDischarge, double noiseAmplitude, float noiseFrequency) {
         this.baseDischarge = baseDischarge;
         this.noiseAmplitude = noiseAmplitude;
         this.noise = new FastNoiseLite(seed);
@@ -59,7 +53,7 @@ public class FlowProfileModel {
      * @param seed       Semilla para la generación de ruido. Determina la secuencia de valores.
      * @param flowConfig Contenedor de configuraciones
      */
-    public FlowProfileModel(int seed, SimulationConfig.FlowConfig flowConfig) {
+    public RandomFlowProfileGenerator(int seed, SimulationConfig.FlowConfig flowConfig) {
         this.noise = new FastNoiseLite(seed);
         this.noise.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
         this.noise.SetFrequency(flowConfig.getNoiseFrequency());
@@ -95,7 +89,8 @@ public class FlowProfileModel {
      * @return Un array de doubles que representa el caudal en cada paso de tiempo.
      * @throws IllegalArgumentException si el tiempo de fin es anterior al de inicio o si el paso de tiempo no es positivo.
      */
-    public double[] generateProfile(double startTimeInSeconds, double endTimeInSeconds, double timeStepInSeconds) {
+    @Override
+    public float[] generateProfile(double startTimeInSeconds, double endTimeInSeconds, double timeStepInSeconds) {
         if (endTimeInSeconds < startTimeInSeconds) {
             throw new IllegalArgumentException("El tiempo final no puede ser menor que el tiempo inicial.");
         }
@@ -105,7 +100,7 @@ public class FlowProfileModel {
 
         // Se calcula el número de pasos necesarios. +1 para incluir el punto final.
         int numSteps = (int) Math.floor((endTimeInSeconds - startTimeInSeconds) / timeStepInSeconds) + 1;
-        double[] dischargeProfile = new double[numSteps];
+        float[] dischargeProfile = new float[numSteps];
 
         double currentTime = startTimeInSeconds;
         for (int i = 0; i < numSteps; i++) {
@@ -122,7 +117,8 @@ public class FlowProfileModel {
      * @param timeStepInSeconds  El incremento de tiempo entre cada punto (en segundos).
      * @return Un array de doubles que representa el caudal en cada paso de tiempo.
      */
-    public double[] generateProfile(double durationInSeconds, double timeStepInSeconds) {
+    @Override
+    public float[] generateProfile(double durationInSeconds, double timeStepInSeconds) {
         return generateProfile(0, durationInSeconds, timeStepInSeconds);
     }
 
@@ -136,7 +132,7 @@ public class FlowProfileModel {
      * @return El volumen total estimado en metros cúbicos.
      */
     public double getTotalVolume(double startTimeInSeconds, double endTimeInSeconds, double timeStepInSeconds) {
-        double[] profile = generateProfile(startTimeInSeconds, endTimeInSeconds, timeStepInSeconds);
+        float[] profile = generateProfile(startTimeInSeconds, endTimeInSeconds, timeStepInSeconds);
         double totalVolume = 0;
         for (double discharge : profile) {
             totalVolume += discharge * timeStepInSeconds;
@@ -152,7 +148,7 @@ public class FlowProfileModel {
      * @return El valor del caudal máximo encontrado en m³/s.
      */
     public double getPeakDischarge(double startTimeInSeconds, double endTimeInSeconds, double timeStepInSeconds) {
-        double[] profile = generateProfile(startTimeInSeconds, endTimeInSeconds, timeStepInSeconds);
+        float[] profile = generateProfile(startTimeInSeconds, endTimeInSeconds, timeStepInSeconds);
         double maxDischarge = 0.0;
         for (double discharge : profile) {
             if (discharge > maxDischarge) {

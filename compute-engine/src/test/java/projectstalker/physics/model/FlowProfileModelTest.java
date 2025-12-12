@@ -1,9 +1,10 @@
 package projectstalker.physics.model;
 
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -35,13 +36,13 @@ class FlowProfileModelTest {
     @Test
     @DisplayName("Logic Test: Should generate a profile with the correct number of steps")
     void generatesCorrectNumberOfSteps() {
-        FlowProfileModel generator = new FlowProfileModel(1, 100, 50, 0.1f);
+        RandomFlowProfileGenerator generator = new RandomFlowProfileGenerator(1, 100, 50, 0.1f);
 
         double startTime = 0;
         double endTime = 100;
         double step = 10; // 0, 10, 20, ..., 100 -> 11 pasos
 
-        double[] profile = generator.generateProfile(startTime, endTime, step);
+        float[] profile = generator.generateProfile(startTime, endTime, step);
 
         // El número de pasos es (fin - inicio) / paso + 1
         int expectedSteps = (int) ((endTime - startTime) / step) + 1;
@@ -55,7 +56,7 @@ class FlowProfileModelTest {
         // lleve el resultado a un valor negativo si no estuviera corregido.
         double baseDischarge = 50.0;
         double largeAmplitude = 100.0;
-        FlowProfileModel generator = new FlowProfileModel(1, baseDischarge, largeAmplitude, 0.1f);
+        RandomFlowProfileGenerator generator = new RandomFlowProfileGenerator(1, baseDischarge, largeAmplitude, 0.1f);
 
         // Comprobamos en muchos puntos de tiempo
         for (double t = 0; t < 1000; t += 10) {
@@ -68,7 +69,7 @@ class FlowProfileModelTest {
     @DisplayName("Logic Test: getTotalVolume should calculate the correct volume for a constant flow")
     void getTotalVolume_shouldCalculateCorrectVolume() {
         // 1. Arrange: Un generador con caudal constante de 10 m³/s
-        FlowProfileModel generator = new FlowProfileModel(1, 10.0, 0.0, 0.1f);
+        RandomFlowProfileGenerator generator = new RandomFlowProfileGenerator(1, 10.0, 0.0, 0.1f);
 
         double startTime = 0;
         double endTime = 100; // 100 segundos
@@ -92,20 +93,23 @@ class FlowProfileModelTest {
     @DisplayName("Logic Test: getPeakDischarge should find the maximum value in the generated profile")
     void getPeakDischarge_shouldFindMaximumValue() {
         // 1. Arrange
-        FlowProfileModel generator = new FlowProfileModel(42, 200, 50, 0.01f);
+        RandomFlowProfileGenerator generator = new RandomFlowProfileGenerator(42, 200, 50, 0.01f);
         double startTime = 0;
         double endTime = 1000;
         double timeStep = 5;
 
         // 2. Act
         // Primero, generamos el perfil completo para tener una referencia
-        double[] profile = generator.generateProfile(startTime, endTime, timeStep);
+        float[] profile = generator.generateProfile(startTime, endTime, timeStep);
         // Luego, llamamos al método que queremos probar
         double peakDischarge = generator.getPeakDischarge(startTime, endTime, timeStep);
 
         // 3. Assert
         // Calculamos el máximo "manualmente" desde el perfil de referencia
-        double expectedPeak = java.util.Arrays.stream(profile).max().getAsDouble();
+        float expectedPeak = (float) IntStream.range(0, profile.length)
+                .mapToDouble(i -> profile[i])
+                .max().getAsDouble();
+
 
         assertEquals(expectedPeak, peakDischarge, 0.001,
                 "getPeakDischarge should return the same maximum value found in the generated profile.");
