@@ -1,11 +1,24 @@
 package projectstalker.domain.event;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import projectstalker.domain.river.RiverSectionType;
 
 /**
  * Representa un evento que modifica los perfiles de una geometría de río.
  * Cada implementación define su propio impacto sobre los arrays de datos.
  */
+// 1. Decimos que vamos a usar el NOMBRE como discriminador
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.PROPERTY,
+        property = "type" // Se creará un campo "type": "MAN_MADE_DAM" en el JSON
+)
+// 2. Registramos las subclases conocidas
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = GeoEvManMadeDam.class, name = "MAN_MADE_DAM")
+        // @JsonSubTypes.Type(value = GeoEvPollution.class, name = "CANON") en el futuro y etc
+})
 public interface GeologicalEvent {
 
     /**
