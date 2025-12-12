@@ -1,0 +1,1 @@
+-- Solo usar al final. Por ahora vamos a aprovechar las características de hibernate para crear tablas
