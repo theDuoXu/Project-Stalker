@@ -49,7 +49,7 @@ services:
   inference-engine:
     build:
       context: ./python
-      dockerfile: Dockerfile.inference.inference
+      dockerfile: docker-compose.yml.inference.inference
     container_name: stalker-inference
     restart: unless-stopped
     volumes:
@@ -68,7 +68,7 @@ services:
   compute-engine:
     build:
       context: .
-      dockerfile: Dockerfile.inference.compute
+      dockerfile: docker-compose.yml.inference.compute
     container_name: stalker-compute
     restart: unless-stopped
     ports:
