@@ -125,7 +125,7 @@ tasks.register('integrationTest', Test) {
     systemProperty "java.library.path", layout.buildDirectory.dir('libs/native').get().asFile.absolutePath
 
     useJUnitPlatform {
-        includeTags 'integration'
+        includeTags 'Integration'
     }
 
     testLogging {
