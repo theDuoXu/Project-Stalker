@@ -93,16 +93,22 @@ public final class RiverGeometry {
 
 
         // --- Asegurar que el perfil sea físicamente consistente ---
-        // El lecho debe ser monotónicamente no creciente, con una única excepción:
-        // se permite un "salto" hacia arriba justo antes de una estructura de presa.
         for (int i = 0; i < cellCount - 1; i++) {
             if (elevationProfile[i] < elevationProfile[i + 1]) {
-                // Se ha detectado un aumento en la elevación. Comprobamos si es la excepción permitida.
+                // EXCEPCIÓN 1: La siguiente celda es la estructura de la presa (Muro)
                 boolean isDamException = (sectionTypes != null && sectionTypes[i + 1] == RiverSectionType.DAM_STRUCTURE);
 
-                if (!isDamException) {
-                    // Si no es la excepción de la presa, el perfil es inválido.
-                    throw new IllegalArgumentException(String.format("El perfil de elevación es físicamente inconsistente. La altitud aumenta de la celda %d (%.2fm) a la celda %d (%.2fm) " + "sin que la siguiente celda sea una presa.", i, elevationProfile[i], i + 1, elevationProfile[i + 1]));
+                // EXCEPCIÓN 2: Estamos dentro de un embalse.
+                // La sedimentación puede crear lechos irregulares (pozas), o la entrada al embalse puede tener un contra-pendiente.
+                // Si la celda actual o la siguiente son RESERVOIR, permitimos la subida.
+                boolean isReservoirContext = (sectionTypes != null &&
+                        (sectionTypes[i] == RiverSectionType.RESERVOIR ||
+                                sectionTypes[i + 1] == RiverSectionType.RESERVOIR));
+
+                if (!isDamException && !isReservoirContext) {
+                    throw new IllegalArgumentException(String.format(
+                            "El perfil de elevación es físicamente inconsistente. La altitud aumenta de la celda %d (%.2fm) a la celda %d (%.2fm) sin ser presa ni embalse.",
+                            i, elevationProfile[i], i + 1, elevationProfile[i + 1]));
                 }
             }
         }
