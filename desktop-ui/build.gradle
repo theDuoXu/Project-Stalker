@@ -1,30 +1,62 @@
 plugins {
     id 'application'
     id 'org.openjfx.javafxplugin'
+    // Aplicamos Spring Boot para gestión de dependencias y DI, pero NO generamos un fat-jar ejecutable de servidor
+    id 'org.springframework.boot'
+    id 'io.spring.dependency-management'
+
+    // Empaquetador de fat jars para el desktop
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+// Configuración de la aplicación principal
+application {
+    mainClass = 'projectstalker.ui.StalkerUiLauncher'
 }
 
 javafx {
-    version = "25"
+    version = "21.0.5"
     modules = ['javafx.controls', 'javafx.fxml', 'javafx.graphics', 'javafx.swing', 'javafx.web']
 }
 
-application {
-    mainClass = 'projectstalker.ui.MainApp'
+dependencies {
+    // --- CAPA DE DOMINIO (DTOs compartidos) ---
+    implementation project(':core-domain')
+
+    // --- SPRING BOOT INTEGRATION ---
+    // Usamos 'starter' para el contexto DI y 'webflux' para el cliente HTTP reactivo (High Performance)
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+    // --- UI UX & THEMING (Look & Feel Profesional) ---
+    // AtlantaFX: Tema moderno (Nord/Primer) - Estandariza CSS
+    implementation 'io.github.mkpaz:atlantafx-base:2.1.0'
+    // ControlsFX: Componentes extra (Notificaciones, Breadcrumbs, Toggles)
+    implementation 'org.controlsfx:controlsfx:11.2.1'
+    // Ikonli: Iconos vectoriales (Material Design)
+    implementation 'org.kordamp.ikonli:ikonli-javafx:12.3.1'
+    implementation 'org.kordamp.ikonli:ikonli-materialdesign2-pack:12.3.1'
+
+    // --- UTILIDADES ---
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Logging UI
+    implementation 'ch.qos.logback:logback-classic'
 }
 
-dependencies {
-    // Dependencia del Dominio
-    implementation project(':core-domain')
-    testImplementation project(':core-domain')
+// Deshabilitar la generación del jar de Spring Boot (es una app de escritorio, no un servidor)
+bootJar {
+    enabled = false
+}
 
-    // --- CLIENTE HTTP & SERIALIZACIÓN ---
-    // Usamos Java 21 HttpClient (Nativo)
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
-
-    // --- GRÁFICOS ---
-    implementation 'org.knowm.xchart:xchart:3.8.6'
-
-    // --- LOGGING IMPLEMENTATION (Cliente) ---
-    // Necesario para ver logs en la consola del cliente
-    runtimeOnly 'ch.qos.logback:logback-classic:1.5.13'
+// Asegurar que corre como aplicación Java estándar
+jar {
+    enabled = true
+    manifest {
+        attributes(
+                'Main-Class': 'projectstalker.ui.StalkerUiLauncher'
+        )
+    }
 }
