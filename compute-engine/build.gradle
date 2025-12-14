@@ -2,6 +2,9 @@ plugins {
     id 'org.springframework.boot'
     id 'me.champeau.jmh' // Benchmarks viven aquí
 }
+
+evaluationDependsOn(':native-lib')
+
 test {
     // 1. Depender de la copia de la lib
     dependsOn 'copyNativeLib'
@@ -59,10 +62,26 @@ dependencies {
 // --- CONFIGURACIÓN JNI & TASKS PERSONALIZADAS ---
 // ===================================================================
 
-// Tarea para copiar la librería nativa al build de este módulo
-def copyNativeLib = tasks.register('copyNativeLib', Copy) {
-    from project(':native-lib').tasks.named('linkDebug').map { it.linkedFile }
-    into layout.buildDirectory.dir('libs/native')
+// Tarea para copiar la librería nativa al resources de este módulo
+tasks.register('copyNativeLib', Copy) {
+    group = 'build'
+    description = 'Copia la librería nativa (.so) desde el módulo C++ a los recursos de Java'
+
+    def nativeTaskName = 'linkDebug'
+
+    dependsOn project(':native-lib').tasks.named(nativeTaskName)
+
+    // Origen: Mapeamos el archivo de salida de esa tarea
+    from(project(':native-lib').tasks.named(nativeTaskName).map { it.linkedFile })
+
+    // Destino: Resources
+    into layout.projectDirectory.dir('src/main/resources/native/linux-x86_64')
+
+}
+
+// Aseguramos que esto corra siempre antes de procesar los recursos de Java
+tasks.named('processResources') {
+    dependsOn 'copyNativeLib'
 }
 
 // Asegurar que Spring Boot tenga la librería al arrancar
