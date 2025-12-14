@@ -1,3 +1,6 @@
+import com.github.jengelman.gradle.plugins.shadow.transformers.AppendingTransformer
+import com.github.jengelman.gradle.plugins.shadow.transformers.ServiceFileTransformer
+
 plugins {
     id 'application'
     id 'org.openjfx.javafxplugin'
@@ -27,6 +30,8 @@ dependencies {
     // Usamos 'starter' para el contexto DI y 'webflux' para el cliente HTTP reactivo (High Performance)
     implementation 'org.springframework.boot:spring-boot-starter'
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
 
     // --- UI UX & THEMING (Look & Feel Profesional) ---
     // AtlantaFX: Tema moderno (Nord/Primer) - Estandariza CSS
@@ -59,4 +64,68 @@ jar {
                 'Main-Class': 'projectstalker.ui.StalkerUiLauncher'
         )
     }
+}
+
+tasks.register('integrationTest', Test) {
+    description = 'Ejecuta tests de integración de UI (Login, Flujos).'
+    group = 'verification'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    // CRÍTICO: Por defecto Gradle intenta correr tests sin pantalla (headless).
+    // GitHub Actions siempre define la variable de entorno "CI=true".
+    // Solo forzamos modo gráfico si NO estamos en CI.
+    if (!System.getenv().containsKey('CI')) {
+        systemProperty 'java.awt.headless', 'false'
+    }
+
+    useJUnitPlatform {
+        includeTags 'Integration'
+    }
+
+    // Para ver los logs "System.out.println" en la consola mientras corre
+    testLogging {
+        events "passed", "skipped", "failed", "standardOut", "standardError"
+        showStandardStreams = true
+        showExceptions true
+        showStackTraces true
+    }
+}
+
+tasks.named('shadowJar') {
+    archiveBaseName.set('ProjectStalkerDSS')
+    archiveClassifier.set('standalone')
+    archiveVersion.set('')
+
+    // Usamos las rutas completas para evitar el error "Unknown property"
+
+    // 1. Fusionar archivos de configuración de Spring
+    transform(ServiceFileTransformer)
+
+    transform(AppendingTransformer) {
+        resource = 'META-INF/spring.handlers'
+    }
+    transform(AppendingTransformer) {
+        resource = 'META-INF/spring.schemas'
+    }
+    transform(AppendingTransformer) {
+        resource = 'META-INF/spring.tooling'
+    }
+
+    // 2. Incluir application.properties y otros recursos
+    from sourceSets.main.output
+
+    // 3. Definir el Main-Class
+    manifest {
+        attributes(
+                'Main-Class': 'projectstalker.ui.StalkerUiLauncher',
+                'Multi-Release': 'true'
+        )
+    }
+}
+
+// Build ahora ejecuta shadowJar
+tasks.named('build') {
+    dependsOn tasks.named('shadowJar')
 }
