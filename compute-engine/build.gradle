@@ -88,6 +88,14 @@ jmh {
 tasks.named('jmh').configure {
     dependsOn copyNativeLib
 }
+// Configuración del bootJar para el backend
+tasks.named('bootJar') {
+    archiveBaseName.set('project-stalker-compute')
+    archiveVersion.set('0.5.0-ALPHA')
+}
+tasks.named('jar') {
+    enabled = false
+}
 
 // Tarea personalizada: GPU Tests
 tasks.register('gpuTest', Test) {
