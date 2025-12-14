@@ -1,6 +1,7 @@
 package projectstalker.physics.jni;
 
 import lombok.extern.slf4j.Slf4j;
+import projectstalker.utils.NativeLibraryLoader;
 
 import java.nio.FloatBuffer;
 
@@ -15,16 +16,7 @@ public class NativeTransportGpuSingleton implements INativeTransportSolver {
 
     // Bloque estático para cargar la librería una sola vez
     static {
-        try {
-            if (Boolean.getBoolean("projectstalker.native.enabled")) {
-                System.loadLibrary("manning_solver"); // Usamos la misma librería compartida
-                log.info("Native library 'manning_solver' loaded successfully for Transport.");
-            } else {
-                log.warn("Native library loading DISABLED via system property.");
-            }
-        } catch (UnsatisfiedLinkError e) {
-            log.error("Failed to load native library 'manning_solver'. GPU Transport will fail.", e);
-        }
+        NativeLibraryLoader.loadLibrary("manning_solver");
     }
 
     private NativeTransportGpuSingleton() {}

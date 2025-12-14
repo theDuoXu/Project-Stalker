@@ -2,6 +2,7 @@
 package projectstalker.physics.jni;
 
 import lombok.extern.slf4j.Slf4j;
+import projectstalker.utils.NativeLibraryLoader;
 
 import java.nio.FloatBuffer;
 
@@ -11,21 +12,7 @@ public class NativeManningGpuSingleton implements INativeManningSolver {
 
     // --- Carga de la librería nativa (JNI) ---
     static {
-        // Obtenemos la propiedad, default a "false" si es nula
-        String enabledProp = System.getProperty("projectstalker.native.enabled");
-        if ("true".equalsIgnoreCase(enabledProp)) {
-            try {
-                log.info("Native library loading ENABLED. Attempting to load 'manning_solver'...");
-                System.loadLibrary("manning_solver");
-                log.info("Native library 'manning_solver' loaded successfully.");
-            } catch (UnsatisfiedLinkError e) {
-                log.error("FATAL: Native library 'manning_solver' failed to load. Ensure the library is in the java.library.path.", e);
-                // No hacemos System.exit(1) para permitir que los tests unitarios continúen si fallan
-                throw new RuntimeException("Fallo crítico cargando librería nativa", e);
-            }
-        } else {
-            log.warn("Native library loading is DISABLED. Running in pure Java/mock mode.");
-        }
+        NativeLibraryLoader.loadLibrary("manning_solver");
     }
 
     private NativeManningGpuSingleton() {
