@@ -14,8 +14,10 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import projectstalker.compute.service.SensorService;
+import projectstalker.config.ApiRoutes;
 import projectstalker.security.SecurityConfig;
 import projectstalker.domain.dto.sensor.SensorHealthDTO;
 import projectstalker.domain.dto.sensor.SensorHealthResponseDTO;
@@ -47,6 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         }
 )
 @AutoConfigureMockMvc(addFilters = false)
+@ActiveProfiles("mock")
 class SensorControllerTest {
 
     @Autowired
@@ -80,7 +83,7 @@ class SensorControllerTest {
         given(sensorService.getHistory(stationId, param)).willReturn(responseMock);
 
         // B. WHEN & THEN
-        mockMvc.perform(get("/api/sensors/{stationId}/history", stationId)
+        mockMvc.perform(get(ApiRoutes.SENSORS + "/{stationId}/history", stationId)
                         .param("parameter", param)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andDo(print())
@@ -108,7 +111,7 @@ class SensorControllerTest {
         given(sensorService.getRealtime(stationId, param)).willReturn(List.of(readingPh));
 
         // B. WHEN & THEN
-        mockMvc.perform(get("/api/sensors/{stationId}/realtime", stationId)
+        mockMvc.perform(get(ApiRoutes.SENSORS + "/{stationId}/realtime", stationId)
                         .param("parameter", param)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andDo(print())
@@ -140,7 +143,7 @@ class SensorControllerTest {
         given(sensorService.getHealth(stationId, param)).willReturn(healthResponse);
 
         // B. WHEN & THEN
-        mockMvc.perform(get("/api/sensors/{stationId}/status", stationId)
+        mockMvc.perform(get(ApiRoutes.SENSORS + "/{stationId}/status", stationId)
                         .param("parameter", param)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andDo(print())
@@ -175,7 +178,7 @@ class SensorControllerTest {
                 .willReturn(mockExport);
 
         // B. WHEN & THEN
-        mockMvc.perform(get("/api/sensors/export/{stationId}", stationId)
+        mockMvc.perform(get(ApiRoutes.SENSORS + "/export/{stationId}", stationId)
                         .param("parameter", param)
                         .param("from", fromStr)
                         .param("to", toStr)
