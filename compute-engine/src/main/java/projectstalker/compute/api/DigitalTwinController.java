@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import projectstalker.compute.api.config.ApiRoutes;
 import projectstalker.compute.service.DigitalTwinService;
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.dto.twin.FlowPreviewRequest;
@@ -14,7 +15,7 @@ import projectstalker.domain.dto.twin.TwinSummaryDTO;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/twins")
+@RequestMapping(ApiRoutes.TWINS)
 @RequiredArgsConstructor
 public class DigitalTwinController {
 

@@ -3,6 +3,7 @@ package projectstalker.compute.api;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import projectstalker.compute.api.config.ApiRoutes;
 import projectstalker.config.SimulationConfig;
 import projectstalker.domain.simulation.SimulationResponseDTO;
 import projectstalker.domain.simulation.IManningResult;
@@ -12,7 +13,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
-@RequestMapping("/api/v1/simulation")
+@RequestMapping(ApiRoutes.SIMULATIONS)
 @Slf4j
 public class SimulationController {
 
@@ -22,7 +23,7 @@ public class SimulationController {
 
     /**
      * Endpoint PRINCIPAL: Lanza la simulación en la GPU.
-     * POST http://localhost:8080/api/v1/simulation/run
+     * POST https://api.protonenergyindustries/projectstalker/v1/simulation/run
      */
     @PostMapping("/run")
     public ResponseEntity<SimulationResponseDTO> runSimulation(@RequestBody SimulationConfig config) {

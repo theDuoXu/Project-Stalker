@@ -10,6 +10,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import projectstalker.compute.api.config.ApiRoutes;
 
 @Configuration
 @EnableWebSecurity
@@ -35,35 +36,56 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 1. PÚBLICO
                         .requestMatchers(
-                                "/v3/api-docs/**",
-                                "/swagger-ui/**",
-                                "/api/public/**"
+                                ApiRoutes.API_DOCS + "/**",
+                                ApiRoutes.SWAGGER_UI + "/**",
+                                ApiRoutes.PUBLIC + "/**"
                         ).permitAll()
 
-                        // 2. SENSORES (Lectura Pública vs Histórico Protegido)
-                        .requestMatchers(HttpMethod.GET, "/api/sensors/*/realtime", "/api/sensors/*/status").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/sensors/*/history", "/api/sensors/export/**")
-                        .hasAnyRole(GUEST, TECHNICIAN, ANALYST, OFFICER, ADMIN)
+                        // 2. SENSORES (Concatenamos sub-rutas específicas)
+                        .requestMatchers(HttpMethod.GET,
+                                ApiRoutes.SENSORS + "/*/realtime",
+                                ApiRoutes.SENSORS + "/*/status"
+                        ).permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                ApiRoutes.SENSORS + "/*/history",
+                                ApiRoutes.SENSORS + "/export/**"
+                        ).hasAnyRole(GUEST, TECHNICIAN, ANALYST, OFFICER, ADMIN)
 
                         // 3. ADMIN GLOBAL
-                        .requestMatchers("/api/admin/**").hasRole(ADMIN)
+                        .requestMatchers(ApiRoutes.ADMIN + "/**").hasRole(ADMIN)
 
                         // 4. SIMULACIONES & DIGITAL TWINS
-                        .requestMatchers(HttpMethod.POST, "/api/twins/**", "/api/sims/**").hasAnyRole(ANALYST, ADMIN)
-                        .requestMatchers(HttpMethod.PUT, "/api/twins/**").hasAnyRole(ANALYST, ADMIN)
-                        .requestMatchers(HttpMethod.DELETE, "/api/twins/**").hasRole(ADMIN)
-                        .requestMatchers(HttpMethod.GET, "/api/twins/**", "/api/sims/**").hasAnyRole(TECHNICIAN, ANALYST, ADMIN)
+                        .requestMatchers(HttpMethod.POST,
+                                ApiRoutes.TWINS + "/**",
+                                ApiRoutes.SIMULATIONS + "/**"
+                        ).hasAnyRole(ANALYST, ADMIN)
+                        .requestMatchers(HttpMethod.PUT,
+                                ApiRoutes.TWINS + "/**"
+                        ).hasAnyRole(ANALYST, ADMIN)
+                        .requestMatchers(HttpMethod.DELETE,
+                                ApiRoutes.TWINS + "/**"
+                        ).hasRole(ADMIN)
+                        .requestMatchers(HttpMethod.GET,
+                                ApiRoutes.TWINS + "/**",
+                                ApiRoutes.SIMULATIONS + "/**"
+                        ).hasAnyRole(TECHNICIAN, ANALYST, ADMIN)
 
                         // 5. OPERACIONES (Alertas e Informes)
-                        .requestMatchers(HttpMethod.POST, "/api/alerts/manual").hasAnyRole(TECHNICIAN, ANALYST, ADMIN)
-                        .requestMatchers(HttpMethod.PUT, "/api/alerts/**").hasAnyRole(OFFICER, ADMIN)
-                        .requestMatchers("/api/reports/**").hasAnyRole(OFFICER, ANALYST, ADMIN)
+                        .requestMatchers(HttpMethod.POST,
+                                ApiRoutes.ALERTS + "/manual"
+                        ).hasAnyRole(TECHNICIAN, ANALYST, ADMIN)
+                        .requestMatchers(HttpMethod.PUT,
+                                ApiRoutes.ALERTS + "/**"
+                        ).hasAnyRole(OFFICER, ADMIN)
+                        .requestMatchers(
+                                ApiRoutes.REPORTS + "/**"
+                        ).hasAnyRole(OFFICER, ANALYST, ADMIN)
 
                         // 6. DEFAULT
                         .anyRequest().authenticated()
                 )
 
-                // Configuración OAuth2 Limpia
+                // Configuración OAuth2
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakJwtConverter))
                 );

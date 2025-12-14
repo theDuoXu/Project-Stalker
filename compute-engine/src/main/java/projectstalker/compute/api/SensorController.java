@@ -5,6 +5,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import projectstalker.compute.api.config.ApiRoutes;
 import projectstalker.compute.service.SensorService;
 import projectstalker.domain.dto.sensor.SensorHealthResponseDTO;
 import projectstalker.domain.dto.sensor.SensorReadingDTO;
@@ -13,8 +14,12 @@ import projectstalker.domain.dto.sensor.SensorResponseDTO;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Endpoint PRINCIPAL: Lanza la simulación en la GPU.
+ * POST <a href="https://api.protonenergyindustries/projectstalker/v1/simulation/run">api</a>
+ */
 @RestController
-@RequestMapping("/api/sensors")
+@RequestMapping(ApiRoutes.SENSORS)
 @RequiredArgsConstructor
 public class SensorController {
 
