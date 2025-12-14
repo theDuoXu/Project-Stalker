@@ -32,9 +32,9 @@
                     <FontIcon iconLiteral="mdi2f-file-plus" iconSize="16"/>
                 </graphic>
             </Button>
-            <Button styleClass="accent" text="Configuración">
+            <Button fx:id="loginButton" text="Conectar a Keycloak" onAction="#onLoginClick" styleClass="accent">
                 <graphic>
-                    <FontIcon iconLiteral="mdi2c-cog" iconSize="16"/>
+                    <FontIcon fx:id="loginIcon" iconLiteral="mdi2l-login" iconSize="16" />
                 </graphic>
             </Button>
         </HBox>
