@@ -1,5 +1,6 @@
 package projectstalker.compute.repository.mock;
 
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 import projectstalker.compute.repository.SensorRepository;
@@ -12,7 +13,7 @@ import java.util.List;
 import java.util.Random;
 
 @Repository
-@Profile("mock") // Se activa solo con el perfil 'mock'
+@Profile("mock")
 public class MockSensorRepository implements SensorRepository {
 
     private final Random random = new Random();
