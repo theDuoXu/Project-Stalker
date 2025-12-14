@@ -1,4 +1,4 @@
-package projectstalker.compute.api.config;
+package projectstalker.config;
 
 public final class ApiRoutes {
 
