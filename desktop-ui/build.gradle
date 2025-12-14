@@ -126,6 +126,6 @@ tasks.named('shadowJar') {
 }
 
 // Build ahora ejecuta shadowJar
-tasks.named('build') {
-    dependsOn tasks.named('shadowJar')
-}
+//tasks.named('build') {
+//    dependsOn tasks.named('shadowJar')
+//}  // deshabilitado temporalmente (en prod habilitar)
