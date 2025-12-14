@@ -97,6 +97,45 @@ public class AuthenticationService {
     }
 
     /**
+     * Cierra la sesión local y abre el navegador para cerrar la sesión en Keycloak.
+     * Se usa id_token_hint para evitar que Keycloak pregunte "¿Estás seguro?".
+     */
+    public CompletableFuture<Void> logout() {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                if (currentToken == null) {
+                    return;
+                }
+
+                // 1. Construir URL de Logout
+                // Endpoint estándar: /protocol/openid-connect/logout
+                StringBuilder logoutUrl = new StringBuilder();
+                logoutUrl.append(String.format("%s/realms/%s/protocol/openid-connect/logout", authServerUrl, realm));
+
+                // Parámetros necesarios para evitar el prompt de confirmación
+                logoutUrl.append("?client_id=").append(clientId);
+
+                 String idToken = currentToken.idToken();
+                 if (idToken != null) {
+                    logoutUrl.append("&id_token_hint=").append(idToken);
+                 }
+
+                // 2. Abrir navegador para limpiar cookies de sesión (Front-channel logout)
+                if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                    Desktop.getDesktop().browse(new URI(logoutUrl.toString()));
+                }
+
+            } catch (Exception e) {
+                // Solo logueamos, no detenemos el logout local
+                System.err.println("Error abriendo navegador para logout: " + e.getMessage());
+            } finally {
+                // 3. Limpieza local
+                this.currentToken = null;
+            }
+        });
+    }
+
+    /**
      * Servidor HTTP "de usar y tirar" para capturar el código de la URL.
      */
     private String waitForCallback(ServerSocket serverSocket) throws IOException {
