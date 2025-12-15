@@ -31,7 +31,6 @@ import java.util.UUID;
 public class DigitalTwinServiceImpl implements DigitalTwinService {
 
     private final DigitalTwinRepository twinRepository;
-    private final RiverGeometryFactory geometryFactory;
 
     // =========================================================================
     // 1. GESTIÓN DEL CICLO DE VIDA (PERSISTENCIA)
@@ -127,7 +126,7 @@ public class DigitalTwinServiceImpl implements DigitalTwinService {
         // 1. Generamos una geometría efímera en memoria (sin eventos geológicos para ser más rápido)
         // Ojo: Si la temperatura depende de presas, deberíamos pedir eventos también en el request.
         // Por ahora asumimos geometría base.
-        RiverGeometry tempGeometry = geometryFactory.createRealisticRiver(config);
+        RiverGeometry tempGeometry = RiverGeometryFactory.createRealisticRiver(config);
 
         // 2. Instanciamos el modelo físico
         RiverTemperatureModel model = new RiverTemperatureModel(config, tempGeometry);
@@ -166,11 +165,11 @@ public class DigitalTwinServiceImpl implements DigitalTwinService {
 
     private RiverGeometry generateFullGeometry(RiverConfig config, List<GeologicalEvent> events) {
         // Paso 1: Río base procedural
-        RiverGeometry base = geometryFactory.createRealisticRiver(config);
+        RiverGeometry base = RiverGeometryFactory.createRealisticRiver(config);
 
         // Paso 2: Aplicar eventos (presas, etc.)
         if (events != null && !events.isEmpty()) {
-            return geometryFactory.applyGeologicalEvents(base, events);
+            return RiverGeometryFactory.applyGeologicalEvents(base, events);
         }
         return base;
     }

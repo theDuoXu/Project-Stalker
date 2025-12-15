@@ -44,7 +44,6 @@ import java.util.List;
  * @version 1.2
  * @since 2025-10-13
  */
-@Component
 public class RiverGeometryFactory {
 
     /**
@@ -60,7 +59,7 @@ public class RiverGeometryFactory {
      * @param config El objeto de configuración que define las propiedades del río.
      * @return Un objeto RiverGeometry inmutable y físicamente consistente.
      */
-    public RiverGeometry createRealisticRiver(RiverConfig config) {
+    public static RiverGeometry createRealisticRiver(RiverConfig config) {
         // 1. Inicialización
         final int cellCount = (int) Math.round(config.totalLength() / config.spatialResolution());
 
@@ -190,7 +189,7 @@ public class RiverGeometryFactory {
      * @throws IllegalArgumentException si dos eventos están más cerca que
      *                                  la separación mínima definida por {@code MINIMUM_CELL_SEPARATION}.
      */
-    public RiverGeometry applyGeologicalEvents(RiverGeometry baseRiver, List<GeologicalEvent> events) {
+    public static RiverGeometry applyGeologicalEvents(RiverGeometry baseRiver, List<GeologicalEvent> events) {
         // --- 1. Manejar casos triviales ---
         if (events == null || events.isEmpty()) {
             return baseRiver; // No hay nada que hacer, devolver el río original.
@@ -232,7 +231,7 @@ public class RiverGeometryFactory {
      * Method de utilidad para verificar que los eventos en una lista mantienen una
      * distancia mínima entre ellos.
      */
-    private void validateEventSeparation(double spatialResolution, List<GeologicalEvent> events) {
+    private static void validateEventSeparation(double spatialResolution, List<GeologicalEvent> events) {
         if (events.size() <= 1) {
             return; // No hay nada que comparar.
         }
