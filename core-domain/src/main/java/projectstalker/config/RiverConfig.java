@@ -38,10 +38,10 @@ import lombok.With;
  * @param decayTurbulenceSensitivity Sensibilidad del Decay a la rugosidad. Un valor de 1.0 implica una relación lineal.
  *                                   0.8 suaviza un poco el efecto para que no sea tan drástico.
  * @param riverPhaseShiftHours     Desfase del pico de PH. Por defecto por la tarde.
- * @param baseTemperature          Temperatura media diaria del agua en grados Celsius (°C).
+ * @param dailyBaseTemperature          Temperatura media diaria del agua en grados Celsius (°C).
  * @param dailyTempVariation       Amplitud de la variación diaria de temperatura en °C (ej: 3.0 para +/- 3°C).
  * @param seasonalTempVariation    Amplitud máxima de la variación anual de temperatura.
- * @param averageAnnualTemperature Media de temperatura anual.
+ * @param averageAnualTemperature Media de temperatura anual.
  * @param basePh                   pH base del agua (ej: 7.5).
  * @param phVariability            Variación máxima del pH a lo largo del río.
  * @param maxHeadwaterCoolingEffect Enfriamiento máximo en la cabecera del río (nacimiento) en °C.
@@ -89,10 +89,10 @@ public record RiverConfig(
         float alphaVariability,
 
         // --- Parámetros de Calidad de Agua (Temporales) ---
-        float baseTemperature,
+        float dailyBaseTemperature,
         float dailyTempVariation,
         float seasonalTempVariation,
-        float averageAnnualTemperature,
+        float averageAnualTemperature,
         float basePh,
         float phVariability,
 
@@ -130,10 +130,10 @@ public record RiverConfig(
                 .riverPhaseShiftHours(15f)
                 .baseDispersionAlpha(10)
                 .alphaVariability(2)
-                .baseTemperature(15)
+                .dailyBaseTemperature(15)
                 .dailyTempVariation(2)
                 .seasonalTempVariation(8)
-                .averageAnnualTemperature(14)
+                .averageAnualTemperature(14)
                 .basePh(7.5F)
                 .phVariability(0.5F)
                 .maxHeadwaterCoolingEffect(4)
