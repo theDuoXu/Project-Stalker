@@ -1,6 +1,5 @@
 package projectstalker.factory;
 
-import org.springframework.stereotype.Component;
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.event.GeologicalEvent;
 import projectstalker.domain.river.RiverSectionType;
