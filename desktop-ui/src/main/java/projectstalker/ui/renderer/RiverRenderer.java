@@ -191,7 +191,9 @@ public class RiverRenderer {
 
             gc.setFill(palette.waterDeep());
             gc.fillRect(x, topY, cellW, riverWidthPx);
+
         }
+        drawMorphologyStatsOverlay(gc, geo);
     }
 
     /**
@@ -465,6 +467,71 @@ public class RiverRenderer {
             return (drop / geo.getSpatialResolution()) * 100.0f;
         }
         return 0.0f;
+    }
+
+    /**
+     * Dibuja un panel informativo con estadísticas globales en la esquina superior izquierda.
+     */
+    private void drawMorphologyStatsOverlay(GraphicsContext gc, RiverGeometry geo) {
+        // 1. CÁLCULO DE ESTADÍSTICAS
+        float maxSlope = 0.0f;
+        float maxZ = -Float.MAX_VALUE;
+        float minZ = Float.MAX_VALUE;
+
+        float[] elevs = geo.getElevationProfile();
+        float[] slopes = geo.getSideSlope();
+        int cells = geo.getCellCount();
+        float dx = geo.getSpatialResolution();
+
+        for (int i = 0; i < cells; i++) {
+            // Taludes (z)
+            float z = slopes[i];
+            if (z > maxZ) maxZ = z;
+            if (z < minZ) minZ = z;
+
+            // Pendiente Longitudinal (%)
+            if (i < cells - 1) {
+                float drop = elevs[i] - elevs[i + 1];
+                float currentSlopePct = (drop / dx) * 100.0f;
+                if (currentSlopePct > maxSlope) maxSlope = currentSlopePct;
+            }
+        }
+
+        float startElev = elevs[0];
+        float endElev = elevs[cells - 1];
+
+        // 2. DIBUJAR CAJA DE FONDO
+        double x = 10;
+        double y = 10;
+        double width = 200;
+        double height = 95; // Ajustado para 5 líneas
+
+        gc.setFill(palette.bg().deriveColor(0, 1, 1, 0.8)); // Fondo semi-transparente
+        gc.setStroke(palette.border());
+        gc.setLineWidth(1.0);
+        gc.fillRoundRect(x, y, width, height, 8, 8);
+        gc.strokeRoundRect(x, y, width, height, 8, 8);
+
+        // 3. DIBUJAR TEXTO
+        gc.setFill(palette.text());
+        gc.setFont(Font.font("Monospaced", FontWeight.BOLD, 11));
+
+        double textX = x + 10;
+        double textY = y + 20;
+        double lineHeight = 16;
+
+        gc.fillText(String.format("ELEV. INICIAL:  %7.1f m", startElev), textX, textY);
+        textY += lineHeight;
+        gc.fillText(String.format("ELEV. FINAL:    %7.1f m", endElev), textX, textY);
+        textY += lineHeight;
+        gc.fillText(String.format("PENDIENTE MAX:  %7.3f %%", maxSlope), textX, textY);
+        textY += lineHeight + 4; // Separador visual
+
+        // Datos de Sección
+        gc.setFill(palette.text().deriveColor(0, 1, 1, 0.8)); // Un poco más apagado
+        gc.fillText(String.format("TALUD (z) MAX:  %7.2f", maxZ), textX, textY);
+        textY += lineHeight;
+        gc.fillText(String.format("TALUD (z) MIN:  %7.2f", minZ), textX, textY);
     }
 
     private Color interpolateColor(Color c1, Color c2, double value, double min, double max) {
