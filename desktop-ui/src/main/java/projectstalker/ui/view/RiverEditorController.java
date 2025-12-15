@@ -13,7 +13,6 @@ import javafx.scene.paint.Color;
 import javafx.util.StringConverter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.dto.twin.FlowPreviewRequest;
@@ -62,17 +61,17 @@ public class RiverEditorController {
     @FXML
     public Spinner<Double> baseWidthSpinner;
     @FXML
-    public Spinner<Double> varWidthSpinner; //
+    public Spinner<Double> varWidthSpinner;
     @FXML
     public Spinner<Double> slopeSpinner;
     @FXML
-    public Spinner<Double> varSlopeSpinner; //
+    public Spinner<Double> varSlopeSpinner;
 
     // --- Hidráulica ---
     @FXML
     public Spinner<Double> manningSpinner;
     @FXML
-    public Spinner<Double> varManningSpinner; //
+    public Spinner<Double> varManningSpinner;
     @FXML
     public Label manningDescLabel;
 
@@ -92,17 +91,19 @@ public class RiverEditorController {
 
     // --- Físico-Química ---
     @FXML
-    public Spinner<Double> baseTempSpinner;
+    public Spinner<Double> dailyBaseTempSpinner;
+    @FXML
+    public Spinner<Double> anualBaseTempSpinner;
     @FXML
     public Spinner<Double> basePhSpinner;
     @FXML
     public Spinner<Double> dispersionSpinner;
     @FXML
-    public Spinner<Double> varBaseTempSpinner;
+    public Spinner<Double> varDailyBaseTempSpinner;
+    @FXML
+    public Spinner<Double> varAnualBaseTempSpinner;
     @FXML
     public Spinner<Double> varBasePhSpinner;
-    @FXML
-    public Spinner<Double> varDispersionSpinner;
 
     // --- Panel Derecho (Tabs) ---
     @FXML
@@ -198,11 +199,13 @@ public class RiverEditorController {
 
         // Ancho: 5m a 2km, paso de 5m
         baseWidthSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(5, 2000, 150, 5));
+        varWidthSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 100, 10, 0.1));
 
         // Pendiente: 0.00001 a 0.1, paso fino de 0.0001
         var slopeFactory = new SpinnerValueFactory.DoubleSpinnerValueFactory(0.00001, 0.1, 0.0002, 0.0001);
         slopeFactory.setConverter(createConverter("%.5f", 0.0002));
         slopeSpinner.setValueFactory(slopeFactory);
+        varSlopeSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 100, 10, 0.1));
     }
 
     private void setupManningSpinner() {
@@ -211,6 +214,7 @@ public class RiverEditorController {
         factory.setConverter(createConverter("%.3f", 0.030));
 
         manningSpinner.setValueFactory(factory);
+        varManningSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 100, 10, 0.1));
 
         // Listener para dar feedback textual sobre el tipo de material
         manningSpinner.valueProperty().addListener((obs, oldVal, newVal) -> updateManningLabel(newVal));
@@ -235,21 +239,17 @@ public class RiverEditorController {
     }
 
     private void setupGeometryControls() {
-        noiseSlider.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-
+        // --- GEOMETRÍA (Base y Variabilidad) ---
         totalLengthSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-
         baseWidthSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-
+        varWidthSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
         slopeSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+        varSlopeSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
 
+        // --- HIDRÁULICA (Base y Variabilidad) ---
         manningSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+        varManningSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
 
-        seedSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-
-        detailFreqSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-
-        zoneFreqSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
 
         morphologyTab.setOnSelectionChanged(event -> {
             if (morphologyTab.isSelected()) {
@@ -268,19 +268,23 @@ public class RiverEditorController {
         // El Slider controla la frecuencia principal visualmente (0-100)
         // Lo mapeamos a una frecuencia pequeña (0.0 - 0.05)
         noiseSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
-            double freq = newVal.doubleValue() / 2000.0;
+            double freq = newVal.doubleValue() / 100;
             noiseFreqValueLabel.setText(String.format("%.5f", freq));
             // Si estamos en la pestaña de morfología, redibujamos en tiempo real
             drawNoiseHeartBeat();
             if (!noiseTab.isSelected()) {
                 highlightTab(noiseTab, true);
+                drawRiverPreview();
             }
         });
 
+        seedSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
         seedSpinner.valueProperty().addListener(this::onUpdateNoiseSpinners);
         // Listeners para redibujar si cambian los campos manuales de texto
+        detailFreqSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
         detailFreqSpinner.valueProperty().addListener(this::onUpdateNoiseSpinners);
 
+        zoneFreqSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
         zoneFreqSpinner.valueProperty().addListener(this::onUpdateNoiseSpinners);
 
         // Listener para LIMPIAR el resaltado cuando el usuario selecciona la pestaña.
@@ -296,14 +300,20 @@ public class RiverEditorController {
         }
     }
 
-    private void onUpdateNoiseSpinners(ObservableValue<? extends Number> o, Number old, Number val) {
-        drawNoiseHeartBeat();
-        if (!noiseTab.isSelected()) highlightTab(noiseTab, true);
+    private void onUpdateGeometryOrNoiseSpinners(ObservableValue<? extends Number> o, Number old, Number val) {
+        // Lógica de enrutamiento inteligente: Redibujar lo que el usuario está viendo
+        if (morphologyTab.isSelected()) {
+            drawRiverPreview();
+        } else if (noiseTab.isSelected()) {
+            drawNoiseHeartBeat();
+        }
+
+        // Gestión de notificaciones (Asteriscos)
+        if (!morphologyTab.isSelected()) highlightTab(morphologyTab, true);
     }
 
-    private void onUpdateGeometryOrNoiseSpinners(ObservableValue<? extends Number> o, Number old, Number val) {
-        drawRiverPreview();
-        if (!morphologyTab.isSelected()) highlightTab(morphologyTab, true);
+    private void onUpdateNoiseSpinners(ObservableValue<? extends Number> o, Number old, Number val) {
+        if (!noiseTab.isSelected()) highlightTab(noiseTab, true);
     }
 
     private void highlightTab(Tab tab, boolean highlight) {
@@ -321,17 +331,20 @@ public class RiverEditorController {
     }
 
     private void setupPhysicoChemical() {
-        baseTempSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(-5.0, 40.0, 15.0, 0.5));
+        dailyBaseTempSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(-5.0, 40.0, 15.0, 0.1));
+        varDailyBaseTempSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 100, 20.0, 0.1));
+
+        anualBaseTempSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(-5.0, 40.0, 15.0, 0.1));
+        varAnualBaseTempSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 100, 10.0, 0.1));
+
         basePhSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 14.0, 7.5, 0.1));
+        varBasePhSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 50, 10.0, 0.1));
+
         dispersionSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.1, 100.0, 10.0, 1.0));
     }
 
     private void setupPresets() {
-        presetCombo.setItems(FXCollections.observableArrayList(
-                "Río Estándar (Tramo Medio)",
-                "Torrente de Alta Montaña",
-                "Llanura / Delta Ancho"
-        ));
+        presetCombo.setItems(FXCollections.observableArrayList("Río Estándar (Tramo Medio)", "Torrente de Alta Montaña", "Llanura / Delta Ancho"));
         presetCombo.getSelectionModel().select(0);
         presetCombo.setOnAction(e -> applyPreset(presetCombo.getSelectionModel().getSelectedIndex()));
     }
@@ -364,9 +377,6 @@ public class RiverEditorController {
         RiverConfig config = buildConfigFromUI();
         this.currentGeometry = RiverGeometryFactory.createRealisticRiver(config);
 
-        // Actualizar Labels de Texto (Lo que pediste en vez del gráfico de elevación)
-//        updateElevationStats(config, currentGeometry);
-
         // Delegar pintado al Renderer
         renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
     }
@@ -391,7 +401,7 @@ public class RiverEditorController {
 
         // 1. Obtención de Parámetros
         long seed = seedSpinner.getValue();
-        double mainFreq = noiseSlider.getValue() / 2000.0;
+        double mainFreq = noiseSlider.getValue() / 2000;
         double detailFreq = detailFreqSpinner.getValue();
         double zoneFreq = zoneFreqSpinner.getValue();
 
@@ -498,26 +508,69 @@ public class RiverEditorController {
 
 
     private void loadConfigToUI(RiverConfig config) {
+        final double ROUNDING_FACTOR = 0.1;
+
+        // --- GEOMETRÍA ---
         totalLengthSpinner.getValueFactory().setValue((double) config.totalLength());
         baseWidthSpinner.getValueFactory().setValue((double) config.baseWidth());
+
+        // Proporción de variación de ancho: se aplica el redondeo
+        double widthRatio = (double) config.widthVariability() / config.baseWidth();
+        varWidthSpinner.getValueFactory().setValue(ROUNDING_FACTOR * Math.round(widthRatio / ROUNDING_FACTOR) * 100);
+
+
+        // --- PENDIENTE ---
         slopeSpinner.getValueFactory().setValue((double) config.averageSlope());
 
+        // Proporción de variación de pendiente: se aplica el redondeo
+        double slopeRatio = (double) config.slopeVariability() / config.averageSlope();
+        varSlopeSpinner.getValueFactory().setValue(ROUNDING_FACTOR * Math.round(slopeRatio / ROUNDING_FACTOR) * 100);
+
+
+        // --- RUGOSIDAD (MANNING) ---
         manningSpinner.getValueFactory().setValue((double) config.baseManning());
         updateManningLabel((double) config.baseManning());
 
+        // Proporción de variación de Manning: se aplica el redondeo
+        double manningRatio = (double) config.manningVariability() / config.baseManning();
+        varManningSpinner.getValueFactory().setValue(ROUNDING_FACTOR * Math.round(manningRatio / ROUNDING_FACTOR) * 100);
+
+
+        // --- SEMILLA DE RUIDO ---
         seedSpinner.getValueFactory().setValue((int) config.seed());
 
-        // Inverso del Slider (aprox)
+
+        // --- FRECUENCIA DE RUIDO (SLIDER) ---
+        // El slider no usa un ValueFactory de forma directa, se calcula y se establece el valor
         double sliderVal = config.noiseFrequency() * 2000.0;
         if (sliderVal > 100) sliderVal = 100;
         noiseSlider.setValue(sliderVal);
         noiseFreqValueLabel.setText(String.format("%.5f", config.noiseFrequency()));
 
+        // --- DETALLES DE RUIDO ---
         detailFreqSpinner.getValueFactory().setValue((double) config.detailNoiseFrequency());
         zoneFreqSpinner.getValueFactory().setValue((double) config.zoneNoiseFrequency());
 
-        baseTempSpinner.getValueFactory().setValue((double) config.baseTemperature());
+
+        // --- TEMPERATURA ---
+        dailyBaseTempSpinner.getValueFactory().setValue((double) config.dailyBaseTemperature());
+        anualBaseTempSpinner.getValueFactory().setValue((double) config.averageAnualTemperature());
+
+        // Proporción de amplitud de ruido de temperatura: se aplica el redondeo
+        double tempRatio = (double) config.dailyTempVariation() / config.dailyBaseTemperature();
+        varDailyBaseTempSpinner.getValueFactory().setValue(ROUNDING_FACTOR * Math.round(tempRatio / ROUNDING_FACTOR) * 100);
+        tempRatio = (double) config.seasonalTempVariation() / config.averageAnualTemperature();
+        varAnualBaseTempSpinner.getValueFactory().setValue(ROUNDING_FACTOR * Math.round(tempRatio / ROUNDING_FACTOR) * 100);
+
+        // --- pH ---
         basePhSpinner.getValueFactory().setValue((double) config.basePh());
+
+        // Proporción de variabilidad de pH: se aplica el redondeo
+        double phRatio = (double) config.phVariability() / config.basePh();
+        varBasePhSpinner.getValueFactory().setValue(ROUNDING_FACTOR * Math.round(phRatio / ROUNDING_FACTOR) * 100);
+
+
+        // --- DISPERSIÓN ---
         dispersionSpinner.getValueFactory().setValue((double) config.baseDispersionAlpha());
 
     }
@@ -535,19 +588,47 @@ public class RiverEditorController {
         float mainFreq = (float) (noiseSlider.getValue() / 2000.0);
 
         return base
-                .withSeed(seed)
+                // --- 1. GEOMETRÍA (Base y Variabilidad) ---
+                .withSeed(seedSpinner.getValue())
                 .withTotalLength(totalLengthSpinner.getValue().floatValue())
                 .withBaseWidth(baseWidthSpinner.getValue().floatValue())
+                .withWidthVariability(
+                        (float) (varWidthSpinner.getValue() / 100 * baseWidthSpinner.getValue())
+                ) // Cálculo inverso: varWidth = ratio * baseWidth
                 .withAverageSlope(slopeSpinner.getValue().floatValue())
-                // Hidráulica
+                .withSlopeVariability(
+                        (float) (varSlopeSpinner.getValue() / 100 * slopeSpinner.getValue())
+                ) // Cálculo inverso: varSlope = ratio * avgSlope
+
+                // --- 2. HIDRÁULICA ---
                 .withBaseManning(manningSpinner.getValue().floatValue())
-                // Procedural
+                .withManningVariability(
+                        (float) (varManningSpinner.getValue() / 100 * manningSpinner.getValue())
+                ) // Cálculo inverso: varManning = ratio * baseManning
+
+                // --- 3. PROCEDURAL (Ruido) ---
                 .withNoiseFrequency(mainFreq)
                 .withDetailNoiseFrequency(detailFreqSpinner.getValue().floatValue())
                 .withZoneNoiseFrequency(zoneFreqSpinner.getValue().floatValue())
-                // Físico-Química
-                .withBaseTemperature(baseTempSpinner.getValue().floatValue())
+
+                // --- 4. FÍSICO-QUÍMICA (Temperatura, pH, Dispersión) ---
+                // Temperatura
+                .withDailyBaseTemperature(dailyBaseTempSpinner.getValue().floatValue())
+                .withDailyTempVariation(
+                        (float) (varDailyBaseTempSpinner.getValue() / 100 * dailyBaseTempSpinner.getValue())
+                )
+                .withAverageAnualTemperature(anualBaseTempSpinner.getValue().floatValue())
+                .withSeasonalTempVariation(
+                        (float) (varAnualBaseTempSpinner.getValue() / 100 * anualBaseTempSpinner.getValue())
+                )
+
+                // pH
                 .withBasePh(basePhSpinner.getValue().floatValue())
+                .withPhVariability(
+                        (float) (varBasePhSpinner.getValue() / 100 * basePhSpinner.getValue())
+                ) // Cálculo inverso: varPh = ratio * basePh
+
+                // Dispersión
                 .withBaseDispersionAlpha(dispersionSpinner.getValue().floatValue());
     }
 
@@ -566,32 +647,23 @@ public class RiverEditorController {
         saveButton.setText("Guardando...");
 
         RiverConfig config = buildConfigFromUI();
-        var request = new TwinCreateRequest(
-                nameField.getText(),
-                descField.getText(),
-                config,
-                Collections.emptyList()
-        );
+        var request = new TwinCreateRequest(nameField.getText(), descField.getText(), config, Collections.emptyList());
 
-        twinService.createTwin(request)
-                .subscribe(
-                        summary -> Platform.runLater(() -> {
-                            saveButton.setDisable(false);
-                            saveButton.setText("Crear Gemelo");
-                            showAlert(Alert.AlertType.INFORMATION, "Éxito", "Gemelo Digital '" + summary.name() + "' creado correctamente.");
+        twinService.createTwin(request).subscribe(summary -> Platform.runLater(() -> {
+            saveButton.setDisable(false);
+            saveButton.setText("Crear Gemelo");
+            showAlert(Alert.AlertType.INFORMATION, "Éxito", "Gemelo Digital '" + summary.name() + "' creado correctamente.");
 
-                            // Eventos de lista
-                            eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
+            // Eventos de lista
+            eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
 
-                            // Recuperar vista inicial
-                            eventPublisher.publishEvent(new RestoreMainViewEvent());
-                        }),
-                        error -> Platform.runLater(() -> {
-                            saveButton.setDisable(false);
-                            saveButton.setText("Crear Gemelo");
-                            showAlert(Alert.AlertType.ERROR, "Error", "Fallo al guardar: " + error.getMessage());
-                        })
-                );
+            // Recuperar vista inicial
+            eventPublisher.publishEvent(new RestoreMainViewEvent());
+        }), error -> Platform.runLater(() -> {
+            saveButton.setDisable(false);
+            saveButton.setText("Crear Gemelo");
+            showAlert(Alert.AlertType.ERROR, "Error", "Fallo al guardar: " + error.getMessage());
+        }));
     }
 
     @FXML
@@ -628,12 +700,9 @@ public class RiverEditorController {
 
         // 2. Construir la request
         RiverConfig config = buildConfigFromUI();
-        var request = new FlowPreviewRequest(
-                config.seed(),
-                100.0f, // Caudal base dummy
+        var request = new FlowPreviewRequest(config.seed(), 100.0f, // Caudal base dummy
                 0.2f,   // Variabilidad dummy
-                0.1f,
-                300    // Segundos a simular
+                0.1f, 300    // Segundos a simular
         );
 
         // 3. Limpiar chart previo
