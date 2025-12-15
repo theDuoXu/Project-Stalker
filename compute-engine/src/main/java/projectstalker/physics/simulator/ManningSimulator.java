@@ -10,9 +10,7 @@ import projectstalker.domain.river.RiverState;
 import projectstalker.domain.simulation.IManningResult;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.factory.RiverFactory;
-import projectstalker.physics.model.RandomFlowProfileGenerator;
-import projectstalker.physics.model.RiverPhModel;
-import projectstalker.physics.model.RiverTemperatureModel;
+import projectstalker.physics.model.*;
 
 /**
  * Orquesta la simulación hidrológica del río.
@@ -30,8 +28,6 @@ public class ManningSimulator implements AutoCloseable {
     private final SimulationConfig simulationConfig;
 
     private final RandomFlowProfileGenerator flowGenerator;
-    private final RiverTemperatureModel temperatureModel; // (Mantenido para futura integración)
-    private final RiverPhModel phModel;                   // (Mantenido para futura integración)
 
     private final ManningBatchProcessor batchProcessor;
 
@@ -42,13 +38,10 @@ public class ManningSimulator implements AutoCloseable {
         this.simulationConfig = simulationConfig;
 
         // 1. Construcción del Dominio Físico
-        this.geometry = new RiverGeometryFactory().createRealisticRiver(riverConfig);
+        this.geometry = RiverGeometryFactory.createRealisticRiver(riverConfig);
 
         // 2. Modelos Auxiliares (Condiciones de Frontera)
         this.flowGenerator = new RandomFlowProfileGenerator((int) riverConfig.seed(), simulationConfig.getFlowConfig());
-        this.temperatureModel = new RiverTemperatureModel(riverConfig, this.geometry);
-        this.phModel = new RiverPhModel(this.geometry);
-
         // 3. Estado Inicial (t=0)
         // Usamos la factoría para crear un río estable o vacío según se requiera
         this.initialState = RiverFactory.createSteadyState(this.geometry, simulationConfig.getFlowConfig().getBaseDischarge());
