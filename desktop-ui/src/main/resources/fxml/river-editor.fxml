@@ -264,25 +264,51 @@
             </StackPane>
         </Tab>
 
-        <Tab text="Hidrología básica">
-            <VBox spacing="10.0" style="-fx-padding: 20;">
-                <HBox alignment="CENTER_LEFT" spacing="10.0">
-                    <Label style="-fx-font-size: 14px; -fx-font-weight: bold;" text="Hidrograma Estimado"/>
+        <Tab text="Hidrología simulada" fx:id="hydrologyTab">
+            <VBox spacing="0.0">
+                <StackPane fx:id="hydrologyContainer" VBox.vgrow="ALWAYS" style="-fx-background-color: -color-bg-default;">
+                    <Canvas fx:id="hydrologyCanvas" width="800" height="400"/>
+                </StackPane>
+
+                <Separator/>
+
+                <HBox alignment="CENTER" spacing="10.0" style="-fx-padding: 10; -fx-background-color: -color-bg-subtle;">
+
+                    <Label fx:id="simulationTimeLabel" text="T+ 00h:00m"
+                           style="-fx-font-family: 'Monospaced'; -fx-font-size: 13px; -fx-font-weight: bold;"/>
+
                     <Region HBox.hgrow="ALWAYS"/>
-                    <Button text="Ejecutar Simulación" onAction="#onPreviewClick">
-                        <graphic>
-                            <FontIcon iconLiteral="mdi2r-refresh" iconSize="14"/>
-                        </graphic>
+
+                    <Button onAction="#onSimRestart" styleClass="flat">
+                        <tooltip><Tooltip text="Reiniciar (T=0)"/></tooltip>
+                        <graphic><FontIcon iconLiteral="mdi2r-restart" iconSize="20"/></graphic>
                     </Button>
+
+                    <Button onAction="#onSimRewind" styleClass="flat">
+                        <tooltip><Tooltip text="Rebobinar (-2x)"/></tooltip>
+                        <graphic><FontIcon iconLiteral="mdi2r-rewind" iconSize="20"/></graphic>
+                    </Button>
+
+                    <Button onAction="#onSimPause" styleClass="accent">
+                        <tooltip><Tooltip text="Pausar"/></tooltip>
+                        <graphic><FontIcon iconLiteral="mdi2p-pause" iconSize="24"/></graphic>
+                    </Button>
+
+                    <Button onAction="#onSimPlay">
+                        <tooltip><Tooltip text="Reproducir (1x)"/></tooltip>
+                        <graphic><FontIcon iconLiteral="mdi2p-play" iconSize="24"/></graphic>
+                    </Button>
+
+                    <Button onAction="#onSimAccelerate" styleClass="flat">
+                        <tooltip><Tooltip text="Acelerar (x2)"/></tooltip>
+                        <graphic><FontIcon iconLiteral="mdi2f-fast-forward" iconSize="20"/></graphic>
+                    </Button>
+
+                    <Region HBox.hgrow="ALWAYS"/>
+
+                    <Label fx:id="simulationSpeedLabel" text="1.0x"
+                           style="-fx-font-size: 11px; -fx-text-fill: -color-accent-fg;"/>
                 </HBox>
-                <LineChart fx:id="previewChart" VBox.vgrow="ALWAYS" createSymbols="false" legendVisible="false">
-                    <xAxis>
-                        <NumberAxis label="Tiempo (s)" side="BOTTOM"/>
-                    </xAxis>
-                    <yAxis>
-                        <NumberAxis label="Caudal (m³/s)" side="LEFT"/>
-                    </yAxis>
-                </LineChart>
             </VBox>
         </Tab>
     </TabPane>
