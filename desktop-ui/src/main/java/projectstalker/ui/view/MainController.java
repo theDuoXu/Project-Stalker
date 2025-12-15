@@ -19,6 +19,7 @@ import javafx.util.Duration;
 import lombok.extern.slf4j.Slf4j;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import projectstalker.domain.dto.twin.TwinSummaryDTO;
@@ -39,6 +40,7 @@ public class MainController {
     private final DigitalTwinClientService twinService;
     private final ApplicationContext springContext;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ApplicationEventPublisher eventPublisher;
 
     @FXML public Label statusLabel;
     @FXML public Button loginButton;
@@ -58,10 +60,11 @@ public class MainController {
 
     public MainController(AuthenticationService authService,
                           DigitalTwinClientService twinService,
-                          ApplicationContext springContext) {
+                          ApplicationContext springContext, ApplicationEventPublisher eventPublisher) {
         this.authService = authService;
         this.twinService = twinService;
         this.springContext = springContext;
+        this.eventPublisher = eventPublisher;
     }
 
     @FXML
@@ -171,6 +174,9 @@ public class MainController {
                 // Habilitamos creación
                 newProjectButton.setDisable(false);
 
+                // Mostramos sidebar si está oculto
+                eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
+
                 // Cargar proyectos tras login exitoso
                 loadProjects();
             });
@@ -235,6 +241,8 @@ public class MainController {
 
                         // Restaurar el evento al modo de login
                         loginButton.setOnAction(e -> onLoginClick());
+                        // Mostramos sidebar si está oculto
+                        eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
                     });
                 });
     }
