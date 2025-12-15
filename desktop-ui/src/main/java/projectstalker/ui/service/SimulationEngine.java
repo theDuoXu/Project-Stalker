@@ -8,17 +8,11 @@ import projectstalker.config.RiverConfig;
 import projectstalker.domain.river.HydrologySnapshot;
 import projectstalker.domain.river.RiverGeometry;
 
-import java.util.function.Consumer;
-import java.util.stream.IntStream;
+// Importamos tus modelos y decoradores del dominio
+import projectstalker.physics.model.*;
 
-/**
- * Motor de Simulación Hidrológica en Tiempo Real.
- * <p>
- * Responsabilidades:
- * 1. Gestionar el avance del tiempo (Play, Pause, Rewind, Speed).
- * 2. Orquestar el cálculo paralelo de modelos dinámicos (Temp, pH, Decay).
- * 3. Emitir snapshots sincronizados con el framerate de la UI (60 FPS).
- */
+import java.util.function.Consumer;
+
 @Service
 public class SimulationEngine {
 
@@ -26,29 +20,26 @@ public class SimulationEngine {
     @Getter
     private double simTimeSeconds = 0.0;
     @Getter
-    @Setter
-    private double playbackSpeed = 0.0; // 0.0 = Pausa
+    private double playbackSpeed = 0.0;
+
+    // --- Control de Pasos (Step Logic) ---
     private double lastSystemTimeNano = -1;
+    private double realTimeAccumulator = 0.0;
 
-    // --- Estado del Río (Cache para rendimiento) ---
-    private RiverGeometry geometry;
-    private RiverConfig config;
-    private float[] basePhProfile;   // Perfil espacial base (Geología)
-    private float[] baseDecayProfile; // Perfil espacial base (Manning)
+    private static final double SIMULATION_STEP_SECONDS = 3660.0; // 1 hora por tick
+    private static final double BASE_REAL_INTERVAL_SECONDS = 1.0; // 1 seg real = 1 tick
 
-    /**
-     * -- SETTER --
-     * Configura el callback para pintar.
-     */
-    // --- Callback UI ---
+    private boolean forceUpdate = false;
+
+    // --- ARQUITECTURA: Modelos de Dominio (Interfaces) ---
+    // El Engine no sabe cómo se calculan, solo sabe que evolucionan en el tiempo.
+    private TimeEvolutionModel tempModel;
+    private TimeEvolutionModel phModel;
+    private TimeEvolutionModel decayModel;
+
     @Setter
     private Consumer<HydrologySnapshot> onFrameReady;
 
-    // --- Constantes Físicas ---
-    private static final double SECONDS_PER_DAY = 86400.0;
-    private static final double TAU = 2.0 * Math.PI;
-
-    // --- El Bucle Principal ---
     private final AnimationTimer timer = new AnimationTimer() {
         @Override
         public void handle(long now) {
@@ -57,46 +48,81 @@ public class SimulationEngine {
                 return;
             }
 
-            // 1. Calcular Delta Time Real (dt)
             double dtRealSeconds = (now - lastSystemTimeNano) / 1_000_000_000.0;
             lastSystemTimeNano = now;
 
-            // 2. Avanzar Tiempo de Simulación
-            if (playbackSpeed != 0.0) {
-                simTimeSeconds += dtRealSeconds * playbackSpeed;
+            boolean needRender = false;
 
-                // Clamp: No permitir tiempo negativo
-                if (simTimeSeconds < 0) {
-                    simTimeSeconds = 0;
-                    playbackSpeed = 0; // Auto-pausa al llegar al inicio
+            if (playbackSpeed != 0.0) {
+                realTimeAccumulator += dtRealSeconds;
+                double targetInterval = BASE_REAL_INTERVAL_SECONDS / Math.abs(playbackSpeed);
+
+                if (realTimeAccumulator >= targetInterval) {
+                    while (realTimeAccumulator >= targetInterval) {
+                        realTimeAccumulator -= targetInterval;
+                        simTimeSeconds += (playbackSpeed > 0) ? SIMULATION_STEP_SECONDS : -SIMULATION_STEP_SECONDS;
+                    }
+                    if (simTimeSeconds < 0) {
+                        simTimeSeconds = 0;
+                        playbackSpeed = 0;
+                        realTimeAccumulator = 0;
+                    }
+                    needRender = true;
                 }
+            } else {
+                realTimeAccumulator = 0.0;
             }
 
-            // 3. Ejecutar Física Solo si tenemos datos cargados
-            if (geometry != null && config != null && onFrameReady != null) {
-                calculateFrame();
+            // Ejecutamos solo si tenemos los modelos instanciados
+            if (tempModel != null && onFrameReady != null) {
+                if (needRender || forceUpdate) {
+                    calculateFrame();
+                    forceUpdate = false;
+                }
             }
         }
     };
 
     /**
-     * Carga un nuevo río en el motor y pre-calcula los datos estáticos.
+     * AQUÍ ES DONDE BRILLA TU ARQUITECTURA.
+     * Ensamble de la cadena de responsabilidad / Decoradores.
      */
     public void loadRiver(RiverGeometry geo, RiverConfig conf) {
-        this.geometry = geo;
-        this.config = conf;
+        // 1. Construcción de la Cadena de Temperatura (Base + Decoradores)
+        // Base: Clima (Estacional/Diario)
+        TemperatureModel tempChain = new RiverTemperatureModel(conf, geo);
 
-        // Copias defensivas de los perfiles base espaciales
-        // (El motor aplicará variaciones temporales sobre esto)
-        this.basePhProfile = geo.clonePhProfile();
-        this.baseDecayProfile = geo.cloneBaseDecayCoefficientAt20C();
+        // Decorador: Enfriamiento de Cabecera (Resuelve el problema de la línea recta al inicio)
+        tempChain = new HeadwaterCoolingDecorator(tempChain, conf, geo);
 
-        // Resetear tiempo al cargar nuevo río (opcional)
+        // Decorador: Efectos Geomorfológicos (Ancho/Pendiente)
+        tempChain = new GeomorphologyTemperatureDecorator(tempChain, conf, geo);
+
+        // Decorador: Estocástico (Ruido Perlin para realismo local)
+        tempChain = new StochasticTemperatureDecorator(tempChain, conf);
+
+        this.tempModel = tempChain;
+
+        // 2. Construcción del Modelo de pH
+        this.phModel = new RiverPhModel(conf, geo, tempChain);
+
+        // 3. Construcción del Modelo de Decay
+        // El Decay necesita la Temperatura para la corrección de Arrhenius.
+        // Inyectamos el modelo de temperatura ya decorado.
+        this.decayModel = new RiverDecayModel(geo, tempChain);
+
+        // Reset estado
         this.simTimeSeconds = 0;
-        this.playbackSpeed = 0; // Pausa por defecto
+        this.playbackSpeed = 0;
+        this.realTimeAccumulator = 0;
+        this.forceUpdate = true;
     }
 
-    // --- Controles de Reproducción ---
+    public void setPlaybackSpeed(double speed) {
+        this.playbackSpeed = speed;
+        this.realTimeAccumulator = 0;
+        this.forceUpdate = true;
+    }
 
     public void start() {
         timer.start();
@@ -109,79 +135,28 @@ public class SimulationEngine {
 
     public void restartTime() {
         this.simTimeSeconds = 0.0;
-        this.playbackSpeed = 0.0; // Pausar al reiniciar
+        this.playbackSpeed = 0.0;
+        this.realTimeAccumulator = 0;
+        this.forceUpdate = true;
     }
 
-    public double getCurrentSimTime() {
-        return simTimeSeconds;
-    }
-
-    // --- NÚCLEO MATEMÁTICO PARALELO ---
+    // --- Núcleo Matemático ---
 
     private void calculateFrame() {
-        int count = geometry.getCellCount();
+        // DELEGACIÓN PURA:
+        // El Engine no calcula nada. Pide los datos a los modelos expertos.
 
-        // Arrays de salida para este frame
-        float[] tempOut = new float[count];
-        float[] phOut = new float[count];
-        float[] decayOut = new float[count];
+        // 1. Temperatura (Llama a toda la cadena de decoradores)
+        float[] tempOut = tempModel.generateProfile(simTimeSeconds);
 
-        // --- 1. PRE-CÁLCULO TEMPORAL (Optimizacion: Fuera del bucle) ---
-        // Estos valores son constantes para todo el río en este instante 't'.
-        double t = simTimeSeconds;
+        // 2. pH
+        float[] phOut = phModel.generateProfile(simTimeSeconds);
 
-        // A. Ciclos de Tiempo
-        double dayCycle = (t % SECONDS_PER_DAY) / SECONDS_PER_DAY * TAU;
-        double secondsPerYear = SECONDS_PER_DAY * 365.0;
-        double yearCycle = (t % secondsPerYear) / secondsPerYear * TAU;
+        // 3. Decay (Internamente usará tempModel.generateProfile o similar para Arrhenius)
+        float[] decayOut = decayModel.generateProfile(simTimeSeconds);
 
-        // B. Factor Estacional (-1.0 Invierno a 1.0 Verano)
-        // Empezamos en -PI/2 para que t=0 sea Invierno (mínimo)
-        double seasonalFactor = Math.sin(yearCycle - (Math.PI / 2.0));
-        double currentSeasonalBase = config.averageAnualTemperature()
-                + (config.seasonalTempVariation() * seasonalFactor);
-
-        // C. Factor Diario (-1.0 Noche a 1.0 Tarde)
-        // Pico a las 15:00h
-        double dailyPhaseShift = ((15.0 / 24.0) * TAU) - (Math.PI / 2.0);
-        double dailyFactor = Math.sin(dayCycle - dailyPhaseShift);
-
-        // D. Temperatura Global del Agua (Sin efectos locales aún)
-        float globalTemp = (float) (currentSeasonalBase + (config.dailyTempVariation() * dailyFactor));
-        globalTemp = Math.max(0.1f, globalTemp); // El agua no se congela en esta simulación
-
-        // E. Factor Biológico pH (Retraso respecto al sol)
-        double phPhase = ((config.riverPhaseShiftHours() + 1.0) / 24.0) * TAU;
-        double bioFactor = Math.sin(dayCycle - phPhase);
-        float phVariation = (float) (config.phVariability() * 0.5 * bioFactor);
-
-        // Constantes para Decay
-        final float theta = 1.047f; // Coeficiente Arrhenius estándar
-
-        // --- 2. EJECUCIÓN PARALELA (Cálculo Espacial) ---
-        // Aplicamos los factores temporales a cada celda espacial específica.
-        final float finalGlobalTemp = globalTemp; // Efectivamente final para lambda
-
-        IntStream.range(0, count).parallel().forEach(i -> {
-
-            // A. Temperatura (Aquí podrías sumar enfriamiento de cabecera si quisieras espacialidad)
-            tempOut[i] = finalGlobalTemp;
-
-            // B. pH (Base Geológica Local + Variación Biológica Temporal)
-            phOut[i] = basePhProfile[i] + phVariation;
-
-            // C. Decay (Base Local k20 corregida por Temperatura Global)
-            // k_T = k_20 * theta^(T - 20)
-            float k20 = baseDecayProfile[i];
-            double temperatureCorrection = Math.pow(theta, finalGlobalTemp - 20.0);
-            decayOut[i] = (float) (k20 * temperatureCorrection);
-        });
-
-        // --- 3. PUBLICAR RESULTADOS ---
-        HydrologySnapshot snapshot = new HydrologySnapshot(
-                tempOut, phOut, decayOut, t
-        );
-
+        // Empaquetar y enviar
+        HydrologySnapshot snapshot = new HydrologySnapshot(tempOut, phOut, decayOut, simTimeSeconds);
         onFrameReady.accept(snapshot);
     }
 }
