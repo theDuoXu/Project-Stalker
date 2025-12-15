@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.chart.LineChart?>
+<?import javafx.scene.chart.NumberAxis?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<SplitPane dividerPositions="0.4" style="-fx-background-color: -color-bg-default;"
+           xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+           fx:controller="projectstalker.ui.view.RiverEditorController">
+
+    <ScrollPane fitToWidth="true" style="-fx-background-color: transparent;">
+        <VBox spacing="15.0" style="-fx-background-color: -color-bg-subtle;">
+            <padding>
+                <Insets bottom="20.0" left="20.0" right="20.0" top="20.0"/>
+            </padding>
+
+            <Label style="-fx-font-size: 18px; -fx-font-weight: bold;" text="Diseñador de Gemelos"/>
+
+            <VBox spacing="5.0" style="-fx-background-color: -color-bg-overlay; -fx-background-radius: 5; -fx-padding: 10;">
+                <Label text="Plantilla Base" style="-fx-font-weight: bold; -fx-text-fill: -color-accent-fg;"/>
+                <ComboBox fx:id="presetCombo" maxWidth="Infinity"/>
+            </VBox>
+
+            <Separator/>
+
+            <VBox spacing="10.0">
+                <Label style="-fx-font-weight: bold;" text="Geometría Base"/>
+                <TextField fx:id="nameField" promptText="Nombre del Río"/>
+                <TextArea fx:id="descField" prefRowCount="2" promptText="Descripción..."/>
+
+                <GridPane hgap="10.0" vgap="10.0">
+                    <columnConstraints>
+                        <ColumnConstraints hgrow="SOMETIMES" percentWidth="45"/>
+                        <ColumnConstraints hgrow="ALWAYS"/>
+                    </columnConstraints>
+
+                    <Label text="Longitud (m):" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                    <Spinner fx:id="totalLengthSpinner" editable="true" GridPane.rowIndex="0" GridPane.columnIndex="1" maxWidth="Infinity"/>
+
+                    <Label text="Ancho (m):" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                    <Spinner fx:id="baseWidthSpinner" editable="true" GridPane.rowIndex="1" GridPane.columnIndex="1" maxWidth="Infinity"/>
+
+                    <Label text="Pendiente:" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                    <Spinner fx:id="slopeSpinner" editable="true" GridPane.rowIndex="2" GridPane.columnIndex="1" maxWidth="Infinity"/>
+                </GridPane>
+            </VBox>
+
+            <Accordion>
+                <panes>
+                    <TitledPane text="Hidráulica (Rugosidad)" animated="false">
+                        <VBox spacing="10.0">
+                            <Label text="Coeficiente de Manning (n)"/>
+                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                <Spinner fx:id="manningSpinner" editable="true" prefWidth="100"/>
+                                <Label fx:id="manningDescLabel" text="Grava" style="-fx-font-size: 10px; -fx-text-fill: -color-fg-muted;" wrapText="true"/>
+                            </HBox>
+                        </VBox>
+                    </TitledPane>
+
+                    <TitledPane text="Morfología Procedural" animated="false">
+                        <VBox spacing="10.0">
+                            <Label text="Semilla (Seed):"/>
+                            <Spinner fx:id="seedSpinner"/>
+
+                            <Separator />
+
+                            <Label text="Sinuosidad Principal (Noise Freq):"/>
+                            <Slider fx:id="noiseSlider" min="0" max="100" showTickMarks="true"/>
+                            <HBox alignment="CENTER_RIGHT">
+                                <Label text="Valor: " style="-fx-font-size: 10px;"/>
+                                <Label fx:id="noiseFreqValueLabel" text="0.00000" style="-fx-font-weight: bold; -fx-font-size: 10px;"/>
+                            </HBox>
+
+                            <Label text="Frecuencias Secundarias:" style="-fx-font-size: 11px; -fx-font-weight: bold;"/>
+                            <GridPane hgap="5.0" vgap="5.0">
+                                <columnConstraints>
+                                    <ColumnConstraints hgrow="SOMETIMES"/>
+                                    <ColumnConstraints hgrow="ALWAYS"/>
+                                </columnConstraints>
+                                <Label text="Detalle:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                <Spinner fx:id="detailFreqSpinner" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                                <Label text="Zonal:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                <Spinner fx:id="zoneFreqSpinner" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                            </GridPane>
+                        </VBox>
+                    </TitledPane>
+
+                    <TitledPane text="Condiciones Físico-Químicas" animated="false">
+                        <GridPane hgap="10.0" vgap="10.0">
+                            <columnConstraints>
+                                <ColumnConstraints hgrow="SOMETIMES"/>
+                                <ColumnConstraints hgrow="ALWAYS"/>
+                            </columnConstraints>
+                            <Label text="Temp. Base (°C):" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                            <Spinner fx:id="baseTempSpinner" editable="true" GridPane.rowIndex="0" GridPane.columnIndex="1" maxWidth="Infinity"/>
+                            <Label text="pH Base:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                            <Spinner fx:id="basePhSpinner" editable="true" GridPane.rowIndex="1" GridPane.columnIndex="1" maxWidth="Infinity"/>
+                            <Label text="Dispersión (Alpha):" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                            <Spinner fx:id="dispersionSpinner" editable="true" GridPane.rowIndex="2" GridPane.columnIndex="1" maxWidth="Infinity"/>
+                        </GridPane>
+                    </TitledPane>
+                </panes>
+            </Accordion>
+
+            <Region VBox.vgrow="ALWAYS" minHeight="20"/>
+
+            <HBox spacing="10.0" alignment="CENTER_RIGHT">
+                <Button text="Cancelar" onAction="#onCancel" styleClass="flat"/>
+                <Button fx:id="saveButton" text="Crear Gemelo" onAction="#onSave" styleClass="accent">
+                    <graphic>
+                        <FontIcon iconLiteral="mdi2c-check" iconSize="16"/>
+                    </graphic>
+                </Button>
+            </HBox>
+        </VBox>
+    </ScrollPane>
+
+    <TabPane fx:id="previewTabs" style="-fx-background-color: -color-bg-default;" tabClosingPolicy="UNAVAILABLE">
+
+        <Tab text="Configuración de ruido Perlin" fx:id="noiseTab">
+            <StackPane style="-fx-padding: 20; ">
+                <VBox spacing="10" alignment="CENTER">
+                    <Label text="Previsualización Topológica en Tiempo Real" style="-fx-text-fill: -color-fg-muted;"/>
+                    <StackPane VBox.vgrow="ALWAYS" style="-fx-border-color: -color-border-muted; -fx-border-width: 1;">
+                        <Canvas fx:id="noiseCanvas" width="600" height="600" />
+                    </StackPane>
+                </VBox>
+            </StackPane>
+        </Tab>
+
+        <Tab text="Morfología (Vista Aérea)" fx:id="morphologyTab">
+            <StackPane style="-fx-padding: 20; ">
+                <VBox spacing="10" alignment="CENTER">
+                    <Label text="Previsualización Topológica en Tiempo Real" style="-fx-text-fill: -color-fg-muted;"/>
+                    <StackPane VBox.vgrow="ALWAYS" style="-fx-border-color: -color-border-muted; -fx-border-width: 1;">
+                        <Canvas fx:id="morphologyCanvas" width="600" height="600" />
+                    </StackPane>
+                </VBox>
+            </StackPane>
+        </Tab>
+
+        <Tab text="Hidrología (Simulación)">
+            <VBox spacing="10.0" style="-fx-padding: 20;">
+                <HBox alignment="CENTER_LEFT" spacing="10.0">
+                    <Label style="-fx-font-size: 14px; -fx-font-weight: bold;" text="Hidrograma Estimado"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="Ejecutar Simulación" onAction="#onPreviewClick">
+                        <graphic>
+                            <FontIcon iconLiteral="mdi2r-refresh" iconSize="14"/>
+                        </graphic>
+                    </Button>
+                </HBox>
+                <LineChart fx:id="previewChart" VBox.vgrow="ALWAYS" createSymbols="false" legendVisible="false">
+                    <xAxis> <NumberAxis label="Tiempo (s)" side="BOTTOM"/> </xAxis>
+                    <yAxis> <NumberAxis label="Caudal (m³/s)" side="LEFT"/> </yAxis>
+                </LineChart>
+            </VBox>
+        </Tab>
+    </TabPane>
+
+</SplitPane>
