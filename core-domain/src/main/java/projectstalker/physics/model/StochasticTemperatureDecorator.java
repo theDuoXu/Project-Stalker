@@ -33,10 +33,10 @@ public class StochasticTemperatureDecorator implements TemperatureModel {
 
         for (int i = 0; i < profile.length; i++) {
             // Obtenemos ruido espacial [-1.0, 1.0]
-            float noise = tempNoise.GetNoise(i, 0);
+            float noise = tempNoise.GetNoise(i, (float) currentTimeInSeconds * 0.01f); // hace que el ruido varíe más lento en el tiempo
 
             // Aplicamos amplitud
-            profile[i] += noise * noiseAmplitude;
+            profile[i] = Math.max(0.1f, profile[i] + noise * noiseAmplitude);
         }
 
         return profile;
