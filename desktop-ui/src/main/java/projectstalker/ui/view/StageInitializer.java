@@ -9,7 +9,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationListener;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
-import projectstalker.ui.StageReadyEvent;
+import projectstalker.ui.event.StageReadyEvent;
 
 import java.io.IOException;
 

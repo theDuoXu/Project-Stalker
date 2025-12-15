@@ -1,4 +1,4 @@
-package projectstalker.ui;
+package projectstalker.ui.event;
 
 import javafx.stage.Stage;
 import org.springframework.context.ApplicationEvent;

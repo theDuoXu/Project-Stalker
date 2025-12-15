@@ -6,7 +6,7 @@ import javafx.application.Platform;
 import javafx.stage.Stage;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
-import projectstalker.ui.view.StageInitializer;
+import projectstalker.ui.event.StageReadyEvent;
 
 public class StalkerFxApp extends Application {
 
@@ -16,6 +16,7 @@ public class StalkerFxApp extends Application {
     public void init() {
         // Inicializamos Spring Boot, pasándole esta clase y los argumentos
         applicationContext = new SpringApplicationBuilder(StalkerUiLauncher.class)
+                .headless(false)
                 .run(getParameters().getRaw().toArray(new String[0]));
     }
 
