@@ -27,7 +27,7 @@ class ClimatologicalTemperatureModelTest {
     void setUp() {
         // Usamos una configuración base conocida
         config = RiverConfig.getTestingRiver()
-                .withAverageAnnualTemperature(15.0f) // T media
+                .withAverageAnualTemperature(15.0f) // T media
                 .withSeasonalTempVariation(10.0f)    // +/- 10 grados anual
                 .withDailyTempVariation(5.0f);       // +/- 5 grados diario
 

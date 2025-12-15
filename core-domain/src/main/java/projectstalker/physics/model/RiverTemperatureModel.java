@@ -72,7 +72,7 @@ public class RiverTemperatureModel implements TemperatureModel{
     private float calculateBaseTemperature(double currentTimeInSeconds) {
         final double dayOfYear = (currentTimeInSeconds / SECONDS_IN_A_DAY) % DAYS_IN_A_YEAR;
         final double seasonalCycle = Math.sin((dayOfYear / DAYS_IN_A_YEAR) * 2.0 * Math.PI);
-        final double baseSeasonalTemp = config.averageAnnualTemperature() + config.seasonalTempVariation() * seasonalCycle;
+        final double baseSeasonalTemp = config.averageAnualTemperature() + config.seasonalTempVariation() * seasonalCycle;
 
         final double secondOfDay = currentTimeInSeconds % SECONDS_IN_A_DAY;
         final double dailyCycle = Math.sin((secondOfDay / SECONDS_IN_A_DAY) * 2.0 * Math.PI);

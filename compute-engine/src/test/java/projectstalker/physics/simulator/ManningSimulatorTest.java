@@ -50,7 +50,7 @@ class ManningSimulatorTest {
 
         // Mocks para modelos químicos (aunque no se usen en simulación pura, se instancian)
         when(mockRiverConfig.basePh()).thenReturn(7.0f);
-        when(mockRiverConfig.baseTemperature()).thenReturn(20.0f);
+        when(mockRiverConfig.dailyBaseTemperature()).thenReturn(20.0f);
         when(mockRiverConfig.noiseFrequency()).thenReturn(0.1f);
 
         // Simulation Config

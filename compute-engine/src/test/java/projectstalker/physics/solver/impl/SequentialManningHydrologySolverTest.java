@@ -65,7 +65,7 @@ class SequentialManningHydrologySolverTest {
         double firstCellDischarge = firstCellArea * nextState.getVelocityAt(0);
         assertEquals(inputDischarge, firstCellDischarge, 0.01, "El caudal en la primera celda debe ser igual al de entrada.");
 
-        double baseTemp = config.averageAnnualTemperature();
+        double baseTemp = config.averageAnualTemperature();
         double tempAtHeadwater = nextState.getTemperatureAt(0);
         assertTrue(tempAtHeadwater < baseTemp, "La temperatura en la cabecera debería ser más fría que la base.");
         assertEquals(baseTemp - config.maxHeadwaterCoolingEffect(), tempAtHeadwater, 1.0, "La temperatura en la cabecera no refleja el efecto de enfriamiento esperado.");
