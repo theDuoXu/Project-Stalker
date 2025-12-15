@@ -105,6 +105,22 @@ public class RiverEditorController {
     @FXML
     public Spinner<Double> varBasePhSpinner;
 
+    // -- Panel avanzado ---
+    @FXML
+    public Spinner<Double> concavitySpinner;
+    @FXML
+    public Spinner<Double> sideSlopeSpinner;
+    @FXML
+    public Spinner<Double> slopeSensSpinner;
+    @FXML
+    public Spinner<Double> decayRateSpinner;
+    @FXML
+    public Spinner<Double> turbSensSpinner;
+    @FXML
+    public Spinner<Double> headwaterCoolingSpinner;
+    @FXML
+    public Spinner<Double> widthHeatingSpinner;
+
     // --- Panel Derecho (Tabs) ---
     @FXML
     public TabPane previewTabs;
@@ -136,6 +152,7 @@ public class RiverEditorController {
         setupPresets();
         setupGeometrySpinners();
         setupManningSpinner();
+        setupAdvancedSpinners();
         setupPhysicoChemical();
         setupNoiseSpinners();
         // Cargar default al inicio
@@ -236,6 +253,39 @@ public class RiverEditorController {
         var zoneFactory = new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0001, 0.1, 0.001, 0.0001);
         zoneFactory.setConverter(createConverter("%.5f", 0.001));
         zoneFreqSpinner.setValueFactory(zoneFactory);
+    }
+    private void setupAdvancedSpinners() {
+        // Concavidad (0.4 default)
+        concavitySpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 1.0, 0.4, 0.05));
+
+        // Talud (z) (4.0 default)
+        sideSlopeSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.1, 10.0, 4.0, 0.5));
+
+        // Sensibilidad Ancho-Pendiente (0.4 default)
+        slopeSensSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.1, 1.0, 0.4, 0.05));
+
+        // Tasa Decay k20 (0.1 default)
+        decayRateSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 2.0, 0.1, 0.01));
+
+        // Sensibilidad Turbulencia (0.8 default)
+        turbSensSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 2.0, 0.8, 0.1));
+
+        // Enfriamiento Cabecera (4.0 default)
+        headwaterCoolingSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 15.0, 4.0, 0.5));
+
+        // Factor Calentamiento por Ancho (1.5 default)
+        widthHeatingSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 5.0, 1.5, 0.1));
+
+        // Listeners para actualizar UI si quieres reactividad inmediata
+        concavitySpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+        sideSlopeSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+        slopeSensSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+        decayRateSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+
+        // TODO placeholders
+        headwaterCoolingSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+        widthHeatingSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+
     }
 
     private void setupGeometryControls() {
@@ -573,6 +623,15 @@ public class RiverEditorController {
         // --- DISPERSIÓN ---
         dispersionSpinner.getValueFactory().setValue((double) config.baseDispersionAlpha());
 
+        // -- AVANZADOS ---
+        concavitySpinner.getValueFactory().setValue((double) config.concavityFactor());
+        sideSlopeSpinner.getValueFactory().setValue((double) config.baseSideSlope());
+        slopeSensSpinner.getValueFactory().setValue((double) config.slopeSensitivityExponent());
+        decayRateSpinner.getValueFactory().setValue((double) config.baseDecayRateAt20C());
+        turbSensSpinner.getValueFactory().setValue((double) config.decayTurbulenceSensitivity());
+        headwaterCoolingSpinner.getValueFactory().setValue((double) config.headwaterCoolingDistance());
+        widthHeatingSpinner.getValueFactory().setValue((double) config.widthHeatingFactor());
+
     }
 
     private RiverConfig buildConfigFromUI() {
@@ -629,7 +688,16 @@ public class RiverEditorController {
                 ) // Cálculo inverso: varPh = ratio * basePh
 
                 // Dispersión
-                .withBaseDispersionAlpha(dispersionSpinner.getValue().floatValue());
+                .withBaseDispersionAlpha(dispersionSpinner.getValue().floatValue())
+
+                // Avanzados
+                .withConcavityFactor(concavitySpinner.getValue().floatValue())
+                .withBaseSideSlope(sideSlopeSpinner.getValue().floatValue())
+                .withSlopeSensitivityExponent(slopeSensSpinner.getValue().floatValue())
+                .withBaseDecayRateAt20C(decayRateSpinner.getValue().floatValue())
+                .withDecayTurbulenceSensitivity(turbSensSpinner.getValue().floatValue())
+                .withMaxHeadwaterCoolingEffect(headwaterCoolingSpinner.getValue().floatValue())
+                .withWidthHeatingFactor(widthHeatingSpinner.getValue().floatValue());
     }
 
     // =========================================================================

@@ -8,6 +8,7 @@
 <?import javafx.scene.layout.*?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
+<?import org.controlsfx.control.ToggleSwitch?>
 <SplitPane dividerPositions="0.4" style="-fx-background-color: -color-bg-default;"
            xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
            fx:controller="projectstalker.ui.view.RiverEditorController">
@@ -20,7 +21,8 @@
 
             <Label style="-fx-font-size: 18px; -fx-font-weight: bold;" text="Diseñador de Gemelos"/>
 
-            <VBox spacing="5.0" style="-fx-background-color: -color-bg-overlay; -fx-background-radius: 5; -fx-padding: 10;">
+            <VBox spacing="5.0"
+                  style="-fx-background-color: -color-bg-overlay; -fx-background-radius: 5; -fx-padding: 10;">
                 <Label text="Plantilla Base" style="-fx-font-weight: bold; -fx-text-fill: -color-accent-fg;"/>
                 <ComboBox fx:id="presetCombo" maxWidth="Infinity"/>
             </VBox>
@@ -38,14 +40,26 @@
                         <ColumnConstraints hgrow="ALWAYS"/>
                     </columnConstraints>
 
-                    <Label text="Longitud (m):" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-                    <Spinner fx:id="totalLengthSpinner" editable="true" GridPane.rowIndex="0" GridPane.columnIndex="1" maxWidth="Infinity"/>
+                    <Label text="Base" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+                    <Label text="Variabilidad %" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
 
-                    <Label text="Ancho (m):" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-                    <Spinner fx:id="baseWidthSpinner" editable="true" GridPane.rowIndex="1" GridPane.columnIndex="1" maxWidth="Infinity"/>
+                    <Label text="Longitud (m):" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                    <Spinner fx:id="totalLengthSpinner" editable="true" GridPane.rowIndex="1" GridPane.columnIndex="1"
+                             maxWidth="Infinity"/>
+                    <Label text="N/A" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
 
-                    <Label text="Pendiente:" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
-                    <Spinner fx:id="slopeSpinner" editable="true" GridPane.rowIndex="2" GridPane.columnIndex="1" maxWidth="Infinity"/>
+
+                    <Label text="Ancho (m):" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                    <Spinner fx:id="baseWidthSpinner" editable="true" GridPane.rowIndex="2" GridPane.columnIndex="1"
+                             maxWidth="Infinity"/>
+                    <Spinner fx:id="varWidthSpinner" editable="true" GridPane.rowIndex="2" GridPane.columnIndex="2"
+                             maxWidth="Infinity"/>
+
+                    <Label text="Pendiente:" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                    <Spinner fx:id="slopeSpinner" editable="true" GridPane.rowIndex="3" GridPane.columnIndex="1"
+                             maxWidth="Infinity"/>
+                    <Spinner fx:id="varSlopeSpinner" editable="true" GridPane.rowIndex="3" GridPane.columnIndex="2"
+                             maxWidth="Infinity"/>
                 </GridPane>
             </VBox>
 
@@ -53,11 +67,19 @@
                 <panes>
                     <TitledPane text="Hidráulica (Rugosidad)" animated="false">
                         <VBox spacing="10.0">
-                            <Label text="Coeficiente de Manning (n)"/>
                             <HBox spacing="10" alignment="CENTER_LEFT">
-                                <Spinner fx:id="manningSpinner" editable="true" prefWidth="100"/>
-                                <Label fx:id="manningDescLabel" text="Grava" style="-fx-font-size: 10px; -fx-text-fill: -color-fg-muted;" wrapText="true"/>
+                                <VBox spacing="10.0">
+                                    <Label text="Coeficiente de Manning (n)"/>
+                                    <Spinner fx:id="manningSpinner" editable="true" prefWidth="100"/>
+                                </VBox>
+
+                                <VBox spacing="10.0">
+                                    <Label text="Variabilidad %"/>
+                                    <Spinner fx:id="varManningSpinner" editable="true" prefWidth="100"/>
+                                </VBox>
                             </HBox>
+                            <Label fx:id="manningDescLabel" text="Grava"
+                                   style="-fx-font-size: 10px; -fx-text-fill: -color-fg-muted;" wrapText="true"/>
                         </VBox>
                     </TitledPane>
 
@@ -66,13 +88,14 @@
                             <Label text="Semilla (Seed):"/>
                             <Spinner fx:id="seedSpinner"/>
 
-                            <Separator />
+                            <Separator/>
 
                             <Label text="Sinuosidad Principal (Noise Freq):"/>
                             <Slider fx:id="noiseSlider" min="0" max="100" showTickMarks="true"/>
                             <HBox alignment="CENTER_RIGHT">
                                 <Label text="Valor: " style="-fx-font-size: 10px;"/>
-                                <Label fx:id="noiseFreqValueLabel" text="0.00000" style="-fx-font-weight: bold; -fx-font-size: 10px;"/>
+                                <Label fx:id="noiseFreqValueLabel" text="0.00000"
+                                       style="-fx-font-weight: bold; -fx-font-size: 10px;"/>
                             </HBox>
 
                             <Label text="Frecuencias Secundarias:" style="-fx-font-size: 11px; -fx-font-weight: bold;"/>
@@ -96,13 +119,99 @@
                                 <ColumnConstraints hgrow="SOMETIMES"/>
                                 <ColumnConstraints hgrow="ALWAYS"/>
                             </columnConstraints>
-                            <Label text="Temp. Base (°C):" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-                            <Spinner fx:id="baseTempSpinner" editable="true" GridPane.rowIndex="0" GridPane.columnIndex="1" maxWidth="Infinity"/>
-                            <Label text="pH Base:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-                            <Spinner fx:id="basePhSpinner" editable="true" GridPane.rowIndex="1" GridPane.columnIndex="1" maxWidth="Infinity"/>
-                            <Label text="Dispersión (Alpha):" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
-                            <Spinner fx:id="dispersionSpinner" editable="true" GridPane.rowIndex="2" GridPane.columnIndex="1" maxWidth="Infinity"/>
+                            <Label text="Base" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+                            <Label text="Variabilidad %" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
+
+                            <Label text="Tmp Diaria °C:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                            <Spinner fx:id="dailyBaseTempSpinner" editable="true" GridPane.rowIndex="1"
+                                     GridPane.columnIndex="1" maxWidth="Infinity"/>
+                            <Spinner fx:id="varDailyBaseTempSpinner" editable="true" GridPane.rowIndex="1"
+                                     GridPane.columnIndex="2" maxWidth="Infinity"/>
+
+                            <Label text="Tmp Anual °C:" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                            <Spinner fx:id="anualBaseTempSpinner" editable="true" GridPane.rowIndex="2"
+                                     GridPane.columnIndex="1" maxWidth="Infinity"/>
+                            <Spinner fx:id="varAnualBaseTempSpinner" editable="true" GridPane.rowIndex="2"
+                                     GridPane.columnIndex="2" maxWidth="Infinity"/>
+
+                            <Label text="pH Base:" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+                            <Spinner fx:id="basePhSpinner" editable="true" GridPane.rowIndex="3"
+                                     GridPane.columnIndex="1" maxWidth="Infinity"/>
+                            <Spinner fx:id="varBasePhSpinner" editable="true" GridPane.rowIndex="3"
+                                     GridPane.columnIndex="2" maxWidth="Infinity"/>
+
+                            <Label text="Dispersión (Alpha):" GridPane.rowIndex="4" GridPane.columnIndex="0"/>
+                            <Spinner fx:id="dispersionSpinner" editable="true" GridPane.rowIndex="4"
+                                     GridPane.columnIndex="1" maxWidth="Infinity"/>
+                            <Label text="N/A" GridPane.rowIndex="4" GridPane.columnIndex="2"/>
                         </GridPane>
+                    </TitledPane>
+
+                    <TitledPane text="Ajustes Avanzados (Física &amp; Geometría)" animated="false">
+                        <VBox spacing="10.0">
+                            <Label text="Perfil y Sección Transversal" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
+                            <GridPane hgap="10.0" vgap="5.0">
+                                <columnConstraints>
+                                    <ColumnConstraints hgrow="SOMETIMES" minWidth="110"/>
+                                    <ColumnConstraints hgrow="ALWAYS"/>
+                                </columnConstraints>
+
+                                <Label text="Concavidad Perfil:" GridPane.rowIndex="0" GridPane.columnIndex="0">
+                                    <tooltip><Tooltip text="0.0 = Perfil recto, 1.0 = Perfil muy cóncavo (río maduro)"/></tooltip>
+                                </Label>
+                                <Spinner fx:id="concavitySpinner" editable="true" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                                <Label text="Talud Lateral (z):" GridPane.rowIndex="1" GridPane.columnIndex="0">
+                                    <tooltip><Tooltip text="Relación Horizontal/Vertical. z=0 es vertical, z=4 es suave."/></tooltip>
+                                </Label>
+                                <Spinner fx:id="sideSlopeSpinner" editable="true" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                            </GridPane>
+
+                            <Separator/>
+
+                            <Label text="Calibración Hidráulica/Química" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
+                            <GridPane hgap="10.0" vgap="5.0">
+                                <columnConstraints>
+                                    <ColumnConstraints hgrow="SOMETIMES" minWidth="110"/>
+                                    <ColumnConstraints hgrow="ALWAYS"/>
+                                </columnConstraints>
+
+                                <Label text="Exp. Ancho/Pend.:" GridPane.rowIndex="0" GridPane.columnIndex="0">
+                                    <tooltip><Tooltip text="Sensibilidad del estrechamiento según la pendiente (0.3 - 0.5)"/></tooltip>
+                                </Label>
+                                <Spinner fx:id="slopeSensSpinner" editable="true" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                                <Label text="Tasa Decay (k20):" GridPane.rowIndex="1" GridPane.columnIndex="0">
+                                    <tooltip><Tooltip text="Coeficiente base de autodepuración a 20°C"/></tooltip>
+                                </Label>
+                                <Spinner fx:id="decayRateSpinner" editable="true" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                                <Label text="Sens. Turbulencia:" GridPane.rowIndex="2" GridPane.columnIndex="0">
+                                    <tooltip><Tooltip text="Cuánto aumenta el Decay con la rugosidad (Manning)"/></tooltip>
+                                </Label>
+                                <Spinner fx:id="turbSensSpinner" editable="true" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+                            </GridPane>
+
+                            <Separator/>
+
+                            <Label text="Modelo Térmico" style="-fx-font-weight: bold; -fx-font-size: 11px;"/>
+                            <GridPane hgap="10.0" vgap="5.0">
+                                <columnConstraints>
+                                    <ColumnConstraints hgrow="SOMETIMES" minWidth="110"/>
+                                    <ColumnConstraints hgrow="ALWAYS"/>
+                                </columnConstraints>
+
+                                <Label text="Enfr. Cabecera:" GridPane.rowIndex="0" GridPane.columnIndex="0">
+                                    <tooltip><Tooltip text="Grados de enfriamiento extra en el nacimiento (agua de deshielo)"/></tooltip>
+                                </Label>
+                                <Spinner fx:id="headwaterCoolingSpinner" editable="true" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                                <Label text="Factor Calent. Ancho:" GridPane.rowIndex="1" GridPane.columnIndex="0">
+                                    <tooltip><Tooltip text="Cuánto calienta el sol según el ancho del río"/></tooltip>
+                                </Label>
+                                <Spinner fx:id="widthHeatingSpinner" editable="true" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                            </GridPane>
+                        </VBox>
                     </TitledPane>
                 </panes>
             </Accordion>
@@ -127,7 +236,7 @@
                 <VBox spacing="10" alignment="CENTER">
                     <Label text="Previsualización Topológica en Tiempo Real" style="-fx-text-fill: -color-fg-muted;"/>
                     <StackPane VBox.vgrow="ALWAYS" style="-fx-border-color: -color-border-muted; -fx-border-width: 1;">
-                        <Canvas fx:id="noiseCanvas" width="600" height="600" />
+                        <Canvas fx:id="noiseCanvas" width="600" height="600"/>
                     </StackPane>
                 </VBox>
             </StackPane>
@@ -136,15 +245,26 @@
         <Tab text="Morfología (Vista Aérea)" fx:id="morphologyTab">
             <StackPane style="-fx-padding: 20; ">
                 <VBox spacing="10" alignment="CENTER">
-                    <Label text="Previsualización Topológica en Tiempo Real" style="-fx-text-fill: -color-fg-muted;"/>
+                    <HBox alignment="CENTER_LEFT" spacing="10.0">
+                        <Label text="Previsualización Topológica en Tiempo Real"
+                               style="-fx-text-fill: -color-fg-muted;"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <ToggleButton fx:id="morphologySwitch"
+                                      text="Toggle"
+                                      styleClass="success">
+                            <graphic>
+                                <FontIcon iconLiteral="mdi2c-chart-bar" iconSize="14"/>
+                            </graphic>
+                        </ToggleButton>
+                    </HBox>
                     <StackPane VBox.vgrow="ALWAYS" style="-fx-border-color: -color-border-muted; -fx-border-width: 1;">
-                        <Canvas fx:id="morphologyCanvas" width="600" height="600" />
+                        <Canvas fx:id="morphologyCanvas" width="600" height="600"/>
                     </StackPane>
                 </VBox>
             </StackPane>
         </Tab>
 
-        <Tab text="Hidrología (Simulación)">
+        <Tab text="Hidrología básica">
             <VBox spacing="10.0" style="-fx-padding: 20;">
                 <HBox alignment="CENTER_LEFT" spacing="10.0">
                     <Label style="-fx-font-size: 14px; -fx-font-weight: bold;" text="Hidrograma Estimado"/>
@@ -156,8 +276,12 @@
                     </Button>
                 </HBox>
                 <LineChart fx:id="previewChart" VBox.vgrow="ALWAYS" createSymbols="false" legendVisible="false">
-                    <xAxis> <NumberAxis label="Tiempo (s)" side="BOTTOM"/> </xAxis>
-                    <yAxis> <NumberAxis label="Caudal (m³/s)" side="LEFT"/> </yAxis>
+                    <xAxis>
+                        <NumberAxis label="Tiempo (s)" side="BOTTOM"/>
+                    </xAxis>
+                    <yAxis>
+                        <NumberAxis label="Caudal (m³/s)" side="LEFT"/>
+                    </yAxis>
                 </LineChart>
             </VBox>
         </Tab>
