@@ -2,6 +2,9 @@ package projectstalker.ui.view;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -11,11 +14,16 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.util.Duration;
 import lombok.extern.slf4j.Slf4j;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import projectstalker.domain.dto.twin.TwinSummaryDTO;
+import projectstalker.ui.event.RestoreMainViewEvent;
+import projectstalker.ui.event.SidebarVisibilityEvent;
 import projectstalker.ui.security.AuthenticationService;
 import projectstalker.ui.service.DigitalTwinClientService;
 import projectstalker.ui.view.components.TwinListCell;
@@ -29,7 +37,7 @@ public class MainController {
 
     private final AuthenticationService authService;
     private final DigitalTwinClientService twinService;
-    private final ApplicationContext springContext; // <--- NECESARIO PARA CARGAR OTROS FXML
+    private final ApplicationContext springContext;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @FXML public Label statusLabel;
@@ -38,6 +46,10 @@ public class MainController {
 
     // Contenedor central dinámico
     @FXML public StackPane contentArea;
+
+    // Contenedor lateral
+    @FXML public VBox twinsSideBar;
+    private double originalSidebarWidth = 250.0;
 
     @FXML public Button newProjectButton;
 
@@ -61,6 +73,13 @@ public class MainController {
 
         // Desactivamos el botón de crear hasta que haya login
         newProjectButton.setDisable(true);
+
+        // Usamos un listener para asegurarnos de tener el valor real tras el layout
+        Platform.runLater(() -> {
+            if (twinsSideBar.getWidth() > 0) {
+                originalSidebarWidth = twinsSideBar.getWidth();
+            }
+        });
     }
 
     @FXML
@@ -86,10 +105,53 @@ public class MainController {
             contentArea.getChildren().clear();
             contentArea.getChildren().add(view);
 
+            // 4. Ocultamos sidebar
+            toggleSidebar(false);
         } catch (IOException e) {
             log.error(e.toString());
             showErrorAlert(new RuntimeException("No se pudo cargar la vista del editor: " + e.getMessage()));
         }
+    }
+    @EventListener
+    public void onSidebarEvent(SidebarVisibilityEvent event) {
+        Platform.runLater(() -> toggleSidebar(event.visible()));
+    }
+
+    @EventListener
+    public void onRestoreMainViewEvent(RestoreMainViewEvent event){
+        contentArea.getChildren().clear();
+        Label placeholder = new Label("Selecciona o crea un Gemelo Digital para comenzar");
+        placeholder.setStyle("-fx-text-fill: -color-fg-muted;");
+        contentArea.getChildren().add(placeholder);
+    }
+
+    private void toggleSidebar(boolean show) {
+        // Si vamos a mostrar, aseguramos que sea visible antes de animar
+        if (show) {
+            twinsSideBar.setVisible(true);
+            twinsSideBar.setManaged(true);
+        }
+
+        double targetWidth = show ? originalSidebarWidth : 0;
+
+        // Animación suave del ancho
+        Timeline timeline = new Timeline();
+        timeline.getKeyFrames().add(new KeyFrame(Duration.millis(300),
+                new KeyValue(twinsSideBar.prefWidthProperty(), targetWidth),
+                new KeyValue(twinsSideBar.minWidthProperty(), targetWidth),
+                new KeyValue(twinsSideBar.maxWidthProperty(), targetWidth),
+                new KeyValue(twinsSideBar.opacityProperty(), show ? 1.0 : 0.0) // Fade out visual
+        ));
+
+        timeline.setOnFinished(e -> {
+            if (!show) {
+                // Al terminar de ocultar, liberamos el espacio completamente
+                twinsSideBar.setVisible(false);
+                twinsSideBar.setManaged(false);
+            }
+        });
+
+        timeline.play();
     }
 
     private void attemptLogin() {
