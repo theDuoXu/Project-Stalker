@@ -17,7 +17,7 @@ import projectstalker.utils.FastNoiseLite;
  * </ul>
  */
 @Slf4j
-public class RiverTemperatureModel implements TimeEvolutionModel{
+public class RiverTemperatureModel implements TemperatureModel{
 
     private static final double SECONDS_IN_A_DAY = 24.0 * 3600.0;
     private static final double DAYS_IN_A_YEAR = 365.25;
