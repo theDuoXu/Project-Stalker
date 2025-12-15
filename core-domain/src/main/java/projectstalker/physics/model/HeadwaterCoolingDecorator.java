@@ -6,9 +6,9 @@ import projectstalker.domain.river.RiverGeometry;
 /**
  * Decorador de Enfriamiento de Cabecera.
  * <p>
- * Modifica el perfil de temperatura aplicando un gradiente negativo en el nacimiento del río.
- * Simula el hecho de que el agua de origen (manantial, deshielo) suele estar más fría
- * que la temperatura de equilibrio ambiental, calentándose a medida que fluye río abajo.
+ * Aplica un decaimiento exponencial a la temperatura en el tramo inicial.
+ * Utiliza una aproximación de la Ley de Enfriamiento de Newton para evitar
+ * transiciones bruscas (codos) en la gráfica.
  */
 public class HeadwaterCoolingDecorator implements TemperatureModel {
 
@@ -24,27 +24,34 @@ public class HeadwaterCoolingDecorator implements TemperatureModel {
 
     @Override
     public float[] generateProfile(double currentTimeInSeconds) {
-        // 1. Obtener el perfil base (del modelo envuelto)
+        // 1. Obtener el perfil base
         float[] profile = wrappedModel.generateProfile(currentTimeInSeconds);
 
-        // 2. Aplicar el efecto de enfriamiento solo donde sea relevante
-        double coolingDist = config.headwaterCoolingDistance();
+        double coolingDist = config.headwaterCoolingDistance(); // Distancia de referencia (L)
         double maxCooling = config.maxHeadwaterCoolingEffect();
 
-        // Optimización: Solo iteramos hasta la distancia de enfriamiento, no todo el río
-        int affectedCells = (int) Math.ceil(coolingDist / spatialResolution);
+        // 2. Definir constante de decaimiento (k)
+        // Queremos que en 'coolingDist', el efecto se haya reducido drásticamente (ej: al 2%).
+        // e^(-4) ≈ 0.018 (1.8%). Así aseguramos que la "cola" visual coincida con el parámetro.
+        final double DECAY_CONSTANT = 4.0;
+
+        // Optimización: Aunque la exponencial nunca llega a 0 absoluto, cortamos
+        // cuando el efecto es despreciable para no iterar 100km de río.
+        // Calculamos hasta 1.5 veces la distancia configurada para asegurar suavidad total.
+        int affectedCells = (int) Math.ceil((coolingDist * 1.5) / spatialResolution);
         int limit = Math.min(profile.length, affectedCells);
 
         for (int i = 0; i < limit; i++) {
             double position = i * spatialResolution;
 
-            // Factor de 1.0 (en el nacimiento) a 0.0 (al final de la distancia de enfriamiento)
-            double gradientFactor = 1.0 - (position / coolingDist);
+            // FÓRMULA: Decaimiento Exponencial (Newton's Law of Heating)
+            // Factor = e^(-k * x / L)
+            // x=0 -> Factor=1.0 (Máximo enfriamiento)
+            // x=L -> Factor=0.018 (Casi temperatura ambiente)
+            double decayFactor = Math.exp(-DECAY_CONSTANT * position / coolingDist);
 
-            if (gradientFactor > 0) {
-                // Restamos temperatura (Enfriamiento)
-                profile[i] -= (float) (maxCooling * gradientFactor);
-            }
+            // Restamos el frío
+            profile[i] -= (float) (maxCooling * decayFactor);
         }
 
         return profile;
