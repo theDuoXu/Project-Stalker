@@ -25,10 +25,19 @@ import lombok.With;
  * @param widthVariability         Variación máxima del ancho en metros (ej: 5.0 para +/- 5m).
  * @param baseSideSlope            Pendiente base de los taludes (adimensional).
  * @param sideSlopeVariability     Variación máxima de la pendiente de los taludes.
+ * @param slopeSensitivityExponent Factor de sensibilidad geométrica. Un valor de 0.5 implica una relación de raíz
+ *                                 cuadrada (típica en hidráulica). Valores mayores exageran el efecto
+ *                                 (estrechamientos muy agresivos).
+ *                                 - Geometría Hidráulica de Leopold & Maddock (1953)
+ * @param roughnessSensitivity     Sensibilidad de la rugosidad a los cambios de pendiente. Basado libremente en
+ *                                 la ecuación de Jarrett (n ~ S^0.38) para arroyos de montaña.
  * @param baseManning              Coeficiente de Manning base.
  * @param manningVariability       Variación máxima del coeficiente de Manning.
  * @param baseDecayRateAt20C       Coeficiente de reacción/descomposición base (k) a 20°C, en unidades de s⁻¹.
  * @param decayRateVariability     Variación máxima del coeficiente de reacción.
+ * @param decayTurbulenceSensitivity Sensibilidad del Decay a la rugosidad. Un valor de 1.0 implica una relación lineal.
+ *                                   0.8 suaviza un poco el efecto para que no sea tan drástico.
+ * @param riverPhaseShiftHours     Desfase del pico de PH. Por defecto por la tarde.
  * @param baseTemperature          Temperatura media diaria del agua en grados Celsius (°C).
  * @param dailyTempVariation       Amplitud de la variación diaria de temperatura en °C (ej: 3.0 para +/- 3°C).
  * @param seasonalTempVariation    Amplitud máxima de la variación anual de temperatura.
@@ -62,6 +71,9 @@ public record RiverConfig(
         float baseSideSlope,
         float sideSlopeVariability,
 
+        float slopeSensitivityExponent,
+        float roughnessSensitivity,
+
         // --- Parámetros Hidráulicos ---
         float baseManning,
         float manningVariability,
@@ -69,6 +81,8 @@ public record RiverConfig(
         // --- Parámetros de Reacción ---
         float baseDecayRateAt20C,
         float decayRateVariability,
+        float decayTurbulenceSensitivity,
+        float riverPhaseShiftHours,
 
         // --- Parámetro de dispersión ---
         float baseDispersionAlpha,
@@ -106,10 +120,14 @@ public record RiverConfig(
                 .widthVariability(40)
                 .baseSideSlope(4)
                 .sideSlopeVariability(1.5F)
+                .slopeSensitivityExponent(0.4f)
+                .roughnessSensitivity(0.35f)
                 .baseManning(0.030F)
                 .manningVariability(0.005F)
                 .baseDecayRateAt20C(0.1F)
                 .decayRateVariability(0.05F)
+                .decayTurbulenceSensitivity(0.8f)
+                .riverPhaseShiftHours(15f)
                 .baseDispersionAlpha(10)
                 .alphaVariability(2)
                 .baseTemperature(15)
