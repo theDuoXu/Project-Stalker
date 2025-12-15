@@ -23,6 +23,7 @@ import projectstalker.ui.event.RestoreMainViewEvent;
 import projectstalker.ui.event.SidebarVisibilityEvent;
 import projectstalker.ui.renderer.RiverRenderer;
 import projectstalker.ui.service.DigitalTwinClientService;
+import projectstalker.ui.service.SimulationEngine;
 import projectstalker.ui.view.util.RiverPresets;
 import projectstalker.utils.FastNoiseLite;
 
@@ -39,6 +40,7 @@ public class RiverEditorController {
     private RiverRenderer renderer; // Instancia del renderer
     private RiverRenderer.RenderMode currentRenderMode = RiverRenderer.RenderMode.MORPHOLOGY;
     private RiverGeometry currentGeometry; // Cache de la geometría actual
+    private SimulationEngine simEngine;
     private double lastMouseX = -1;
     private double lastMouseY = -1;
 
@@ -66,6 +68,12 @@ public class RiverEditorController {
     public Spinner<Double> slopeSpinner;
     @FXML
     public Spinner<Double> varSlopeSpinner;
+
+    // --- UI: Panel de simulación ---
+    @FXML
+    public Label simulationTimeLabel;
+    @FXML
+    public Label simulationSpeedLabel;
 
     // --- Hidráulica ---
     @FXML
@@ -127,6 +135,8 @@ public class RiverEditorController {
     @FXML
     public Canvas morphologyCanvas;
     @FXML
+    public Canvas hydrologyCanvas;
+    @FXML
     public Canvas noiseCanvas;
     @FXML
     public LineChart<Number, Number> previewChart;
@@ -139,9 +149,10 @@ public class RiverEditorController {
     @FXML
     public ToggleButton morphologySwitch;
 
-    public RiverEditorController(DigitalTwinClientService twinService, ApplicationEventPublisher eventPublisher) {
+    public RiverEditorController(DigitalTwinClientService twinService, ApplicationEventPublisher eventPublisher, SimulationEngine simEngine) {
         this.twinService = twinService;
         this.eventPublisher = eventPublisher;
+        this.simEngine = simEngine;
     }
 
     @FXML
@@ -163,6 +174,8 @@ public class RiverEditorController {
         setupGeometryControls();
         setupNoiseControls();
         setupCanvasResizing();
+
+        startSimulationEngine();
     }
 
     private void setupMorphologySwitch() {
@@ -197,6 +210,41 @@ public class RiverEditorController {
                 });
             }
         });
+        hydrologyCanvas.setOnMouseMoved(e -> {
+            this.lastMouseX = e.getX();
+            this.lastMouseY = e.getY();
+            if (currentGeometry != null) {
+                renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
+            }
+        });
+        hydrologyCanvas.setOnMouseExited(e -> {
+            this.lastMouseX = -1;
+            this.lastMouseY = -1;
+            // Pasamos -1 para ocultar el HUD
+            if (currentGeometry != null) renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
+        });
+
+        hydrologyCanvas.sceneProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                // Pequeño delay para asegurar que el CSS se ha procesado
+                javafx.application.Platform.runLater(() -> {
+                    renderer.reloadThemeColors();
+                    if (currentGeometry != null)
+                        renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
+                });
+            }
+        });
+    }
+
+    private void startSimulationEngine() {
+        simEngine.setOnFrameReady(snapshot -> {
+            // Pintar en el Canvas de Hidrología
+            renderer.renderHydrology(hydrologyCanvas,currentGeometry, snapshot, lastMouseX, lastMouseY);
+            // Actualizar el reloj digital
+            updateTimeLabel(snapshot.timeSeconds());
+        });
+
+        simEngine.start();
     }
 
 
@@ -426,7 +474,7 @@ public class RiverEditorController {
     private void drawRiverPreview() {
         RiverConfig config = buildConfigFromUI();
         this.currentGeometry = RiverGeometryFactory.createRealisticRiver(config);
-
+        simEngine.loadRiver(currentGeometry, config);
         // Delegar pintado al Renderer
         renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
     }
@@ -762,26 +810,50 @@ public class RiverEditorController {
     }
 
     @FXML
-    public void onPreviewClick() {
-        // 1. Asegurar que estamos viendo la pestaña correcta
-        previewTabs.getSelectionModel().select(1);
+    public void onSimRestart() {
+        // Reinicia el tiempo a 0.0
+        simEngine.restartTime();
+        // Opcional: Si quieres que empiece pausado al reiniciar
+        // simEngine.setPlaybackSpeed(0.0);
+        updateSpeedLabel();
+    }
 
-        // 2. Construir la request
-        RiverConfig config = buildConfigFromUI();
-        var request = new FlowPreviewRequest(config.seed(), 100.0f, // Caudal base dummy
-                0.2f,   // Variabilidad dummy
-                0.1f, 300    // Segundos a simular
-        );
+    @FXML
+    public void onSimRewind() {
+        // Establece velocidad negativa para retroceder
+        // Según tu tooltip es -2x, pero puedes poner -5.0 para que sea más notable
+        simEngine.setPlaybackSpeed(-2.0);
+        updateSpeedLabel();
+    }
 
-        // 3. Limpiar chart previo
-        previewChart.getData().clear();
+    @FXML
+    public void onSimPause() {
+        // Congela el tiempo
+        simEngine.setPlaybackSpeed(0.0);
+        updateSpeedLabel();
+    }
 
-        // 4. Llamada reactiva
-        twinService.previewFlow(request).subscribe(data -> {
-            Platform.runLater(() -> updateChart(data));
-        }, error -> {
-            Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Error Simulación", error.getMessage()));
-        });
+    @FXML
+    public void onSimPlay() {
+        // Velocidad normal (Tiempo real)
+        simEngine.setPlaybackSpeed(1.0);
+        updateSpeedLabel();
+    }
+
+    @FXML
+    public void onSimAccelerate() {
+        // Lógica de multiplicación:
+        // Si está pausado o rebobinando, arranca a 2x.
+        // Si ya está corriendo, duplica la velocidad actual (2x, 4x, 8x...)
+        double current = simEngine.getPlaybackSpeed();
+
+        if (current <= 0) {
+            simEngine.setPlaybackSpeed(2.0);
+        } else {
+            // Limitamos a 64x por seguridad/estabilidad visual
+            simEngine.setPlaybackSpeed(Math.min(64.0, current * 2.0));
+        }
+        updateSpeedLabel();
     }
 
     @FXML
@@ -828,6 +900,34 @@ public class RiverEditorController {
                 }
             }
         };
+    }
+
+    private void updateSpeedLabel() {
+        double speed = simEngine.getPlaybackSpeed();
+        if (speed == 0) {
+            simulationSpeedLabel.setText("PAUSED");
+            simulationSpeedLabel.setStyle("-fx-text-fill: -color-fg-muted; -fx-font-size: 11px;");
+        } else {
+            simulationSpeedLabel.setText(String.format("%.1fx", speed));
+            // Color diferente para avance (Azul/Verde) o retroceso (Naranja/Rojo)
+            if (speed > 0) {
+                simulationSpeedLabel.setStyle("-fx-text-fill: -color-success-fg; -fx-font-size: 11px;");
+            } else {
+                simulationSpeedLabel.setStyle("-fx-text-fill: -color-warning-fg; -fx-font-size: 11px;");
+            }
+        }
+    }
+
+    // Este método lo llama el SimulationEngine en cada frame (via callback)
+    private void updateTimeLabel(double totalSeconds) {
+        long totalSecs = (long) totalSeconds;
+        long days = totalSecs / 86400;
+        long remainder = totalSecs % 86400;
+        long hours = remainder / 3600;
+        long minutes = (remainder % 3600) / 60;
+
+        // Formato DDd HH:MM (Los segundos cambian demasiado rápido a velocidades altas)
+        simulationTimeLabel.setText(String.format("T+ %02dd %02d:%02d", days, hours, minutes));
     }
 
     private double parseSafeDouble(String txt, double def) {
