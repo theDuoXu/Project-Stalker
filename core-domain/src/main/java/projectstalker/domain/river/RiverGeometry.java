@@ -48,7 +48,7 @@ public final class RiverGeometry {
      * que el objeto RiverGeometry siempre se encuentre en un estado consistente y válido.
      *
      * @param cellCount          El número total de celdas del río (> 1).
-     * @param spatialResolution                 La longitud de cada celda en metros (> 0).
+     * @param spatialResolution  La longitud de cada celda en metros (> 0).
      * @param elevationProfile   Array con la altitud del fondo del cauce para cada celda.
      * @param bottomWidth        Array con el ancho del fondo del cauce para cada celda (valores >= 0).
      * @param sideSlope          Array con la pendiente de los taludes laterales (valores >= 0).
@@ -363,13 +363,17 @@ public final class RiverGeometry {
         return phProfile.clone();
     }
 
-    public float[] cloneDispersionAlpha(){return dispersionAlpha.clone();}
+    public float[] cloneDispersionAlpha() {
+        return dispersionAlpha.clone();
+    }
 
     public RiverSectionType[] cloneSectionTypes() {
         return sectionTypes.clone();
     }
 
-
+    public float getTotalLength() {
+        return cellCount * spatialResolution;
+    }
 
 
     public record GpuGeometryBuffers(
@@ -377,5 +381,6 @@ public final class RiverGeometry {
             FloatBuffer sideSlope,
             FloatBuffer manning,
             FloatBuffer bedSlope
-    ) {}
+    ) {
+    }
 }
