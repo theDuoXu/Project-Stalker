@@ -477,9 +477,12 @@ public class RiverRenderer {
         float maxSlope = 0.0f;
         float maxZ = -Float.MAX_VALUE;
         float minZ = Float.MAX_VALUE;
+        float maxWidth = -Float.MAX_VALUE; // Nuevo
+        float minWidth = Float.MAX_VALUE;  // Nuevo
 
         float[] elevs = geo.getElevationProfile();
         float[] slopes = geo.getSideSlope();
+        float[] widths = geo.getBottomWidth(); // Array de anchos
         int cells = geo.getCellCount();
         float dx = geo.getSpatialResolution();
 
@@ -488,6 +491,11 @@ public class RiverRenderer {
             float z = slopes[i];
             if (z > maxZ) maxZ = z;
             if (z < minZ) minZ = z;
+
+            // Anchos (b) - NUEVO
+            float w = widths[i];
+            if (w > maxWidth) maxWidth = w;
+            if (w < minWidth) minWidth = w;
 
             // Pendiente Longitudinal (%)
             if (i < cells - 1) {
@@ -503,14 +511,14 @@ public class RiverRenderer {
         // 2. DIBUJAR CAJA DE FONDO
         double x = 10;
         double y = 10;
-        double width = 200;
-        double height = 95; // Ajustado para 5 líneas
+        double boxW = 210; // Un pelín más ancho para números grandes
+        double boxH = 135; // Aumentado para caber las nuevas líneas (+40px aprox)
 
         gc.setFill(palette.bg().deriveColor(0, 1, 1, 0.8)); // Fondo semi-transparente
         gc.setStroke(palette.border());
         gc.setLineWidth(1.0);
-        gc.fillRoundRect(x, y, width, height, 8, 8);
-        gc.strokeRoundRect(x, y, width, height, 8, 8);
+        gc.fillRoundRect(x, y, boxW, boxH, 8, 8);
+        gc.strokeRoundRect(x, y, boxW, boxH, 8, 8);
 
         // 3. DIBUJAR TEXTO
         gc.setFill(palette.text());
@@ -520,14 +528,21 @@ public class RiverRenderer {
         double textY = y + 20;
         double lineHeight = 16;
 
+        // Grupo Vertical
         gc.fillText(String.format("ELEV. INICIAL:  %7.1f m", startElev), textX, textY);
         textY += lineHeight;
         gc.fillText(String.format("ELEV. FINAL:    %7.1f m", endElev), textX, textY);
         textY += lineHeight;
         gc.fillText(String.format("PENDIENTE MAX:  %7.3f %%", maxSlope), textX, textY);
-        textY += lineHeight + 4; // Separador visual
+        textY += lineHeight + 5; // Separador
 
-        // Datos de Sección
+        // Grupo Horizontal (NUEVO)
+        gc.fillText(String.format("ANCHO MAX:      %7.1f m", maxWidth), textX, textY);
+        textY += lineHeight;
+        gc.fillText(String.format("ANCHO MIN:      %7.1f m", minWidth), textX, textY);
+        textY += lineHeight + 5; // Separador
+
+        // Grupo Forma (Talud)
         gc.setFill(palette.text().deriveColor(0, 1, 1, 0.8)); // Un poco más apagado
         gc.fillText(String.format("TALUD (z) MAX:  %7.2f", maxZ), textX, textY);
         textY += lineHeight;
