@@ -27,11 +27,12 @@
 
             <Region HBox.hgrow="ALWAYS"/>
 
-            <Button text="Nuevo Proyecto">
+            <Button fx:id="newProjectButton" text="Nuevo Proyecto" onAction="#onNewProjectClick">
                 <graphic>
                     <FontIcon iconLiteral="mdi2f-file-plus" iconSize="16"/>
                 </graphic>
             </Button>
+
             <Button fx:id="loginButton" text="Conectar a Keycloak" onAction="#onLoginClick" styleClass="accent">
                 <graphic>
                     <FontIcon fx:id="loginIcon" iconLiteral="mdi2l-login" iconSize="16" />
@@ -51,9 +52,9 @@
     </left>
 
     <center>
-        <StackPane
-                style="-fx-background-color: -color-bg-subtle; -fx-border-color: -color-border-muted; -fx-border-width: 1 0 0 1;"
-                BorderPane.alignment="CENTER">
+        <StackPane fx:id="contentArea"
+                   style="-fx-background-color: -color-bg-subtle; -fx-border-color: -color-border-muted; -fx-border-width: 1 0 0 1;"
+                   BorderPane.alignment="CENTER">
             <Label style="-fx-text-fill: -color-fg-muted;" text="Selecciona o crea un Gemelo Digital para comenzar"/>
         </StackPane>
     </center>
