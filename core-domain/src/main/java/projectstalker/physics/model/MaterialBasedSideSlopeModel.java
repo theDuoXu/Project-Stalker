@@ -3,42 +3,50 @@ package projectstalker.physics.model;
 import projectstalker.config.RiverConfig;
 
 /**
- * Modelo Base de Taludes (Side Slope) basado en Material (Ángulo de Reposo).
+ * Modelo de Taludes (Side Slope) basado en Material (Ángulo de Reposo).
  * <p>
- * Establece la inclinación de las orillas z basándose en la rugosidad del lecho (Manning),
- * asumiendo que el Manning es un indicador del tipo de material geológico.
+ * Vincula la rugosidad (Manning) con la estabilidad del talud:
  * <ul>
- * <li><b>Manning Alto (Roca/Grava gruesa):</b> Material cohesivo o duro. Soporta taludes verticales o empinados ($z$ bajo).</li>
- * <li><b>Manning Bajo (Arena/Limo):</b> Material suelto. Requiere taludes suaves para ser estable ($z$ alto).</li>
+ * <li><b>Manning Bajo (Arena):</b> Usamos <code>config.baseSideSlope()</code>. Talud suave (z alto).</li>
+ * <li><b>Manning Alto (Roca):</b> Usamos <code>base - variability</code>. Talud empinado (z bajo).</li>
  * </ul>
  */
 public class MaterialBasedSideSlopeModel implements SpatialModel {
 
-    // Manning de referencia para interpolación
-    private static final double MANNING_ROCK = 0.050; // Roca
-    private static final double MANNING_SAND = 0.025; // Arena fina
-
-    // Taludes de referencia (Horizontal : Vertical)
-    private static final double Z_ROCK = 0.5; // Casi vertical
-    private static final double Z_SAND = 4.0; // Muy plano
+    // Referencias de Manning para la interpolación (Física de materiales)
+    private static final double MANNING_SAND_REF = 0.025; // n para arena limpia/tierra
+    private static final double MANNING_ROCK_REF = 0.055; // n para roca/montaña
 
     @Override
     public float calculate(int cellIndex, RiverConfig config, double localManning, double unusedNoise) {
-        // Interpolación Lineal Inversa
-        // A mayor Manning (más duro), menor Z (más vertical).
 
-        // 1. Normalizar Manning dentro del rango esperado
-        // Clampeamos para no extrapolar valores locos fuera de arena-roca
-        double n = Math.max(MANNING_SAND, Math.min(MANNING_ROCK, localManning));
+        // 1. Definir el Rango de Taludes desde la Configuración
+        // z = Distancia Horizontal / Altura Vertical
 
-        // 2. Calcular factor de posición (0.0 = Arena, 1.0 = Roca)
-        double ratio = (n - MANNING_SAND) / (MANNING_ROCK - MANNING_SAND);
+        // El talud Base es el más suave (Arena), ej: 4.0
+        double zSand = config.baseSideSlope();
 
-        // 3. Interpolar Z
-        // Si ratio es 0 (Arena) -> Z_SAND
-        // Si ratio es 1 (Roca)  -> Z_ROCK
-        double z = Z_SAND - (ratio * (Z_SAND - Z_ROCK));
+        // El talud Roca es el base menos la variabilidad, ej: 4.0 - 3.5 = 0.5 (Vertical)
+        // Clampeamos a 0.1 para no tener paredes negativas o división por cero infinita
+        double z = getZ(config, localManning, zSand);
 
         return (float) z;
+    }
+
+    private static double getZ(RiverConfig config, double localManning, double zSand) {
+        double zRock = Math.max(0.1, zSand - config.sideSlopeVariability());
+
+        // 2. Normalizar el Manning local
+        // Determinamos dónde cae el manning actual entre arena y roca
+        double n = Math.max(MANNING_SAND_REF, Math.min(MANNING_ROCK_REF, localManning));
+
+        // Ratio 0.0 = Arena, 1.0 = Roca
+        double hardnessRatio = (n - MANNING_SAND_REF) / (MANNING_ROCK_REF - MANNING_SAND_REF);
+
+        // 3. Interpolar el talud z
+        // Si ratio es 0 (Arena) -> devolvemos zSand (4.0)
+        // Si ratio es 1 (Roca)  -> devolvemos zRock (0.5)
+        double z = zSand - (hardnessRatio * (zSand - zRock));
+        return z;
     }
 }
