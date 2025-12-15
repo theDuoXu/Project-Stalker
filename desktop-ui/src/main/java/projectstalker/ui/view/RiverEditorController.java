@@ -1,7 +1,6 @@
 package projectstalker.ui.view;
 
 import javafx.application.Platform;
-import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
@@ -12,15 +11,18 @@ import javafx.scene.chart.XYChart;
 import javafx.scene.control.*;
 import javafx.scene.paint.Color;
 import javafx.util.StringConverter;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.dto.twin.FlowPreviewRequest;
 import projectstalker.domain.dto.twin.TwinCreateRequest;
+import projectstalker.domain.river.RiverGeometry;
+import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.ui.event.RestoreMainViewEvent;
 import projectstalker.ui.event.SidebarVisibilityEvent;
+import projectstalker.ui.renderer.RiverRenderer;
 import projectstalker.ui.service.DigitalTwinClientService;
 import projectstalker.ui.view.util.RiverPresets;
 import projectstalker.utils.FastNoiseLite;
@@ -33,6 +35,13 @@ public class RiverEditorController {
 
     private final DigitalTwinClientService twinService;
     private final ApplicationEventPublisher eventPublisher;
+
+    // Lógica compleja de dibujo de ríos
+    private RiverRenderer renderer; // Instancia del renderer
+    private RiverRenderer.RenderMode currentRenderMode = RiverRenderer.RenderMode.MORPHOLOGY;
+    private RiverGeometry currentGeometry; // Cache de la geometría actual
+    private double lastMouseX = -1;
+    private double lastMouseY = -1;
 
     // Para control de cambios
     private RiverConfig initialConfigState;
@@ -53,11 +62,17 @@ public class RiverEditorController {
     @FXML
     public Spinner<Double> baseWidthSpinner;
     @FXML
+    public Spinner<Double> varWidthSpinner; //
+    @FXML
     public Spinner<Double> slopeSpinner;
+    @FXML
+    public Spinner<Double> varSlopeSpinner; //
 
     // --- Hidráulica ---
     @FXML
     public Spinner<Double> manningSpinner;
+    @FXML
+    public Spinner<Double> varManningSpinner; //
     @FXML
     public Label manningDescLabel;
 
@@ -82,6 +97,12 @@ public class RiverEditorController {
     public Spinner<Double> basePhSpinner;
     @FXML
     public Spinner<Double> dispersionSpinner;
+    @FXML
+    public Spinner<Double> varBaseTempSpinner;
+    @FXML
+    public Spinner<Double> varBasePhSpinner;
+    @FXML
+    public Spinner<Double> varDispersionSpinner;
 
     // --- Panel Derecho (Tabs) ---
     @FXML
@@ -98,6 +119,8 @@ public class RiverEditorController {
     public Tab noiseTab;
     @FXML
     public Button saveButton;
+    @FXML
+    public ToggleButton morphologySwitch;
 
     public RiverEditorController(DigitalTwinClientService twinService, ApplicationEventPublisher eventPublisher) {
         this.twinService = twinService;
@@ -106,6 +129,9 @@ public class RiverEditorController {
 
     @FXML
     public void initialize() {
+        this.renderer = new RiverRenderer(morphologyCanvas);
+        setupRendererListeners();
+        setupMorphologySwitch();
         setupPresets();
         setupGeometrySpinners();
         setupManningSpinner();
@@ -116,8 +142,43 @@ public class RiverEditorController {
         loadConfigToUI(standard);
         saveStateAsInitial(standard, "", "");
 
+        setupGeometryControls();
         setupNoiseControls();
         setupCanvasResizing();
+    }
+
+    private void setupMorphologySwitch() {
+        morphologySwitch.selectedProperty().addListener((observable, oldValue, newValue) -> {
+            onMorphologyCanvasModeChange(newValue);
+        });
+    }
+
+    private void setupRendererListeners() {
+        morphologyCanvas.setOnMouseMoved(e -> {
+            this.lastMouseX = e.getX();
+            this.lastMouseY = e.getY();
+            if (currentGeometry != null) {
+                renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
+            }
+        });
+
+        morphologyCanvas.setOnMouseExited(e -> {
+            this.lastMouseX = -1;
+            this.lastMouseY = -1;
+            // Pasamos -1 para ocultar el HUD
+            if (currentGeometry != null) renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
+        });
+
+        morphologyCanvas.sceneProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                // Pequeño delay para asegurar que el CSS se ha procesado
+                javafx.application.Platform.runLater(() -> {
+                    renderer.reloadThemeColors();
+                    if (currentGeometry != null)
+                        renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
+                });
+            }
+        });
     }
 
 
@@ -173,6 +234,36 @@ public class RiverEditorController {
         zoneFreqSpinner.setValueFactory(zoneFactory);
     }
 
+    private void setupGeometryControls() {
+        noiseSlider.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+
+        totalLengthSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+
+        baseWidthSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+
+        slopeSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+
+        manningSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+
+        seedSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+
+        detailFreqSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+
+        zoneFreqSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+
+        morphologyTab.setOnSelectionChanged(event -> {
+            if (morphologyTab.isSelected()) {
+                highlightTab(morphologyTab, false);
+                drawRiverPreview();
+            }
+        });
+        // Dibujo inicial
+        if (morphologyTab.isSelected()) {
+            drawRiverPreview();
+        }
+    }
+
+
     private void setupNoiseControls() {
         // El Slider controla la frecuencia principal visualmente (0-100)
         // Lo mapeamos a una frecuencia pequeña (0.0 - 0.05)
@@ -192,19 +283,27 @@ public class RiverEditorController {
 
         zoneFreqSpinner.valueProperty().addListener(this::onUpdateNoiseSpinners);
 
-        baseWidthSpinner.valueProperty().addListener(this::onUpdateNoiseSpinners);
-
         // Listener para LIMPIAR el resaltado cuando el usuario selecciona la pestaña.
         noiseTab.setOnSelectionChanged(event -> {
             if (noiseTab.isSelected()) {
                 highlightTab(noiseTab, false);
+                drawNoiseHeartBeat();
             }
         });
+        // Dibujo inicial
+        if (noiseTab.isSelected()) {
+            drawNoiseHeartBeat();
+        }
     }
 
     private void onUpdateNoiseSpinners(ObservableValue<? extends Number> o, Number old, Number val) {
         drawNoiseHeartBeat();
         if (!noiseTab.isSelected()) highlightTab(noiseTab, true);
+    }
+
+    private void onUpdateGeometryOrNoiseSpinners(ObservableValue<? extends Number> o, Number old, Number val) {
+        drawRiverPreview();
+        if (!morphologyTab.isSelected()) highlightTab(morphologyTab, true);
     }
 
     private void highlightTab(Tab tab, boolean highlight) {
@@ -256,8 +355,20 @@ public class RiverEditorController {
         else manningDescLabel.setStyle("-fx-text-fill: -color-fg-muted; -fx-font-size: 10px;");
     }
 
+    /**
+     * Dibuja una vista técnica combinada:
+     * 1. Planta (Top-down): Ancho del cauce y zonas de fricción.
+     * 2. Perfil (Side-view): Caída de elevación a lo largo del río.
+     */
     private void drawRiverPreview() {
-        // Método a implementar
+        RiverConfig config = buildConfigFromUI();
+        this.currentGeometry = RiverGeometryFactory.createRealisticRiver(config);
+
+        // Actualizar Labels de Texto (Lo que pediste en vez del gráfico de elevación)
+//        updateElevationStats(config, currentGeometry);
+
+        // Delegar pintado al Renderer
+        renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
     }
 
     /**
@@ -409,8 +520,6 @@ public class RiverEditorController {
         basePhSpinner.getValueFactory().setValue((double) config.basePh());
         dispersionSpinner.getValueFactory().setValue((double) config.baseDispersionAlpha());
 
-        // Forzar dibujo inicial
-        Platform.runLater(this::drawRiverPreview);
     }
 
     private RiverConfig buildConfigFromUI() {
@@ -538,6 +647,11 @@ public class RiverEditorController {
         });
     }
 
+    @FXML
+    private void onMorphologyCanvasModeChange(Boolean newValue) {
+        currentRenderMode = RiverRenderer.RenderMode.fromBoolean(newValue);
+    }
+
     private void updateChart(float[] flowData) {
         XYChart.Series<Number, Number> series = new XYChart.Series<>();
         series.setName("Hidrograma Generado");
@@ -594,4 +708,6 @@ public class RiverEditorController {
         alert.setContentText(content);
         alert.showAndWait();
     }
+
+
 }
