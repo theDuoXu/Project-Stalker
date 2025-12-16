@@ -1,6 +1,7 @@
 package projectstalker.ui.view.delegate;
 
 import javafx.beans.value.ObservableValue;
+import javafx.scene.canvas.Canvas;
 import javafx.scene.control.Tab;
 
 /**
@@ -78,6 +79,11 @@ public class RiverUpdateDelegate {
                 }
             });
         }
+    }
+
+    public final void trackCanvasSizeChanges(Canvas canvas, Runnable redrawStrategy){
+        canvas.widthProperty().addListener((e) -> redrawStrategy.run());
+        canvas.heightProperty().addListener((e) -> redrawStrategy.run());
     }
 
     // --- Gestión Visual de Tabs ---

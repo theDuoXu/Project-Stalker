@@ -290,8 +290,9 @@ public class RiverEditorController {
 
     private void setupCanvas() {
         // El canvas debe redibujarse si cambia el tamaño del contenedor padre
-        noiseCanvas.widthProperty().addListener(evt -> drawNoiseHeartBeat());
-        noiseCanvas.heightProperty().addListener(evt -> drawNoiseHeartBeat());
+        this.updateDelegate.trackCanvasSizeChanges(noiseCanvas, this::drawNoiseHeartBeat);
+        this.updateDelegate.trackCanvasSizeChanges(morphologyCanvas, this::drawNoiseHeartBeat);
+        this.updateDelegate.trackCanvasSizeChanges(hydrologyCanvas, this::drawNoiseHeartBeat);
 
         canvasInteractor.bind(
                 this::redrawMorphology,     // Qué hacer al mover el ratón (Repaint)
