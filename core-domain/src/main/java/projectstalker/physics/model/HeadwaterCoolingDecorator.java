@@ -6,9 +6,11 @@ import projectstalker.domain.river.RiverGeometry;
 /**
  * Decorador de Enfriamiento de Cabecera.
  * <p>
- * Aplica un decaimiento exponencial a la temperatura en el tramo inicial.
- * Utiliza una aproximación de la Ley de Enfriamiento de Newton para evitar
- * transiciones bruscas (codos) en la gráfica.
+ * Modifica el perfil de temperatura simulando que el agua nace más fría.
+ * <p>
+ * Mejoras aplicadas:
+ * 1. <b>Curva Cosenoidal (SmoothStep):</b> Elimina la agresividad inicial. La transición es suave al principio y al final.
+ * 2. <b>Protección Anti-Congelación:</b> Se asegura de que la resta nunca baje de 0.1°C.
  */
 public class HeadwaterCoolingDecorator implements TemperatureModel {
 
@@ -24,34 +26,39 @@ public class HeadwaterCoolingDecorator implements TemperatureModel {
 
     @Override
     public float[] generateProfile(double currentTimeInSeconds) {
-        // 1. Obtener el perfil base
+        // 1. Obtener el perfil base (Temperatura ambiente/estacional)
         float[] profile = wrappedModel.generateProfile(currentTimeInSeconds);
 
-        double coolingDist = config.headwaterCoolingDistance(); // Distancia de referencia (L)
+        double coolingDist = config.headwaterCoolingDistance();
         double maxCooling = config.maxHeadwaterCoolingEffect();
 
-        // 2. Definir constante de decaimiento (k)
-        // Queremos que en 'coolingDist', el efecto se haya reducido drásticamente (ej: al 2%).
-        // e^(-4) ≈ 0.018 (1.8%). Así aseguramos que la "cola" visual coincida con el parámetro.
-        final double DECAY_CONSTANT = 4.0;
+        // Si la distancia es 0 o negativa, no hacemos nada
+        if (coolingDist <= 0) return profile;
 
-        // Optimización: Aunque la exponencial nunca llega a 0 absoluto, cortamos
-        // cuando el efecto es despreciable para no iterar 100km de río.
-        // Calculamos hasta 1.5 veces la distancia configurada para asegurar suavidad total.
-        int affectedCells = (int) Math.ceil((coolingDist * 1.5) / spatialResolution);
+        // Iteramos solo hasta la distancia de efecto
+        int affectedCells = (int) Math.ceil(coolingDist / spatialResolution);
         int limit = Math.min(profile.length, affectedCells);
 
         for (int i = 0; i < limit; i++) {
             double position = i * spatialResolution;
 
-            // FÓRMULA: Decaimiento Exponencial (Newton's Law of Heating)
-            // Factor = e^(-k * x / L)
-            // x=0 -> Factor=1.0 (Máximo enfriamiento)
-            // x=L -> Factor=0.018 (Casi temperatura ambiente)
-            double decayFactor = Math.exp(-DECAY_CONSTANT * position / coolingDist);
+            // Progreso normalizado de 0.0 (nacimiento) a 1.0 (fin del efecto)
+            double progress = position / coolingDist;
 
-            // Restamos el frío
-            profile[i] -= (float) (maxCooling * decayFactor);
+            // FÓRMULA: Interpolación Cosenoidal (Half-Cosine / SmoothStep)
+            // En x=0 -> cos(0)=1 -> (1+1)/2 = 1.0 (100% efecto)
+            // En x=1 -> cos(pi)=-1 -> (1-1)/2 = 0.0 (0% efecto)
+            // Esto genera una curva mucho más suave que la lineal o la exponencial agresiva.
+            double smoothFactor = 0.5 * (1.0 + Math.cos(Math.PI * progress));
+
+            // Calculamos la temperatura propuesta
+            float currentTemp = profile[i];
+            float coolingAmount = (float) (maxCooling * smoothFactor);
+            float newTemp = currentTemp - coolingAmount;
+
+            // CORRECCIÓN FÍSICA: El agua líquida no baja de 0°C (aprox)
+            // Si hacía 2°C y restamos 4°C, nos quedamos en 0.1°C, no en -2°C.
+            profile[i] = Math.max(0.1f, newTemp);
         }
 
         return profile;
