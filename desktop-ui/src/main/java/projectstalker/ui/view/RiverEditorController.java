@@ -22,6 +22,7 @@ import projectstalker.ui.renderer.NoiseSignatureRenderer;
 import projectstalker.ui.renderer.RiverRenderer;
 import projectstalker.ui.service.DigitalTwinClientService;
 import projectstalker.ui.service.SimulationEngine;
+import projectstalker.ui.view.delegate.RiverEditorCanvasInteractorDelegate;
 import projectstalker.ui.view.delegate.SimulationControlDelegate;
 import projectstalker.ui.view.util.RiverPresets;
 import projectstalker.ui.view.util.RiverUiFactory;
@@ -42,14 +43,13 @@ public class RiverEditorController {
     private RiverRenderer.RenderMode currentRenderMode = RiverRenderer.RenderMode.MORPHOLOGY;
     private RiverGeometry currentGeometry; // Cache de la geometría actual
     private SimulationEngine simEngine;
-    private double lastMouseX = -1;
-    private double lastMouseY = -1;
 
     // Para control de cambios
     private RiverConfig initialConfigState;
     private String initialNameState = "";
     private String initialDescState = "";
     private SimulationControlDelegate simDelegate;
+    private final RiverEditorCanvasInteractorDelegate canvasInteractor;
 
     // --- UI: Controles Principales ---
     @FXML
@@ -153,10 +153,11 @@ public class RiverEditorController {
     @FXML
     public ToggleButton morphologySwitch;
 
-    public RiverEditorController(DigitalTwinClientService twinService, ApplicationEventPublisher eventPublisher, SimulationEngine simEngine) {
+    public RiverEditorController(DigitalTwinClientService twinService, ApplicationEventPublisher eventPublisher, SimulationEngine simEngine, RiverEditorCanvasInteractorDelegate canvasInteractor) {
         this.twinService = twinService;
         this.eventPublisher = eventPublisher;
         this.simEngine = simEngine;
+        this.canvasInteractor = canvasInteractor;
     }
 
     @FXML
@@ -169,7 +170,6 @@ public class RiverEditorController {
                 this.simulationSpeedLabel
         );
 
-        setupRendererListeners();
         setupMorphologySwitch();
         setupPresets();
         setupGeometrySpinners();
@@ -184,7 +184,7 @@ public class RiverEditorController {
 
         setupGeometryControls();
         setupNoiseControls();
-        setupCanvasResizing();
+        setupCanvas();
 
         startSimulationEngine();
     }
@@ -195,62 +195,15 @@ public class RiverEditorController {
         });
     }
 
-    private void setupRendererListeners() {
-        morphologyCanvas.setOnMouseMoved(e -> {
-            this.lastMouseX = e.getX();
-            this.lastMouseY = e.getY();
-            if (currentGeometry != null) {
-                renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
-            }
-        });
-
-        morphologyCanvas.setOnMouseExited(e -> {
-            this.lastMouseX = -1;
-            this.lastMouseY = -1;
-            // Pasamos -1 para ocultar el HUD
-            if (currentGeometry != null) renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
-        });
-
-        morphologyCanvas.sceneProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal != null) {
-                // Pequeño delay para asegurar que el CSS se ha procesado
-                javafx.application.Platform.runLater(() -> {
-                    renderer.reloadThemeColors();
-                    if (currentGeometry != null)
-                        renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
-                });
-            }
-        });
-        hydrologyCanvas.setOnMouseMoved(e -> {
-            this.lastMouseX = e.getX();
-            this.lastMouseY = e.getY();
-            if (currentGeometry != null) {
-                renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
-            }
-        });
-        hydrologyCanvas.setOnMouseExited(e -> {
-            this.lastMouseX = -1;
-            this.lastMouseY = -1;
-            // Pasamos -1 para ocultar el HUD
-            if (currentGeometry != null) renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
-        });
-
-        hydrologyCanvas.sceneProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal != null) {
-                // Pequeño delay para asegurar que el CSS se ha procesado
-                javafx.application.Platform.runLater(() -> {
-                    renderer.reloadThemeColors();
-                    if (currentGeometry != null)
-                        renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
-                });
-            }
-        });
-    }
-
     private void startSimulationEngine() {
         simEngine.setOnFrameReady(snapshot -> {
             // Pintar en el Canvas de Hidrología (esto se mantiene aquí por ahora)
-            renderer.renderHydrology(hydrologyCanvas, currentGeometry, snapshot, lastMouseX, lastMouseY);
+            renderer.renderHydrology(
+                    hydrologyCanvas,
+                    currentGeometry,
+                    snapshot,
+                    canvasInteractor.getMouseX(),
+                    canvasInteractor.getMouseY());
 
             // Delegar actualización de UI
             simDelegate.updateTime(snapshot.timeSeconds());
@@ -263,10 +216,26 @@ public class RiverEditorController {
     // 1. CONFIGURACIÓN DE CONTROLES (SETUP)
     // =========================================================================
 
-    private void setupCanvasResizing() {
+    private void setupCanvas() {
         // El canvas debe redibujarse si cambia el tamaño del contenedor padre
         noiseCanvas.widthProperty().addListener(evt -> drawNoiseHeartBeat());
         noiseCanvas.heightProperty().addListener(evt -> drawNoiseHeartBeat());
+
+        canvasInteractor.bind(
+                this::redrawMorphology,     // Qué hacer al mover el ratón (Repaint)
+                renderer::reloadThemeColors, // Qué hacer al cargar la escena (Theme)
+                morphologyCanvas, hydrologyCanvas // Los canvas afectados
+        );
+    }
+    private void redrawMorphology() {
+        if (currentGeometry != null) {
+            renderer.render(
+                    currentGeometry,
+                    currentRenderMode,
+                    canvasInteractor.getMouseX(),
+                    canvasInteractor.getMouseY()
+            );
+        }
     }
 
     private void setupGeometrySpinners() {
@@ -293,42 +262,37 @@ public class RiverEditorController {
     private void setupNoiseSpinners() {
         // 1. Seed (Semilla) - Entero Grande
         // Rango: 0 a 999999999. Paso: 1 o 10000. Usamos Long para la seguridad del tipo.
-        seedSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(0, 9999999, 1000, 1));
-
+        RiverUiFactory.configureSpinner(seedSpinner,0, 9999999, 1000, 1 );
         // 2. Frecuencia de Detalle (detailFreqSpinner) - Valor fino
         // Rango: 0.001 a 1.0. Paso: 0.001 (muy fino).
-        var detailFactory = new SpinnerValueFactory.DoubleSpinnerValueFactory(0.001, 1.0, 0.05, 0.001);
-        detailFactory.setConverter(createConverter("%.4f", 0.05));
-        detailFreqSpinner.setValueFactory(detailFactory);
+        RiverUiFactory.configureScientificSpinner(detailFreqSpinner, 0.001, 1.0, 0.05, 0.001, "%.4f");
 
         // 3. Frecuencia Zonal (zoneFreqSpinner) - Valor muy fino (escala macro)
         // Rango: 0.0001 a 0.1. Paso: 0.0001 (aún más fino).
-        var zoneFactory = new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0001, 0.1, 0.001, 0.0001);
-        zoneFactory.setConverter(createConverter("%.5f", 0.001));
-        zoneFreqSpinner.setValueFactory(zoneFactory);
+        RiverUiFactory.configureScientificSpinner(zoneFreqSpinner, 0.0001, 0.1, 0.001, 0.0001, "%.5f");
     }
 
     private void setupAdvancedSpinners() {
         // Concavidad (0.4 default)
-        concavitySpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 1.0, 0.4, 0.05));
+        RiverUiFactory.configureSpinner(concavitySpinner, 0.0, 1.0, 0.4, 0.05);
 
         // Talud (z) (4.0 default)
-        sideSlopeSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.1, 10.0, 4.0, 0.1));
+        RiverUiFactory.configureSpinner(sideSlopeSpinner, 0.1, 10.0, 4.0, 0.1);
 
         // Sensibilidad Ancho-Pendiente (0.4 default)
-        slopeSensSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.1, 1.0, 0.4, 0.01));
+        RiverUiFactory.configureSpinner(slopeSensSpinner, 0.1, 1.0, 0.4, 0.01);
 
         // Tasa Decay k20 (0.1 default)
-        decayRateSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 2.0, 0.1, 0.01));
+        RiverUiFactory.configureSpinner(decayRateSpinner, 0.0, 2.0, 0.1, 0.01);
 
         // Sensibilidad Turbulencia (0.8 default)
-        turbSensSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 2.0, 0.8, 0.1));
+        RiverUiFactory.configureSpinner(turbSensSpinner, 0.0, 2.0, 0.8, 0.1);
 
         // Enfriamiento Cabecera (4.0 default)
-        headwaterCoolingSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 15.0, 4.0, 0.5));
+        RiverUiFactory.configureSpinner(headwaterCoolingSpinner, 0.0, 15.0, 4.0, 0.5);
 
         // Factor Calentamiento por Ancho (1.5 default)
-        widthHeatingSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 5.0, 1.5, 0.1));
+        RiverUiFactory.configureSpinner(widthHeatingSpinner, 0.0, 5.0, 1.5, 0.1);
 
         // Listeners para actualizar UI si quieres reactividad inmediata
         concavitySpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
@@ -451,16 +415,20 @@ public class RiverEditorController {
     }
 
     private void setupPhysicoChemical() {
-        dailyBaseTempSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(-5.0, 40.0, 15.0, 0.1));
-        varDailyBaseTempSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 100, 20.0, 0.1));
+        // Temperatura Base Diaria
+        RiverUiFactory.configureSpinner(dailyBaseTempSpinner, -5.0, 40.0, 15.0, 0.1);
+        RiverUiFactory.configureSpinner(varDailyBaseTempSpinner, 0.0, 100.0, 20.0, 0.1);
 
-        anualBaseTempSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(-5.0, 40.0, 15.0, 0.1));
-        varAnualBaseTempSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 100, 10.0, 0.1));
+        // Temperatura Base Anual
+        RiverUiFactory.configureSpinner(anualBaseTempSpinner, -5.0, 40.0, 15.0, 0.1);
+        RiverUiFactory.configureSpinner(varAnualBaseTempSpinner, 0.0, 100.0, 10.0, 0.1);
 
-        basePhSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 14.0, 7.5, 0.1));
-        varBasePhSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 50, 10.0, 0.1));
+        // pH Base
+        RiverUiFactory.configureSpinner(basePhSpinner, 0.0, 14.0, 7.5, 0.1);
+        RiverUiFactory.configureSpinner(varBasePhSpinner, 0.0, 50.0, 10.0, 0.1);
 
-        dispersionSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.1, 100.0, 10.0, 1.0));
+        // Dispersión
+        RiverUiFactory.configureSpinner(dispersionSpinner, 0.1, 100.0, 10.0, 1.0);
 
         dailyBaseTempSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
         varDailyBaseTempSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
@@ -516,7 +484,7 @@ public class RiverEditorController {
     private void drawHydrologyTab() {
         simEngine.loadRiver(currentGeometry, buildConfigFromUI());
         // Delegar pintado al Renderer
-        renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
+        renderer.render(currentGeometry, currentRenderMode, canvasInteractor.getMouseX(), canvasInteractor.getMouseY());
     }
 
     /**
@@ -795,29 +763,6 @@ public class RiverEditorController {
     // =========================================================================
     // 5. HELPERS
     // =========================================================================
-
-    /**
-     * Helper limpio para crear convertidores de String a Double.
-     * Evita el uso de clases anónimas sucias y maneja NumberFormatException.
-     */
-    private StringConverter<Double> createConverter(String format, double fallbackValue) {
-        return new StringConverter<>() {
-            @Override
-            public String toString(Double object) {
-                if (object == null) return String.format(format, fallbackValue);
-                return String.format(format, object);
-            }
-
-            @Override
-            public Double fromString(String string) {
-                try {
-                    return Double.parseDouble(string.replace(",", ".")); // Tolerancia a comas
-                } catch (NumberFormatException e) {
-                    return fallbackValue;
-                }
-            }
-        };
-    }
 
     private void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
