@@ -21,10 +21,13 @@ import projectstalker.domain.river.RiverGeometry;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.ui.event.RestoreMainViewEvent;
 import projectstalker.ui.event.SidebarVisibilityEvent;
+import projectstalker.ui.event.TransitoryStatusUpdateEvent;
 import projectstalker.ui.renderer.RiverRenderer;
 import projectstalker.ui.service.DigitalTwinClientService;
 import projectstalker.ui.service.SimulationEngine;
 import projectstalker.ui.view.util.RiverPresets;
+import projectstalker.ui.viewmodel.StatusType;
+import projectstalker.ui.viewmodel.StatusViewModel;
 import projectstalker.utils.FastNoiseLite;
 
 import java.util.Collections;
@@ -241,7 +244,7 @@ public class RiverEditorController {
     private void startSimulationEngine() {
         simEngine.setOnFrameReady(snapshot -> {
             // Pintar en el Canvas de Hidrología
-            renderer.renderHydrology(hydrologyCanvas,currentGeometry, snapshot, lastMouseX, lastMouseY);
+            renderer.renderHydrology(hydrologyCanvas, currentGeometry, snapshot, lastMouseX, lastMouseY);
             // Actualizar el reloj digital
             updateTimeLabel(snapshot.timeSeconds());
         });
@@ -304,6 +307,7 @@ public class RiverEditorController {
         zoneFactory.setConverter(createConverter("%.5f", 0.001));
         zoneFreqSpinner.setValueFactory(zoneFactory);
     }
+
     private void setupAdvancedSpinners() {
         // Concavidad (0.4 default)
         concavitySpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 1.0, 0.4, 0.05));
@@ -336,8 +340,8 @@ public class RiverEditorController {
         headwaterCoolingSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
         widthHeatingSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
 
-        hydrologyTab.setOnSelectionChanged((e) ->{
-            if (hydrologyTab.isSelected()){
+        hydrologyTab.setOnSelectionChanged((e) -> {
+            if (hydrologyTab.isSelected()) {
                 highlightTab(hydrologyTab, false);
                 this.currentGeometry = RiverGeometryFactory.createRealisticRiver(buildConfigFromUI());
                 drawHydrologyTab();
@@ -423,11 +427,11 @@ public class RiverEditorController {
         if (!noiseTab.isSelected()) highlightTab(noiseTab, true);
     }
 
-    private void onUpdateHydrologySpinners(ObservableValue<? extends Number> o, Number old, Number val){
-        if(hydrologyTab.isSelected()){
+    private void onUpdateHydrologySpinners(ObservableValue<? extends Number> o, Number old, Number val) {
+        if (hydrologyTab.isSelected()) {
             this.currentGeometry = RiverGeometryFactory.createRealisticRiver(buildConfigFromUI());
             drawHydrologyTab();
-        }else {
+        } else {
             highlightTab(hydrologyTab, true);
         }
     }
@@ -469,7 +473,7 @@ public class RiverEditorController {
         varBasePhSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
         varBasePhSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
 
-//        dispersionSpinner.valueProperty().addListener(this::); No se usa todavía
+//        dispersionSpinner.valueProperty().addListener(this::onAnySpinnerUpdate) todavía no se usa pero no borrar
 
     }
 
@@ -716,6 +720,11 @@ public class RiverEditorController {
         headwaterCoolingSpinner.getValueFactory().setValue((double) config.headwaterCoolingDistance());
         widthHeatingSpinner.getValueFactory().setValue((double) config.widthHeatingFactor());
 
+        eventPublisher.publishEvent(
+                new TransitoryStatusUpdateEvent(
+                        "Preconfiguración cargada!",
+                        StatusViewModel.TransitionTime.IMMEDIATE,
+                        StatusType.SUCCESS));
     }
 
     private RiverConfig buildConfigFromUI() {
@@ -732,56 +741,27 @@ public class RiverEditorController {
 
         return base
                 // --- 1. GEOMETRÍA (Base y Variabilidad) ---
-                .withSeed(seedSpinner.getValue())
-                .withTotalLength(totalLengthSpinner.getValue().floatValue())
-                .withBaseWidth(baseWidthSpinner.getValue().floatValue())
-                .withWidthVariability(
-                        (float) (varWidthSpinner.getValue() / 100 * baseWidthSpinner.getValue())
-                ) // Cálculo inverso: varWidth = ratio * baseWidth
-                .withAverageSlope(slopeSpinner.getValue().floatValue())
-                .withSlopeVariability(
-                        (float) (varSlopeSpinner.getValue() / 100 * slopeSpinner.getValue())
-                ) // Cálculo inverso: varSlope = ratio * avgSlope
+                .withSeed(seedSpinner.getValue()).withTotalLength(totalLengthSpinner.getValue().floatValue()).withBaseWidth(baseWidthSpinner.getValue().floatValue()).withWidthVariability((float) (varWidthSpinner.getValue() / 100 * baseWidthSpinner.getValue())) // Cálculo inverso: varWidth = ratio * baseWidth
+                .withAverageSlope(slopeSpinner.getValue().floatValue()).withSlopeVariability((float) (varSlopeSpinner.getValue() / 100 * slopeSpinner.getValue())) // Cálculo inverso: varSlope = ratio * avgSlope
 
                 // --- 2. HIDRÁULICA ---
-                .withBaseManning(manningSpinner.getValue().floatValue())
-                .withManningVariability(
-                        (float) (varManningSpinner.getValue() / 100 * manningSpinner.getValue())
-                ) // Cálculo inverso: varManning = ratio * baseManning
+                .withBaseManning(manningSpinner.getValue().floatValue()).withManningVariability((float) (varManningSpinner.getValue() / 100 * manningSpinner.getValue())) // Cálculo inverso: varManning = ratio * baseManning
 
                 // --- 3. PROCEDURAL (Ruido) ---
-                .withNoiseFrequency(mainFreq)
-                .withDetailNoiseFrequency(detailFreqSpinner.getValue().floatValue())
-                .withZoneNoiseFrequency(zoneFreqSpinner.getValue().floatValue())
+                .withNoiseFrequency(mainFreq).withDetailNoiseFrequency(detailFreqSpinner.getValue().floatValue()).withZoneNoiseFrequency(zoneFreqSpinner.getValue().floatValue())
 
                 // --- 4. FÍSICO-QUÍMICA (Temperatura, pH, Dispersión) ---
                 // Temperatura
-                .withDailyBaseTemperature(dailyBaseTempSpinner.getValue().floatValue())
-                .withDailyTempVariation(
-                        (float) (varDailyBaseTempSpinner.getValue() / 100 * dailyBaseTempSpinner.getValue())
-                )
-                .withAverageAnualTemperature(anualBaseTempSpinner.getValue().floatValue())
-                .withSeasonalTempVariation(
-                        (float) (varAnualBaseTempSpinner.getValue() / 100 * anualBaseTempSpinner.getValue())
-                )
+                .withDailyBaseTemperature(dailyBaseTempSpinner.getValue().floatValue()).withDailyTempVariation((float) (varDailyBaseTempSpinner.getValue() / 100 * dailyBaseTempSpinner.getValue())).withAverageAnualTemperature(anualBaseTempSpinner.getValue().floatValue()).withSeasonalTempVariation((float) (varAnualBaseTempSpinner.getValue() / 100 * anualBaseTempSpinner.getValue()))
 
                 // pH
-                .withBasePh(basePhSpinner.getValue().floatValue())
-                .withPhVariability(
-                        (float) (varBasePhSpinner.getValue() / 100 * basePhSpinner.getValue())
-                ) // Cálculo inverso: varPh = ratio * basePh
+                .withBasePh(basePhSpinner.getValue().floatValue()).withPhVariability((float) (varBasePhSpinner.getValue() / 100 * basePhSpinner.getValue())) // Cálculo inverso: varPh = ratio * basePh
 
                 // Dispersión
                 .withBaseDispersionAlpha(dispersionSpinner.getValue().floatValue())
 
                 // Avanzados
-                .withConcavityFactor(concavitySpinner.getValue().floatValue())
-                .withBaseSideSlope(sideSlopeSpinner.getValue().floatValue())
-                .withSlopeSensitivityExponent(slopeSensSpinner.getValue().floatValue())
-                .withBaseDecayRateAt20C(decayRateSpinner.getValue().floatValue())
-                .withDecayTurbulenceSensitivity(turbSensSpinner.getValue().floatValue())
-                .withMaxHeadwaterCoolingEffect(headwaterCoolingSpinner.getValue().floatValue())
-                .withWidthHeatingFactor(widthHeatingSpinner.getValue().floatValue());
+                .withConcavityFactor(concavitySpinner.getValue().floatValue()).withBaseSideSlope(sideSlopeSpinner.getValue().floatValue()).withSlopeSensitivityExponent(slopeSensSpinner.getValue().floatValue()).withBaseDecayRateAt20C(decayRateSpinner.getValue().floatValue()).withDecayTurbulenceSensitivity(turbSensSpinner.getValue().floatValue()).withMaxHeadwaterCoolingEffect(headwaterCoolingSpinner.getValue().floatValue()).withWidthHeatingFactor(widthHeatingSpinner.getValue().floatValue());
     }
 
     // =========================================================================
@@ -811,6 +791,14 @@ public class RiverEditorController {
 
             // Recuperar vista inicial
             eventPublisher.publishEvent(new RestoreMainViewEvent());
+
+            // Notificar éxito
+            eventPublisher.publishEvent(
+                    new TransitoryStatusUpdateEvent(
+                            "Configuración guardada con éxito",
+                            StatusViewModel.TransitionTime.SHORT,
+                            StatusType.SUCCESS));
+
         }), error -> Platform.runLater(() -> {
             saveButton.setDisable(false);
             saveButton.setText("Crear Gemelo");
@@ -830,6 +818,11 @@ public class RiverEditorController {
             if (alert.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.CANCEL) {
                 return;
             }
+            // Eventos de lista
+            eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
+
+            // Recuperar vista inicial
+            eventPublisher.publishEvent(new RestoreMainViewEvent());
         }
 
         loadConfigToUI(RiverPresets.standard());
@@ -847,6 +840,10 @@ public class RiverEditorController {
 
     @FXML
     public void onSimRestart() {
+        eventPublisher.publishEvent(
+                new TransitoryStatusUpdateEvent(
+                        "Reiniciando...",
+                        StatusViewModel.TransitionTime.SHORT));
         // Reinicia el tiempo a 0.0
         simEngine.restartTime();
         // Opcional: Si quieres que empiece pausado al reiniciar
@@ -856,6 +853,11 @@ public class RiverEditorController {
 
     @FXML
     public void onSimRewind() {
+        eventPublisher.publishEvent(
+                new TransitoryStatusUpdateEvent(
+                        "Rebobinando...",
+                        StatusViewModel.TransitionTime.SHORT));
+
         // Establece velocidad negativa para retroceder
         // Según tu tooltip es -2x, pero puedes poner -5.0 para que sea más notable
         simEngine.setPlaybackSpeed(-2.0);
@@ -864,6 +866,10 @@ public class RiverEditorController {
 
     @FXML
     public void onSimPause() {
+        eventPublisher.publishEvent(
+                new TransitoryStatusUpdateEvent(
+                        "Simulación pausada",
+                        StatusViewModel.TransitionTime.SHORT, StatusType.WARNING));
         // Congela el tiempo
         simEngine.setPlaybackSpeed(0.0);
         updateSpeedLabel();
@@ -871,6 +877,10 @@ public class RiverEditorController {
 
     @FXML
     public void onSimPlay() {
+        eventPublisher.publishEvent(
+                new TransitoryStatusUpdateEvent(
+                        "Simulación iniciada",
+                        StatusViewModel.TransitionTime.SHORT));
         // Velocidad normal (Tiempo real)
         simEngine.setPlaybackSpeed(1.0);
         updateSpeedLabel();
@@ -878,6 +888,11 @@ public class RiverEditorController {
 
     @FXML
     public void onSimAccelerate() {
+        eventPublisher.publishEvent(
+                new TransitoryStatusUpdateEvent(
+                        "Acelerando simulación",
+                        StatusViewModel.TransitionTime.SHORT));
+
         // Lógica de multiplicación:
         // Si está pausado o rebobinando, arranca a 2x.
         // Si ya está corriendo, duplica la velocidad actual (2x, 4x, 8x...)

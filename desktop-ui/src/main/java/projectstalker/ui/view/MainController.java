@@ -232,8 +232,8 @@ public class MainController {
                         publishPermanentStatus("HPC: Desconectado", StatusType.DEFAULT, StatusTarget.HPC);
 
                         publishPermanentStatus(connectionStatusString);
-                        publishTransitoryStatus("Proyectos cargados: " + projects.size(), StatusViewModel.TransitionTime.SHORT);
-                        publishTransitoryStatus(connectionStatusString, StatusViewModel.TransitionTime.MEDIUM ,StatusType.SUCCESS);
+                        publishTransitoryStatus("Proyectos cargados: " + projects.size(), StatusViewModel.TransitionTime.IMMEDIATE);
+                        publishTransitoryStatus(connectionStatusString, StatusViewModel.TransitionTime.IMMEDIATE ,StatusType.SUCCESS);
                     });
                 }, error -> {
                     Platform.runLater(() -> {
