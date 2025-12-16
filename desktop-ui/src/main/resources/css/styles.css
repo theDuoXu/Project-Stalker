@@ -25,3 +25,12 @@
     -fx-text-fill: -color-warning-fg;
     -fx-font-weight: bold;
 }
+
+/* MUTED: Para estado PAUSED o inactivo */
+.status-muted {
+    -fx-background-color: transparent;
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-weight: normal;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 4;
+}

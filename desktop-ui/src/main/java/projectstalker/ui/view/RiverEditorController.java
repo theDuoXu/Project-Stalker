@@ -5,17 +5,13 @@ import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.scene.canvas.Canvas;
-import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.chart.LineChart;
-import javafx.scene.chart.XYChart;
 import javafx.scene.control.*;
-import javafx.scene.paint.Color;
 import javafx.util.StringConverter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import projectstalker.config.RiverConfig;
-import projectstalker.domain.dto.twin.FlowPreviewRequest;
 import projectstalker.domain.dto.twin.TwinCreateRequest;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.factory.RiverGeometryFactory;
@@ -26,10 +22,11 @@ import projectstalker.ui.renderer.NoiseSignatureRenderer;
 import projectstalker.ui.renderer.RiverRenderer;
 import projectstalker.ui.service.DigitalTwinClientService;
 import projectstalker.ui.service.SimulationEngine;
+import projectstalker.ui.view.delegate.SimulationControlDelegate;
 import projectstalker.ui.view.util.RiverPresets;
+import projectstalker.ui.view.util.RiverUiFactory;
 import projectstalker.ui.viewmodel.StatusType;
 import projectstalker.ui.viewmodel.StatusViewModel;
-import projectstalker.utils.FastNoiseLite;
 
 import java.util.Collections;
 
@@ -52,6 +49,7 @@ public class RiverEditorController {
     private RiverConfig initialConfigState;
     private String initialNameState = "";
     private String initialDescState = "";
+    private SimulationControlDelegate simDelegate;
 
     // --- UI: Controles Principales ---
     @FXML
@@ -164,6 +162,13 @@ public class RiverEditorController {
     @FXML
     public void initialize() {
         this.renderer = new RiverRenderer(morphologyCanvas);
+        this.simDelegate = new SimulationControlDelegate(
+                this.simEngine,
+                this.eventPublisher,
+                this.simulationTimeLabel,
+                this.simulationSpeedLabel
+        );
+
         setupRendererListeners();
         setupMorphologySwitch();
         setupPresets();
@@ -244,12 +249,12 @@ public class RiverEditorController {
 
     private void startSimulationEngine() {
         simEngine.setOnFrameReady(snapshot -> {
-            // Pintar en el Canvas de Hidrología
+            // Pintar en el Canvas de Hidrología (esto se mantiene aquí por ahora)
             renderer.renderHydrology(hydrologyCanvas, currentGeometry, snapshot, lastMouseX, lastMouseY);
-            // Actualizar el reloj digital
-            updateTimeLabel(snapshot.timeSeconds());
-        });
 
+            // Delegar actualización de UI
+            simDelegate.updateTime(snapshot.timeSeconds());
+        });
         simEngine.start();
     }
 
@@ -265,27 +270,21 @@ public class RiverEditorController {
     }
 
     private void setupGeometrySpinners() {
-        // Longitud: 1km a 500km, paso de 10m
-        totalLengthSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(1000, 500000, 50000, 10));
-
+        // Longitud: 1km a 500km, paso de 10m;
+        RiverUiFactory.configureSpinner(totalLengthSpinner, 1000, 500000, 50000, 10);
         // Ancho: 5m a 2km, paso de 5m
-        baseWidthSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(5, 2000, 150, 5));
-        varWidthSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 100, 10, 0.1));
+        RiverUiFactory.configureSpinner(baseWidthSpinner, 5, 2000, 150, 5);
+        RiverUiFactory.configureSpinner(varWidthSpinner, 0, 100, 10, 0.1);
 
         // Pendiente: 0.00001 a 0.1, paso fino de 0.0001
-        var slopeFactory = new SpinnerValueFactory.DoubleSpinnerValueFactory(0.00001, 0.1, 0.0002, 0.0001);
-        slopeFactory.setConverter(createConverter("%.5f", 0.0002));
-        slopeSpinner.setValueFactory(slopeFactory);
-        varSlopeSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 100, 10, 0.1));
+        RiverUiFactory.configureScientificSpinner(slopeSpinner, 0.00001, 0.1, 0.0002, 0.0001, "%.5f");
+        RiverUiFactory.configureSpinner(varSlopeSpinner, 0, 100, 10, 0.1);
     }
 
     private void setupManningSpinner() {
         // Rango científico: 0.010 (Canal liso) a 0.150 (Máximo razonable). Paso: 0.001
-        var factory = new SpinnerValueFactory.DoubleSpinnerValueFactory(0.010, 0.150, 0.030, 0.001);
-        factory.setConverter(createConverter("%.3f", 0.030));
-
-        manningSpinner.setValueFactory(factory);
-        varManningSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 100, 10, 0.1));
+        RiverUiFactory.configureScientificSpinner(manningSpinner, 0.010, 0.150, 0.030, 0.001, "%.3f");
+        RiverUiFactory.configureSpinner(varManningSpinner, 0, 100, 10, 0.1);
 
         // Listener para dar feedback textual sobre el tipo de material
         manningSpinner.valueProperty().addListener((obs, oldVal, newVal) -> updateManningLabel(newVal));
@@ -765,90 +764,32 @@ public class RiverEditorController {
 
     @FXML
     public void onSimRestart() {
-        eventPublisher.publishEvent(
-                new TransitoryStatusUpdateEvent(
-                        "Reiniciando...",
-                        StatusViewModel.TransitionTime.SHORT));
-        // Reinicia el tiempo a 0.0
-        simEngine.restartTime();
-        // Opcional: Si quieres que empiece pausado al reiniciar
-        // simEngine.setPlaybackSpeed(0.0);
-        updateSpeedLabel();
+        simDelegate.restart();
     }
 
     @FXML
     public void onSimRewind() {
-        eventPublisher.publishEvent(
-                new TransitoryStatusUpdateEvent(
-                        "Rebobinando...",
-                        StatusViewModel.TransitionTime.SHORT));
-
-        // Establece velocidad negativa para retroceder
-        // Según tu tooltip es -2x, pero puedes poner -5.0 para que sea más notable
-        simEngine.setPlaybackSpeed(-2.0);
-        updateSpeedLabel();
+        simDelegate.rewind();
     }
 
     @FXML
     public void onSimPause() {
-        eventPublisher.publishEvent(
-                new TransitoryStatusUpdateEvent(
-                        "Simulación pausada",
-                        StatusViewModel.TransitionTime.SHORT, StatusType.WARNING));
-        // Congela el tiempo
-        simEngine.setPlaybackSpeed(0.0);
-        updateSpeedLabel();
+        simDelegate.pause();
     }
 
     @FXML
     public void onSimPlay() {
-        eventPublisher.publishEvent(
-                new TransitoryStatusUpdateEvent(
-                        "Simulación iniciada",
-                        StatusViewModel.TransitionTime.SHORT));
-        // Velocidad normal (Tiempo real)
-        simEngine.setPlaybackSpeed(1.0);
-        updateSpeedLabel();
+        simDelegate.play();
     }
 
     @FXML
     public void onSimAccelerate() {
-        eventPublisher.publishEvent(
-                new TransitoryStatusUpdateEvent(
-                        "Acelerando simulación",
-                        StatusViewModel.TransitionTime.SHORT));
-
-        // Lógica de multiplicación:
-        // Si está pausado o rebobinando, arranca a 2x.
-        // Si ya está corriendo, duplica la velocidad actual (2x, 4x, 8x...)
-        double current = simEngine.getPlaybackSpeed();
-
-        if (current <= 0) {
-            simEngine.setPlaybackSpeed(2.0);
-        } else {
-            // Limitamos a 64x por seguridad/estabilidad visual
-            simEngine.setPlaybackSpeed(Math.min(64.0, current * 2.0));
-        }
-        updateSpeedLabel();
+        simDelegate.accelerate();
     }
 
     @FXML
     private void onMorphologyCanvasModeChange(Boolean newValue) {
         currentRenderMode = RiverRenderer.RenderMode.fromBoolean(newValue);
-    }
-
-    private void updateChart(float[] flowData) {
-        XYChart.Series<Number, Number> series = new XYChart.Series<>();
-        series.setName("Hidrograma Generado");
-
-        // Decimación simple para rendimiento de UI
-        int step = Math.max(1, flowData.length / 300);
-
-        for (int i = 0; i < flowData.length; i += step) {
-            series.getData().add(new XYChart.Data<>(i, flowData[i]));
-        }
-
-        previewChart.getData().add(series);
     }
 
     // =========================================================================
@@ -878,42 +819,6 @@ public class RiverEditorController {
         };
     }
 
-    private void updateSpeedLabel() {
-        double speed = simEngine.getPlaybackSpeed();
-        if (speed == 0) {
-            simulationSpeedLabel.setText("PAUSED");
-            simulationSpeedLabel.setStyle("-fx-text-fill: -color-fg-muted; -fx-font-size: 11px;");
-        } else {
-            simulationSpeedLabel.setText(String.format("%.1fx", speed));
-            // Color diferente para avance (Azul/Verde) o retroceso (Naranja/Rojo)
-            if (speed > 0) {
-                simulationSpeedLabel.setStyle("-fx-text-fill: -color-success-fg; -fx-font-size: 11px;");
-            } else {
-                simulationSpeedLabel.setStyle("-fx-text-fill: -color-warning-fg; -fx-font-size: 11px;");
-            }
-        }
-    }
-
-    // Este método lo llama el SimulationEngine en cada frame (via callback)
-    private void updateTimeLabel(double totalSeconds) {
-        long totalSecs = (long) totalSeconds;
-        long days = totalSecs / 86400;
-        long remainder = totalSecs % 86400;
-        long hours = remainder / 3600;
-        long minutes = (remainder % 3600) / 60;
-
-        // Formato DDd HH:MM (Los segundos cambian demasiado rápido a velocidades altas)
-        simulationTimeLabel.setText(String.format("T+ %02dd %02d:%02d", days, hours, minutes));
-    }
-
-    private double parseSafeDouble(String txt, double def) {
-        try {
-            return Double.parseDouble(txt);
-        } catch (Exception e) {
-            return def;
-        }
-    }
-
     private void showAlert(Alert.AlertType type, String title, String content) {
         Alert alert = new Alert(type);
         alert.setTitle(title);
@@ -921,6 +826,4 @@ public class RiverEditorController {
         alert.setContentText(content);
         alert.showAndWait();
     }
-
-
 }

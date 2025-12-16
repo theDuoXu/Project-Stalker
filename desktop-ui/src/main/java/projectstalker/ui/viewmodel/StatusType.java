@@ -4,5 +4,6 @@ public enum StatusType {
     DEFAULT,    // Texto normal (gris/blanco)
     SUCCESS,    // Éxito (verde)
     WARNING,    // Advertencia (amarillo/naranja)
-    ERROR       // Error (rojo)
+    ERROR,       // Error (rojo)
+    INFO,       // Texto normal
 }
