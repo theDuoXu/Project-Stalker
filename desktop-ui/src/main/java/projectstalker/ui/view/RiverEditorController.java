@@ -7,7 +7,6 @@ import javafx.fxml.FXML;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.chart.LineChart;
 import javafx.scene.control.*;
-import javafx.util.StringConverter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -23,6 +22,7 @@ import projectstalker.ui.renderer.RiverRenderer;
 import projectstalker.ui.service.DigitalTwinClientService;
 import projectstalker.ui.service.SimulationEngine;
 import projectstalker.ui.view.delegate.RiverEditorCanvasInteractorDelegate;
+import projectstalker.ui.view.delegate.RiverUpdateDelegate;
 import projectstalker.ui.view.delegate.SimulationControlDelegate;
 import projectstalker.ui.view.util.RiverPresets;
 import projectstalker.ui.view.util.RiverUiFactory;
@@ -50,6 +50,7 @@ public class RiverEditorController {
     private String initialDescState = "";
     private SimulationControlDelegate simDelegate;
     private final RiverEditorCanvasInteractorDelegate canvasInteractor;
+    private RiverUpdateDelegate updateDelegate;
 
     // --- UI: Controles Principales ---
     @FXML
@@ -169,6 +170,14 @@ public class RiverEditorController {
                 this.simulationTimeLabel,
                 this.simulationSpeedLabel
         );
+        this.updateDelegate = new RiverUpdateDelegate(
+                morphologyTab, noiseTab, hydrologyTab,
+                this::drawRiverPreview,
+                this::drawNoiseHeartBeat,
+                this::drawHydrologyTab
+        );
+        bindUpdateListeners();
+        setupTabSelectionClearing();
 
         setupMorphologySwitch();
         setupPresets();
@@ -182,11 +191,74 @@ public class RiverEditorController {
         loadConfigToUI(standard);
         saveStateAsInitial(standard, "", "");
 
-        setupGeometryControls();
-        setupNoiseControls();
         setupCanvas();
 
         startSimulationEngine();
+    }
+    private void bindUpdateListeners() {
+        // 1. Controles que afectan GEOMETRÍA (Morfología)
+        updateDelegate.trackMorphologyChanges(
+                totalLengthSpinner.valueProperty(),
+                baseWidthSpinner.valueProperty(),
+                varWidthSpinner.valueProperty(),
+                slopeSpinner.valueProperty(),
+                varSlopeSpinner.valueProperty(),
+                manningSpinner.valueProperty(),
+                varManningSpinner.valueProperty(),
+                concavitySpinner.valueProperty(),
+                sideSlopeSpinner.valueProperty(),
+                slopeSensSpinner.valueProperty(),
+                basePhSpinner.valueProperty(),
+                varBasePhSpinner.valueProperty(),
+                decayRateSpinner.valueProperty(),
+                turbSensSpinner.valueProperty()
+        );
+
+        // 2. Controles que afectan RUIDO + GEOMETRÍA (Shared)
+        updateDelegate.trackSharedChanges(
+                seedSpinner.valueProperty(),
+                noiseSlider.valueProperty(),
+                detailFreqSpinner.valueProperty(),
+                zoneFreqSpinner.valueProperty()
+        );
+
+        // 3. Controles que afectan HIDROLOGÍA (Física/Química)
+        updateDelegate.trackHydrologyChanges(
+                dailyBaseTempSpinner.valueProperty(),
+                anualBaseTempSpinner.valueProperty(),
+                varDailyBaseTempSpinner.valueProperty(),
+                varAnualBaseTempSpinner.valueProperty(),
+                basePhSpinner.valueProperty(),
+                varBasePhSpinner.valueProperty(),
+                dispersionSpinner.valueProperty(),
+                decayRateSpinner.valueProperty(),
+                headwaterCoolingSpinner.valueProperty(),
+                widthHeatingSpinner.valueProperty()
+        );
+    }
+    private void setupTabSelectionClearing() {
+        morphologyTab.setOnSelectionChanged(e -> {
+            if (morphologyTab.isSelected()) {
+                updateDelegate.cleanTab(morphologyTab);
+                drawRiverPreview();
+            }
+        });
+
+        noiseTab.setOnSelectionChanged(e -> {
+            if (noiseTab.isSelected()) {
+                updateDelegate.cleanTab(noiseTab);
+                drawNoiseHeartBeat();
+            }
+        });
+
+        hydrologyTab.setOnSelectionChanged(e -> {
+            if (hydrologyTab.isSelected()) {
+                updateDelegate.cleanTab(hydrologyTab);
+                // Regeneramos la geometría para asegurar consistencia al cambiar de tab
+                this.currentGeometry = RiverGeometryFactory.createRealisticRiver(buildConfigFromUI());
+                drawHydrologyTab();
+            }
+        });
     }
 
     private void setupMorphologySwitch() {
@@ -293,125 +365,6 @@ public class RiverEditorController {
 
         // Factor Calentamiento por Ancho (1.5 default)
         RiverUiFactory.configureSpinner(widthHeatingSpinner, 0.0, 5.0, 1.5, 0.1);
-
-        // Listeners para actualizar UI si quieres reactividad inmediata
-        concavitySpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        sideSlopeSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        slopeSensSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        decayRateSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        decayRateSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
-        turbSensSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        headwaterCoolingSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
-        widthHeatingSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
-
-        hydrologyTab.setOnSelectionChanged((e) -> {
-            if (hydrologyTab.isSelected()) {
-                highlightTab(hydrologyTab, false);
-                this.currentGeometry = RiverGeometryFactory.createRealisticRiver(buildConfigFromUI());
-                drawHydrologyTab();
-            }
-        });
-    }
-
-    private void setupGeometryControls() {
-        // --- GEOMETRÍA (Base y Variabilidad) ---
-        totalLengthSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        baseWidthSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        varWidthSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        slopeSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        varSlopeSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-
-        // --- HIDRÁULICA (Base y Variabilidad) ---
-        manningSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        varManningSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-
-
-        morphologyTab.setOnSelectionChanged(event -> {
-            if (morphologyTab.isSelected()) {
-                highlightTab(morphologyTab, false);
-                drawRiverPreview();
-            }
-        });
-        // Dibujo inicial
-        if (morphologyTab.isSelected()) {
-            drawRiverPreview();
-        }
-    }
-
-
-    private void setupNoiseControls() {
-        // El Slider controla la frecuencia principal visualmente (0-100)
-        // Lo mapeamos a una frecuencia pequeña (0.0 - 0.05)
-        noiseSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
-            double freq = newVal.doubleValue() / 100;
-            noiseFreqValueLabel.setText(String.format("%.5f", freq));
-            // Si estamos en la pestaña de morfología, redibujamos en tiempo real
-            drawNoiseHeartBeat();
-            if (!noiseTab.isSelected()) {
-                highlightTab(noiseTab, true);
-                drawRiverPreview();
-            }
-        });
-
-        seedSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        seedSpinner.valueProperty().addListener(this::onUpdateNoiseSpinners);
-        // Listeners para redibujar si cambian los campos manuales de texto
-        detailFreqSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        detailFreqSpinner.valueProperty().addListener(this::onUpdateNoiseSpinners);
-
-        zoneFreqSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        zoneFreqSpinner.valueProperty().addListener(this::onUpdateNoiseSpinners);
-
-        // Listener para LIMPIAR el resaltado cuando el usuario selecciona la pestaña.
-        noiseTab.setOnSelectionChanged(event -> {
-            if (noiseTab.isSelected()) {
-                highlightTab(noiseTab, false);
-                drawNoiseHeartBeat();
-            }
-        });
-        // Dibujo inicial
-        if (noiseTab.isSelected()) {
-            drawNoiseHeartBeat();
-        }
-    }
-
-    private void onUpdateGeometryOrNoiseSpinners(ObservableValue<? extends Number> o, Number old, Number val) {
-        // Lógica de enrutamiento inteligente: Redibujar lo que el usuario está viendo
-        if (morphologyTab.isSelected()) {
-            drawRiverPreview();
-        } else if (noiseTab.isSelected()) {
-            drawNoiseHeartBeat();
-        }
-
-        // Gestión de notificaciones (Asteriscos)
-        if (!morphologyTab.isSelected()) highlightTab(morphologyTab, true);
-    }
-
-    private void onUpdateNoiseSpinners(ObservableValue<? extends Number> o, Number old, Number val) {
-        if (!noiseTab.isSelected()) highlightTab(noiseTab, true);
-    }
-
-    private void onUpdateHydrologySpinners(ObservableValue<? extends Number> o, Number old, Number val) {
-        if (hydrologyTab.isSelected()) {
-            this.currentGeometry = RiverGeometryFactory.createRealisticRiver(buildConfigFromUI());
-            drawHydrologyTab();
-        } else {
-            highlightTab(hydrologyTab, true);
-        }
-    }
-
-    private void highlightTab(Tab tab, boolean highlight) {
-        if (highlight) {
-            // Añade un símbolo Unicode y un estilo para llamar la atención.
-            if (!tab.getText().contains("✱")) {
-                tab.setText(tab.getText() + " ✱");
-            }
-            tab.setStyle("-fx-background-color: #FFA50040; -fx-text-fill: -color-accent-fg;"); // Fondo naranja semi-transparente
-        } else {
-            // Limpiar el estilo y el símbolo.
-            tab.setStyle(null);
-            tab.setText(tab.getText().replace(" ✱", ""));
-        }
     }
 
     private void setupPhysicoChemical() {
@@ -430,16 +383,6 @@ public class RiverEditorController {
         // Dispersión
         RiverUiFactory.configureSpinner(dispersionSpinner, 0.1, 100.0, 10.0, 1.0);
 
-        dailyBaseTempSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
-        varDailyBaseTempSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
-        anualBaseTempSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
-        varAnualBaseTempSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
-
-
-        basePhSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
-        basePhSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        varBasePhSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
-        varBasePhSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
 
 //        dispersionSpinner.valueProperty().addListener(this::onAnySpinnerUpdate) todavía no se usa pero no borrar
 
