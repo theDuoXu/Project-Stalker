@@ -1,0 +1,27 @@
+/* Estilo base del badge/label */
+.label {
+    -fx-font-size: 12px;
+    -fx-padding: 0 4 0 4;
+    -fx-background-radius: 4;
+}
+
+/* ÉXITO: Fondo verde oscuro suave, texto verde brillante */
+.status-success {
+    -fx-background-color: -color-success-muted;
+    -fx-text-fill: -color-success-fg;
+    -fx-font-weight: bold;
+}
+
+/* ERROR: Fondo rojo oscuro suave, texto rojo brillante */
+.status-error {
+    -fx-background-color: -color-danger-muted;
+    -fx-text-fill: -color-danger-fg;
+    -fx-font-weight: bold;
+}
+
+/* WARNING: Fondo amarillo oscuro suave, texto amarillo brillante */
+.status-warning {
+    -fx-background-color: -color-warning-muted;
+    -fx-text-fill: -color-warning-fg;
+    -fx-font-weight: bold;
+}

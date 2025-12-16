@@ -2,6 +2,8 @@ package projectstalker.ui.viewmodel;
 
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.util.Duration;
@@ -10,10 +12,115 @@ import org.springframework.stereotype.Component;
 import projectstalker.ui.event.PermanentStatusUpdateEvent;
 import projectstalker.ui.event.TransitoryStatusUpdateEvent;
 
-@Component
+import java.util.LinkedList;
+import java.util.Queue;
+
 public class StatusViewModel {
 
     private final StringProperty statusMessage = new SimpleStringProperty();
+    // Propiedad para el tipo
+    private final ObjectProperty<StatusType> statusType = new SimpleObjectProperty<>(StatusType.DEFAULT);
+
+    private final StatusTarget target;
+
+    // Estado permanente de respaldo
+    private String permanentMessage = "";
+    private StatusType permanentType = StatusType.DEFAULT;
+
+    private final Queue<TransitoryStatusUpdateEvent> notificationQueue = new LinkedList<>();
+    private boolean isShowingTransitory = false;
+    private PauseTransition currentTransition;
+
+    public StatusViewModel(StatusTarget target) {
+        this.target = target;
+        // Inicialización por defecto según el target
+        if (target == StatusTarget.APP) {
+            this.permanentMessage = "Sistema DSS Inicializado.";
+        }
+    }
+
+    // --- Getters de Propiedades para JavaFX ---
+    public StringProperty statusMessageProperty() { return statusMessage; }
+    public ObjectProperty<StatusType> statusTypeProperty() { return statusType; }
+
+    // --- Lógica ---
+
+    @EventListener
+    public void handlePermanentStatusUpdate(PermanentStatusUpdateEvent event) {
+        if (event.target() != this.target) return;
+
+        Platform.runLater(() -> {
+            // REGLA DE PRIORIDAD: Un cambio de estado permanente (ej: Desconexión)
+            // mata cualquier notificación pendiente. La realidad manda.
+            stopCurrentTransition();
+            notificationQueue.clear();
+            isShowingTransitory = false;
+
+            // Guardamos y mostramos la nueva realidad
+            this.permanentMessage = event.message();
+            this.permanentType = event.type();
+
+            updateState(this.permanentMessage, this.permanentType);
+        });
+    }
+
+    @EventListener
+    public void handleTransitoryStatusUpdate(TransitoryStatusUpdateEvent event) {
+        if (event.target() != this.target) return;
+
+        // Si es permanente disfrazado, lo delegamos
+        if (event.transitionTime() == TransitionTime.PERMANENT) {
+            handlePermanentStatusUpdate(event.asPermanentEvent());
+            return;
+        }
+
+        Platform.runLater(() -> {
+            // 1. Añadimos a la cola
+            notificationQueue.add(event);
+
+            // 2. Si no estamos mostrando nada, arrancamos la cola
+            if (!isShowingTransitory) {
+                processNextInQueue();
+            }
+        });
+    }
+
+    private void processNextInQueue() {
+        // Si la cola está vacía, volvemos al caso base (Rompe recursividad)
+        if (notificationQueue.isEmpty()) {
+            isShowingTransitory = false;
+            updateState(this.permanentMessage, this.permanentType);
+            return;
+        }
+
+        // Sacamos el siguiente evento
+        TransitoryStatusUpdateEvent nextEvent = notificationQueue.poll();
+        isShowingTransitory = true;
+
+        // Actualizamos UI
+        updateState(nextEvent.message(), nextEvent.type());
+
+        // Programamos el timer
+        stopCurrentTransition();
+        currentTransition = new PauseTransition(nextEvent.transitionTime().toJavaFXDuration());
+
+        // RECURSIVIDAD: Al terminar, llamamos a este mismo método
+        currentTransition.setOnFinished(e -> processNextInQueue());
+
+        currentTransition.play();
+    }
+
+    private void stopCurrentTransition() {
+        if (currentTransition != null) {
+            currentTransition.stop();
+            currentTransition = null;
+        }
+    }
+
+    private void updateState(String message, StatusType type) {
+        this.statusMessage.set(message);
+        this.statusType.set(type);
+    }
 
     public enum TransitionTime {
         /**
@@ -62,51 +169,5 @@ public class StatusViewModel {
             }
             return Duration.millis(durationMillis);
         }
-    }
-
-    // Último estado permanente
-    private String permanentStatus = "Sistema DSS Inicializado.";
-
-    public StringProperty statusMessageProperty() {
-        return statusMessage;
-    }
-
-    public void setStatusMessage(String message) {
-        this.statusMessage.set(message);
-    }
-
-    public String getStatusMessage() {
-        return statusMessage.get();
-    }
-
-    @EventListener
-    public void handlePermanentStatusUpdate(PermanentStatusUpdateEvent event) {
-        // JavaFX requiere que las actualizaciones de UI (y sus propiedades) se realicen en el hilo de la aplicación.
-        // Platform.runLater asegura esto.
-        Platform.runLater(() -> {
-            this.permanentStatus = event.message();
-            setStatusMessage(event.message());
-        });
-    }
-
-    @EventListener
-    public void handleTransitoryStatusUpdate(TransitoryStatusUpdateEvent event) {
-
-        // Evitar que un evento transitorio permanente anule el estado persistente.
-        // Los eventos permanentes deben usar PermanentStatusUpdateEvent.
-        if (event.transitionTime() == TransitionTime.PERMANENT) {
-            handlePermanentStatusUpdate(event.asPermanentEvent());
-            return;
-        }
-
-        Platform.runLater(() -> {
-            this.statusMessage.set(event.message());
-            PauseTransition pause = new PauseTransition(event.transitionTime().toJavaFXDuration());
-            pause.setOnFinished(e -> {
-                // Restaura el último mensaje permanente conocido
-                this.statusMessage.set(this.permanentStatus);
-            });
-            pause.play();
-        });
     }
 }

@@ -71,7 +71,7 @@
             <Region HBox.hgrow="ALWAYS"/>
 
             <Separator orientation="VERTICAL"/>
-            <Label style="-fx-font-size: 11px; -fx-text-fill: -color-danger-fg;" text="HPC Engine: DISCONNECTED"/>
+            <Label fx:id="hpcStatusLabel" styleClass="status-error" text="HPC Engine: DISCONNECTED"/>
         </HBox>
     </bottom>
 

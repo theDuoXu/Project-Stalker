@@ -18,16 +18,22 @@ import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 import lombok.extern.slf4j.Slf4j;
 import org.kordamp.ikonli.javafx.FontIcon;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import projectstalker.domain.dto.twin.TwinSummaryDTO;
+import projectstalker.ui.event.PermanentStatusUpdateEvent;
 import projectstalker.ui.event.RestoreMainViewEvent;
 import projectstalker.ui.event.SidebarVisibilityEvent;
+import projectstalker.ui.event.TransitoryStatusUpdateEvent;
 import projectstalker.ui.security.AuthenticationService;
 import projectstalker.ui.service.DigitalTwinClientService;
 import projectstalker.ui.view.components.TwinListCell;
+import projectstalker.ui.viewmodel.StatusTarget;
+import projectstalker.ui.viewmodel.StatusType;
+import projectstalker.ui.viewmodel.StatusViewModel;
 
 import java.io.IOException;
 import java.util.Base64;
@@ -41,43 +47,59 @@ public class MainController {
     private final ApplicationContext springContext;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ApplicationEventPublisher eventPublisher;
+    private final StatusViewModel statusViewModel;
+    private final StatusViewModel hpcStatusViewModel;
 
     @FXML public Label statusLabel;
+    @FXML public Label hpcStatusLabel;
     @FXML public Button loginButton;
     @FXML public FontIcon loginIcon;
 
-    // Contenedor central dinámico
     @FXML public StackPane contentArea;
-
-    // Contenedor lateral
     @FXML public VBox twinsSideBar;
+    @FXML public Button newProjectButton;
+    @FXML public ListView<TwinSummaryDTO> projectListView;
+
     private double originalSidebarWidth = 250.0;
 
-    @FXML public Button newProjectButton;
-
-    // Vinculado al FXML
-    @FXML public ListView<TwinSummaryDTO> projectListView;
+    // Guardamos el string base de conexión para restaurarlo tras cargas temporales
+    private String connectionStatusString = "Desconectado";
 
     public MainController(AuthenticationService authService,
                           DigitalTwinClientService twinService,
-                          ApplicationContext springContext, ApplicationEventPublisher eventPublisher) {
+                          ApplicationContext springContext,
+                          ApplicationEventPublisher eventPublisher,
+                          @Qualifier("mainStatusViewModel") StatusViewModel statusViewModel,
+                          @Qualifier("hpcStatusViewModel") StatusViewModel hpcStatusViewModel) {
         this.authService = authService;
         this.twinService = twinService;
         this.springContext = springContext;
         this.eventPublisher = eventPublisher;
+        this.statusViewModel = statusViewModel;
+        this.hpcStatusViewModel = hpcStatusViewModel;
     }
 
     @FXML
     public void initialize() {
-        statusLabel.setText("Sistema DSS Inicializado. Esperando autenticación...");
+        // 1. Vinculación reactiva MAIN
+        statusLabel.textProperty().bind(this.statusViewModel.statusMessageProperty());
+        this.statusViewModel.statusTypeProperty().addListener((obs, oldVal, newVal) ->
+                applyStyle(statusLabel, newVal)
+        );
 
-        // Configuramos la CellFactory separada
+        // 1b. Vinculación reactiva HPC
+        hpcStatusLabel.textProperty().bind(this.hpcStatusViewModel.statusMessageProperty());
+        this.hpcStatusViewModel.statusTypeProperty().addListener((obs, oldVal, newVal) ->
+                applyStyle(hpcStatusLabel, newVal)
+        );
+
+        // 2. Estado inicial vía evento
+        publishPermanentStatus("Sistema DSS Inicializado... Esperando login");
+        publishPermanentStatus("HPC: Desconectado", StatusType.DEFAULT, StatusTarget.HPC);
+
         projectListView.setCellFactory(listView -> new TwinListCell());
-
-        // Desactivamos el botón de crear hasta que haya login
         newProjectButton.setDisable(true);
 
-        // Usamos un listener para asegurarnos de tener el valor real tras el layout
         Platform.runLater(() -> {
             if (twinsSideBar.getWidth() > 0) {
                 originalSidebarWidth = twinsSideBar.getWidth();
@@ -85,9 +107,19 @@ public class MainController {
         });
     }
 
+    private void applyStyle(Label label, StatusType type) {
+        label.getStyleClass().removeAll("status-error", "status-success", "status-warning");
+        switch (type) {
+            case SUCCESS -> label.getStyleClass().add("status-success");
+            case ERROR -> label.getStyleClass().add("status-error");
+            case WARNING -> label.getStyleClass().add("status-warning");
+        }
+    }
+
     @FXML
     public void onLoginClick() {
-        statusLabel.setText("Esperando autorización en el navegador...");
+        // Estado permanente mientras dura el proceso de login
+        publishPermanentStatus("Esperando autorización en el navegador...");
         loginButton.setDisable(true);
         attemptLogin();
     }
@@ -95,26 +127,19 @@ public class MainController {
     @FXML
     public void onNewProjectClick() {
         try {
-            // Cargamos el FXML del Editor
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/river-editor.fxml"));
-
-            // Le decimos al FXMLLoader que use Spring para crear el controlador (De la misma manera cargamos el MainView)
-            // Esto permite que RiverEditorController tenga @Autowired o inyección por constructor.
             loader.setControllerFactory(springContext::getBean);
-
             Parent view = loader.load();
 
-            // 3. Reemplazamos el contenido del centro
             contentArea.getChildren().clear();
             contentArea.getChildren().add(view);
-
-            // 4. Ocultamos sidebar
             toggleSidebar(false);
         } catch (IOException e) {
             log.error(e.toString());
             showErrorAlert(new RuntimeException("No se pudo cargar la vista del editor: " + e.getMessage()));
         }
     }
+
     @EventListener
     public void onSidebarEvent(SidebarVisibilityEvent event) {
         Platform.runLater(() -> toggleSidebar(event.visible()));
@@ -129,7 +154,6 @@ public class MainController {
     }
 
     private void toggleSidebar(boolean show) {
-        // Si vamos a mostrar, aseguramos que sea visible antes de animar
         if (show) {
             twinsSideBar.setVisible(true);
             twinsSideBar.setManaged(true);
@@ -137,18 +161,16 @@ public class MainController {
 
         double targetWidth = show ? originalSidebarWidth : 0;
 
-        // Animación suave del ancho
         Timeline timeline = new Timeline();
         timeline.getKeyFrames().add(new KeyFrame(Duration.millis(300),
                 new KeyValue(twinsSideBar.prefWidthProperty(), targetWidth),
                 new KeyValue(twinsSideBar.minWidthProperty(), targetWidth),
                 new KeyValue(twinsSideBar.maxWidthProperty(), targetWidth),
-                new KeyValue(twinsSideBar.opacityProperty(), show ? 1.0 : 0.0) // Fade out visual
+                new KeyValue(twinsSideBar.opacityProperty(), show ? 1.0 : 0.0)
         ));
 
         timeline.setOnFinished(e -> {
             if (!show) {
-                // Al terminar de ocultar, liberamos el espacio completamente
                 twinsSideBar.setVisible(false);
                 twinsSideBar.setManaged(false);
             }
@@ -160,31 +182,33 @@ public class MainController {
     private void attemptLogin() {
         authService.login().thenAccept(token -> {
             String username = extractUsername(token.accessToken());
+            this.connectionStatusString = "CONECTADO | Usuario: " + username;
 
             Platform.runLater(() -> {
-                statusLabel.setText("CONECTADO | Usuario: " + username);
-                statusLabel.setStyle("-fx-text-fill: -color-success-fg; -fx-font-weight: bold;");
+                // Actualizamos estado permanente de éxito
+                publishPermanentStatus(connectionStatusString);
+                publishTransitoryStatus(connectionStatusString, StatusViewModel.TransitionTime.MEDIUM ,StatusType.SUCCESS);
 
                 loginButton.setText("Cerrar Sesión");
                 loginButton.setDisable(false);
                 if (loginIcon != null) loginIcon.setIconLiteral("mdi2a-account-check");
 
                 loginButton.setOnAction(e -> doLogout());
-
-                // Habilitamos creación
                 newProjectButton.setDisable(false);
-
-                // Mostramos sidebar si está oculto
                 eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
 
-                // Cargar proyectos tras login exitoso
                 loadProjects();
             });
 
         }).exceptionally(ex -> {
             Platform.runLater(() -> {
-                statusLabel.setText("Error: " + ex.getMessage());
-                statusLabel.setStyle("-fx-text-fill: -color-danger-fg;");
+                // Error Transitorio (6 seg) y luego vuelve al estado anterior (Esperando login)
+                publishTransitoryStatus(
+                        "Error de conexión: " + ex.getMessage(),
+                        StatusViewModel.TransitionTime.MEDIUM,
+                        StatusType.ERROR);
+
+                // Restauramos el botón
                 loginButton.setDisable(false);
                 loginButton.setText("Reintentar Conexión");
                 showErrorAlert(ex);
@@ -194,18 +218,30 @@ public class MainController {
     }
 
     public void loadProjects() {
-        statusLabel.setText("Cargando catálogo de ríos...");
+        // Cambiamos a estado permanente "Cargando" para que no desaparezca si tarda
+
+        // --- AQUÍ USAMOS EL NUEVO VIEW MODEL DE HPC VÍA EVENTO ---
+        publishPermanentStatus("Sincronizando...", StatusType.DEFAULT, StatusTarget.HPC);
 
         twinService.getAllTwins()
                 .collectList()
                 .subscribe(projects -> {
                     Platform.runLater(() -> {
                         projectListView.getItems().setAll(projects);
-                        statusLabel.setText("Proyectos cargados: " + projects.size());
+
+                        publishPermanentStatus("HPC: Desconectado", StatusType.DEFAULT, StatusTarget.HPC);
+
+                        publishPermanentStatus(connectionStatusString);
+                        publishTransitoryStatus("Proyectos cargados: " + projects.size(), StatusViewModel.TransitionTime.SHORT);
+                        publishTransitoryStatus(connectionStatusString, StatusViewModel.TransitionTime.MEDIUM ,StatusType.SUCCESS);
                     });
                 }, error -> {
                     Platform.runLater(() -> {
-                        statusLabel.setText("Error obteniendo datos del servidor.");
+                        // Mantenemos el estado de error visible un tiempo razonable
+                        publishTransitoryStatus("Error obteniendo datos del servidor.", StatusViewModel.TransitionTime.MEDIUM);
+
+                        // --- ERROR EN HPC VÍA EVENTO ---
+                        publishPermanentStatus("HPC Engine: DISCONNECTED", StatusType.ERROR, StatusTarget.HPC);
                     });
                 });
     }
@@ -213,39 +249,59 @@ public class MainController {
     private void doLogout() {
         log.info("Iniciando cierre de sesión en Keycloak...");
         loginButton.setDisable(true);
-        statusLabel.setText("Cerrando sesión en Keycloak...");
+        publishPermanentStatus("Cerrando sesión en Keycloak...");
 
-        // Llamamos al servicio de autenticación para cerrar la sesión externa
         authService.logout()
                 .exceptionally(ex -> {
-                    log.error("Fallo al contactar Keycloak para cerrar sesión: {}", ex.getMessage());
-                    // Permite que la desconexión local continúe incluso si el cierre de sesión remoto falla
+                    log.error("Fallo al contactar Keycloak: {}", ex.getMessage());
                     return null;
                 })
                 .thenRun(() -> {
-                    // Se ejecuta sin importar si el logout remoto falló o tuvo éxito
                     Platform.runLater(() -> {
-                        // --- LIMPIEZA DE UI (solo se ejecuta tras el logout asíncrono) ---
-                        statusLabel.setText("Desconectado.");
-                        statusLabel.setStyle("");
+                        // Limpieza UI
+                        statusLabel.setStyle(""); // Reset estilo
+                        publishPermanentStatus("Desconectado.");
+
+                        // Reset HPC
+                        publishPermanentStatus("HPC: Desconectado", StatusType.DEFAULT, StatusTarget.HPC);
+
                         loginButton.setText("Conectar a Keycloak");
-                        loginButton.setDisable(false); // Habilitamos para iniciar sesión de nuevo
+                        loginButton.setDisable(false);
                         if (loginIcon != null) loginIcon.setIconLiteral("mdi2l-login");
 
-                        // Limpiamos la lista y el panel central al salir
                         projectListView.getItems().clear();
                         contentArea.getChildren().clear();
                         contentArea.getChildren().add(new Label("Selecciona o crea un Gemelo Digital para comenzar"));
 
                         newProjectButton.setDisable(true);
-
-                        // Restaurar el evento al modo de login
                         loginButton.setOnAction(e -> onLoginClick());
-                        // Mostramos sidebar si está oculto
                         eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
                     });
                 });
     }
+
+    // --- Helpers de Eventos para reducir verbosidad ---
+
+    private void publishPermanentStatus(String message) {
+        eventPublisher.publishEvent(new PermanentStatusUpdateEvent(message, StatusType.DEFAULT, StatusTarget.APP));
+    }
+
+    private void publishPermanentStatus(String message, StatusType statusType, StatusTarget target) {
+        eventPublisher.publishEvent(new PermanentStatusUpdateEvent(message, statusType, target));
+    }
+
+    private void publishPermanentStatus(String message, StatusType statusType) {
+        publishPermanentStatus(message, statusType, StatusTarget.APP);
+    }
+
+    private void publishTransitoryStatus(String message, StatusViewModel.TransitionTime time) {
+        eventPublisher.publishEvent(new TransitoryStatusUpdateEvent(message, StatusType.DEFAULT, time, StatusTarget.APP));
+    }
+
+    private void publishTransitoryStatus(String message, StatusViewModel.TransitionTime time, StatusType statusType) {
+        eventPublisher.publishEvent(new TransitoryStatusUpdateEvent(message, statusType, time, StatusTarget.APP));
+    }
+
     private String extractUsername(String accessToken) {
         try {
             String[] parts = accessToken.split("\\.");

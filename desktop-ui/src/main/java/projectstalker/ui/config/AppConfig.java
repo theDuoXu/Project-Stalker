@@ -4,6 +4,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.context.support.PropertySourcesPlaceholderConfigurer;
+import projectstalker.ui.viewmodel.StatusTarget;
+import projectstalker.ui.viewmodel.StatusViewModel;
 
 @Configuration
 @PropertySource("classpath:application.properties")
@@ -17,5 +19,15 @@ public class AppConfig {
     @Bean
     public static PropertySourcesPlaceholderConfigurer propertySourcesPlaceholderConfigurer() {
         return new PropertySourcesPlaceholderConfigurer();
+    }
+
+    @Bean
+    public StatusViewModel mainStatusViewModel() {
+        return new StatusViewModel(StatusTarget.APP);
+    }
+
+    @Bean
+    public StatusViewModel hpcStatusViewModel() {
+        return new StatusViewModel(StatusTarget.HPC);
     }
 }
