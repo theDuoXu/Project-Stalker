@@ -145,6 +145,8 @@ public class RiverEditorController {
     @FXML
     public Tab noiseTab;
     @FXML
+    public Tab hydrologyTab;
+    @FXML
     public Button saveButton;
     @FXML
     public ToggleButton morphologySwitch;
@@ -307,10 +309,10 @@ public class RiverEditorController {
         concavitySpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 1.0, 0.4, 0.05));
 
         // Talud (z) (4.0 default)
-        sideSlopeSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.1, 10.0, 4.0, 0.5));
+        sideSlopeSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.1, 10.0, 4.0, 0.1));
 
         // Sensibilidad Ancho-Pendiente (0.4 default)
-        slopeSensSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.1, 1.0, 0.4, 0.05));
+        slopeSensSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.1, 1.0, 0.4, 0.01));
 
         // Tasa Decay k20 (0.1 default)
         decayRateSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 2.0, 0.1, 0.01));
@@ -329,11 +331,18 @@ public class RiverEditorController {
         sideSlopeSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
         slopeSensSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
         decayRateSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+        decayRateSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
+        turbSensSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+        headwaterCoolingSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
+        widthHeatingSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
 
-        // TODO placeholders
-        headwaterCoolingSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-        widthHeatingSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
-
+        hydrologyTab.setOnSelectionChanged((e) ->{
+            if (hydrologyTab.isSelected()){
+                highlightTab(hydrologyTab, false);
+                this.currentGeometry = RiverGeometryFactory.createRealisticRiver(buildConfigFromUI());
+                drawHydrologyTab();
+            }
+        });
     }
 
     private void setupGeometryControls() {
@@ -414,6 +423,15 @@ public class RiverEditorController {
         if (!noiseTab.isSelected()) highlightTab(noiseTab, true);
     }
 
+    private void onUpdateHydrologySpinners(ObservableValue<? extends Number> o, Number old, Number val){
+        if(hydrologyTab.isSelected()){
+            this.currentGeometry = RiverGeometryFactory.createRealisticRiver(buildConfigFromUI());
+            drawHydrologyTab();
+        }else {
+            highlightTab(hydrologyTab, true);
+        }
+    }
+
     private void highlightTab(Tab tab, boolean highlight) {
         if (highlight) {
             // Añade un símbolo Unicode y un estilo para llamar la atención.
@@ -439,6 +457,20 @@ public class RiverEditorController {
         varBasePhSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0, 50, 10.0, 0.1));
 
         dispersionSpinner.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(0.1, 100.0, 10.0, 1.0));
+
+        dailyBaseTempSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
+        varDailyBaseTempSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
+        anualBaseTempSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
+        varAnualBaseTempSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
+
+
+        basePhSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
+        basePhSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+        varBasePhSpinner.valueProperty().addListener(this::onUpdateHydrologySpinners);
+        varBasePhSpinner.valueProperty().addListener(this::onUpdateGeometryOrNoiseSpinners);
+
+//        dispersionSpinner.valueProperty().addListener(this::); No se usa todavía
+
     }
 
     private void setupPresets() {
@@ -474,7 +506,11 @@ public class RiverEditorController {
     private void drawRiverPreview() {
         RiverConfig config = buildConfigFromUI();
         this.currentGeometry = RiverGeometryFactory.createRealisticRiver(config);
-        simEngine.loadRiver(currentGeometry, config);
+        drawHydrologyTab();
+    }
+
+    private void drawHydrologyTab() {
+        simEngine.loadRiver(currentGeometry, buildConfigFromUI());
         // Delegar pintado al Renderer
         renderer.render(currentGeometry, currentRenderMode, lastMouseX, lastMouseY);
     }
