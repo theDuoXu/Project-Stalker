@@ -48,7 +48,7 @@ public class RiverUpdateDelegate {
     }
 
     /**
-     * Grupo 2: Cambios que afectan RUIDO + GEOMETRÍA (Shared)
+     * Grupo 2: Cambios que afectan RUIDO + GEOMETRÍA + HIDROLOGÍA (Shared)
      */
     @SafeVarargs
     public final void trackSharedChanges(ObservableValue<? extends Number>... properties) {
