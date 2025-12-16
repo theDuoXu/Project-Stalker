@@ -27,7 +27,7 @@ import projectstalker.ui.view.delegate.RiverUpdateDelegate;
 import projectstalker.ui.view.delegate.SimulationControlDelegate;
 import projectstalker.ui.view.util.RiverPresets;
 import projectstalker.ui.view.util.RiverUiFactory;
-import projectstalker.ui.viewmodel.RiverEditorViewModel; // IMPORTADO
+import projectstalker.ui.viewmodel.RiverEditorViewModel;
 import projectstalker.ui.viewmodel.StatusType;
 import projectstalker.ui.viewmodel.StatusViewModel;
 
@@ -55,7 +55,7 @@ public class RiverEditorController {
     private SimulationControlDelegate simDelegate;
     private final RiverEditorCanvasInteractorDelegate canvasInteractor;
     private RiverUpdateDelegate updateDelegate;
-    private final RiverEditorViewModel viewModel; // INYECTADO
+    private final RiverEditorViewModel viewModel;
 
     // --- UI: Controles Principales ---
     @FXML public TextField nameField;
@@ -303,7 +303,8 @@ public class RiverEditorController {
                 viewModel.dispersion,
                 viewModel.decayRate,
                 viewModel.headwaterCooling,
-                viewModel.widthHeating
+                viewModel.widthHeating,
+                viewModel.noiseSliderValue
         );
     }
 
@@ -457,6 +458,7 @@ public class RiverEditorController {
     }
 
     private void drawHydrologyTab() {
+        this.currentGeometry = RiverGeometryFactory.createRealisticRiver(buildConfigFromUI());
         simEngine.loadRiver(currentGeometry, buildConfigFromUI());
         // Delegar pintado al Renderer
         renderer.render(currentGeometry, currentRenderMode, canvasInteractor.getMouseX(), canvasInteractor.getMouseY());
