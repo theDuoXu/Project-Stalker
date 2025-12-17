@@ -44,7 +44,7 @@ public class RiverEditorController {
     private RiverRenderer renderer; // Instancia del renderer
     private RiverRenderer.RenderMode currentRenderMode = RiverRenderer.RenderMode.MORPHOLOGY;
     private RiverGeometry currentGeometry; // Cache de la geometría actual
-    private SimulationEngine simEngine;
+    private final SimulationEngine simEngine;
 
     // Para control de cambios
     private RiverConfig initialConfigState;

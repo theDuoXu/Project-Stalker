@@ -89,6 +89,7 @@ public class RiverUpdateDelegate {
     // --- Gestión Visual de Tabs ---
 
     public void markTabDirty(Tab tab) {
+        if (tab.isSelected()) return; // No marcar si estamos en la pestaña
         if (!tab.getText().contains("✱")) {
             tab.setText(tab.getText() + " ✱");
         }
