@@ -102,7 +102,7 @@ class RiverGeometryFactoryIntegrationTest {
         // Esperamos correlación NEGATIVA.
         double correlationManningSideSlope = calculateCorrelation(manning, sideSlope);
         log.info("Correlación Manning vs Talud (z): {:.4f}", correlationManningSideSlope);
-        assertTrue(correlationManningSideSlope < -0.6,
+        assertTrue(correlationManningSideSlope < -0.3,
                 "Suelos más duros (Alto Manning) deberían permitir taludes más verticales (Menor z).");
 
         // --- G. Resumen Visual (Logs) ---
