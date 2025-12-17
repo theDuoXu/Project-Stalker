@@ -1,5 +1,6 @@
 package projectstalker.ui.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,6 +11,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import projectstalker.ui.security.AuthenticationService;
 
 @Configuration
+@Slf4j
 public class ApiClientConfig {
 
     // Se lee de application.properties
@@ -28,13 +30,19 @@ public class ApiClientConfig {
     private ExchangeFilterFunction addBearerToken(AuthenticationService authService) {
         return (request, next) -> {
             String token = authService.getAccessToken();
-            if (token != null) {
+
+            // --- LOG DE DEPURACIÓN ---
+            if (token != null && !token.isBlank()) {
+                log.info("AUTH: Adjuntando Bearer Token. (Empieza por: {}...)", token.charAt(0));
+
                 ClientRequest authorizedRequest = ClientRequest.from(request)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .build();
                 return next.exchange(authorizedRequest);
+            } else {
+                log.error("AUTH: ¡Token NULL o Vacío! Enviando petición anónima (Esto fallará con 401).");
+                return next.exchange(request);
             }
-            return next.exchange(request);
         };
     }
 }

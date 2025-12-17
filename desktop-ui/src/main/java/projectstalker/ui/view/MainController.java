@@ -24,10 +24,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import projectstalker.domain.dto.twin.TwinSummaryDTO;
-import projectstalker.ui.event.PermanentStatusUpdateEvent;
-import projectstalker.ui.event.RestoreMainViewEvent;
-import projectstalker.ui.event.SidebarVisibilityEvent;
-import projectstalker.ui.event.TransitoryStatusUpdateEvent;
+import projectstalker.ui.event.*;
 import projectstalker.ui.security.AuthenticationService;
 import projectstalker.ui.service.DigitalTwinClientService;
 import projectstalker.ui.view.components.TwinListCell;
@@ -98,6 +95,15 @@ public class MainController {
         publishPermanentStatus("HPC: Desconectado", StatusType.DEFAULT, StatusTarget.HPC);
 
         projectListView.setCellFactory(listView -> new TwinListCell());
+        projectListView.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                TwinSummaryDTO selected = projectListView.getSelectionModel().getSelectedItem();
+                if (selected != null) {
+                    openEditorForTwin(selected);
+                }
+            }
+        });
+
         newProjectButton.setDisable(true);
 
         Platform.runLater(() -> {
@@ -105,6 +111,24 @@ public class MainController {
                 originalSidebarWidth = twinsSideBar.getWidth();
             }
         });
+    }
+
+    private void openEditorForTwin(TwinSummaryDTO twin) {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/river-editor.fxml"));
+            loader.setControllerFactory(springContext::getBean);
+            Parent view = loader.load();
+
+            // Configurar el controlador en modo edición
+            RiverEditorController controller = loader.getController();
+            controller.setEditingTwin(twin);
+
+            contentArea.getChildren().clear();
+            contentArea.getChildren().add(view);
+            toggleSidebar(false);
+        } catch (IOException e) {
+            log.error("Error abriendo editor", e);
+        }
     }
 
     private void applyStyle(Label label, StatusType type) {
@@ -147,10 +171,18 @@ public class MainController {
 
     @EventListener
     public void onRestoreMainViewEvent(RestoreMainViewEvent event){
-        contentArea.getChildren().clear();
-        Label placeholder = new Label("Selecciona o crea un Gemelo Digital para comenzar");
-        placeholder.setStyle("-fx-text-fill: -color-fg-muted;");
-        contentArea.getChildren().add(placeholder);
+        Platform.runLater(() -> {
+            contentArea.getChildren().clear();
+            Label placeholder = new Label("Selecciona o crea un Gemelo Digital para comenzar");
+            placeholder.setStyle("-fx-text-fill: -color-fg-muted;");
+            contentArea.getChildren().add(placeholder);
+        });
+    }
+
+    @EventListener
+    public void onTwinListRefresh(TwinListRefreshEvent event) {
+        log.info("Evento de refresco recibido. Recargando lista de proyectos...");
+        loadProjects();
     }
 
     private void toggleSidebar(boolean show) {

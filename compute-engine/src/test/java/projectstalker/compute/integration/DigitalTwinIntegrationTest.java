@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean; // <--- NECESARIO
-import org.springframework.security.oauth2.jwt.JwtDecoder; // <--- NECESARIO
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.ActiveProfiles;
 import projectstalker.compute.service.DigitalTwinService;
 import projectstalker.config.RiverConfig;
@@ -65,10 +65,6 @@ class DigitalTwinIntegrationTest {
         // 5. THEN - Verificar datos complejos
         assertThat(details.config()).isNotNull();
         assertThat(details.config().baseWidth()).isEqualTo(150.0f);
-
-        assertThat(details.geometry()).isNotNull();
-        // Verificar que la presa elevó el terreno en la posición correcta (aprox index 10)
-        assertThat(details.geometry().getElevationProfile()[10]).isEqualTo(215.0f);
 
         // Verificar Polimorfismo
         assertThat(details.events()).hasSize(1);

@@ -22,6 +22,5 @@ public record TwinDetailDTO(
         String name,
         String description,
         RiverConfig config,
-        List<GeologicalEvent> events,
-        RiverGeometry geometry // ¡Cuidado! Esto puede ser grande
+        List<GeologicalEvent> events
 ) {}

@@ -1,6 +1,7 @@
 package projectstalker.ui.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import projectstalker.config.ApiRoutes;
@@ -41,7 +42,19 @@ public class DigitalTwinClientService {
         return apiClient.get()
                 .uri(ApiRoutes.TWINS + "/" + id)
                 .retrieve()
-                .bodyToMono(TwinDetailDTO.class)
+                .bodyToMono(String.class)
+                .map(jsonString -> {
+                    log.info("JSON RAW RECIBIDO: {}", jsonString);
+                    try {
+                        // Deserializamos manualmente para este test
+                        return new com.fasterxml.jackson.databind.ObjectMapper()
+                                .findAndRegisterModules() // Importante para Records/JavaTime
+                                .readValue(jsonString, TwinDetailDTO.class);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Error manual de deserialización", e);
+                    }
+                })
+                // ----------------------------------------------------
                 .doOnError(e -> log.error("Error recuperando detalle Twin[{}]: {}", id, e.getMessage()));
     }
 
@@ -103,7 +116,7 @@ public class DigitalTwinClientService {
         return apiClient.post()
                 .uri(uriBuilder -> uriBuilder
                         .path(uri)
-                        .queryParam("time", timeOfDaySeconds)
+                        .queryParam("timeOfDaySeconds", timeOfDaySeconds)
                         .build())
                 .bodyValue(config)
                 .retrieve()

@@ -13,11 +13,14 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import projectstalker.config.RiverConfig;
 import projectstalker.domain.dto.twin.TwinCreateRequest;
+import projectstalker.domain.dto.twin.TwinDetailDTO;
+import projectstalker.domain.dto.twin.TwinSummaryDTO;
 import projectstalker.domain.river.RiverGeometry;
 import projectstalker.factory.RiverGeometryFactory;
 import projectstalker.ui.event.RestoreMainViewEvent;
 import projectstalker.ui.event.SidebarVisibilityEvent;
 import projectstalker.ui.event.TransitoryStatusUpdateEvent;
+import projectstalker.ui.event.TwinListRefreshEvent;
 import projectstalker.ui.renderer.NoiseSignatureRenderer;
 import projectstalker.ui.renderer.RiverRenderer;
 import projectstalker.ui.service.DigitalTwinClientService;
@@ -31,12 +34,14 @@ import projectstalker.ui.viewmodel.RiverEditorViewModel;
 import projectstalker.ui.viewmodel.StatusType;
 import projectstalker.ui.viewmodel.StatusViewModel;
 
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 
 @Slf4j
 @Component
 public class RiverEditorController {
-
+    private final Duration TIMEOUT_DURATION = Duration.of(60, ChronoUnit.SECONDS);
     private final DigitalTwinClientService twinService;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -50,6 +55,7 @@ public class RiverEditorController {
     private RiverConfig initialConfigState;
     private String initialNameState = "";
     private String initialDescState = "";
+    private String editingTwinId = null;
 
     // Delegados y ViewModel
     private SimulationControlDelegate simDelegate;
@@ -110,7 +116,6 @@ public class RiverEditorController {
     @FXML public Canvas morphologyCanvas;
     @FXML public Canvas hydrologyCanvas;
     @FXML public Canvas noiseCanvas;
-    @FXML public LineChart<Number, Number> previewChart;
     @FXML public Tab morphologyTab;
     @FXML public Tab noiseTab;
     @FXML public Tab hydrologyTab;
@@ -284,7 +289,7 @@ public class RiverEditorController {
                 viewModel.turbSens
         );
 
-        // 2. Controles que afectan RUIDO + GEOMETRÍA (Shared)
+        // 2. Controles que afectan RUIDO + GEOMETRÍA + HYDROLOGY (Shared)
         updateDelegate.trackSharedChanges(
                 viewModel.seed,
                 viewModel.noiseSliderValue,
@@ -435,6 +440,43 @@ public class RiverEditorController {
     // =========================================================================
     // 2. LÓGICA VISUAL (CANVAS & LABELS)
     // =========================================================================
+    public void setEditingTwin(TwinSummaryDTO twin) {
+        // 1. Inicialización básica de UI
+        this.editingTwinId = twin.id();
+        this.nameField.setText(twin.name());
+        this.descField.setText(twin.description());
+        this.saveButton.setText("Guardar Cambios");
+
+        // 2. Recuperar configuración completa del Backend
+        twinService.getTwinDetails(twin.id())
+                .subscribe(
+                        detail -> Platform.runLater(() -> handleTwinLoaded(detail)),
+                        error -> Platform.runLater(() -> handleLoadError(error))
+                );
+    }
+    private void handleTwinLoaded(TwinDetailDTO detail) {
+        try {
+            // A. Cargar configuración en los controles
+            loadConfigToUI(detail.config());
+
+            // B. Hidratar la geometría localmente (optimización de red)
+            this.currentGeometry = RiverGeometryFactory.createRealisticRiver(detail.config());
+
+            // C. Actualizar visualización y motor físico
+            drawRiverPreview();
+            simEngine.loadRiver(currentGeometry, detail.config());
+
+        } catch (Exception e) {
+            log.error("Error procesando la geometría del río", e);
+            showAlert(Alert.AlertType.ERROR, "Error de Visualización", "Los datos son válidos, pero falló la generación gráfica.");
+        }
+    }
+
+    private void handleLoadError(Throwable error) {
+        log.error("Error recuperando detalles del Twin", error);
+        showAlert(Alert.AlertType.ERROR, "Error de Conexión", "No se pudo cargar el río seleccionado.");
+        onCancel();
+    }
 
     private void updateManningLabel(Double n) {
         String text;
@@ -532,25 +574,48 @@ public class RiverEditorController {
 
         RiverConfig config = buildConfigFromUI();
         var request = new TwinCreateRequest(nameField.getText(), descField.getText(), config, Collections.emptyList());
+        if (this.editingTwinId == null)
+        {
+            twinService.createTwin(request).subscribe(summary -> Platform.runLater(() -> {
+                saveButton.setDisable(false);
+                saveButton.setText("Crear Gemelo");
+                showAlert(Alert.AlertType.INFORMATION, "Éxito", "Gemelo Digital '" + summary.name() + "' creado correctamente.");
 
-        twinService.createTwin(request).subscribe(summary -> Platform.runLater(() -> {
-            saveButton.setDisable(false);
-            saveButton.setText("Crear Gemelo");
-            showAlert(Alert.AlertType.INFORMATION, "Éxito", "Gemelo Digital '" + summary.name() + "' creado correctamente.");
+                eventPublisher.publishEvent(new TwinListRefreshEvent());
+                eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
+                eventPublisher.publishEvent(new RestoreMainViewEvent());
+                eventPublisher.publishEvent(
+                        new TransitoryStatusUpdateEvent(
+                                "Configuración guardada con éxito",
+                                StatusViewModel.TransitionTime.SHORT,
+                                StatusType.SUCCESS));
 
-            eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
-            eventPublisher.publishEvent(new RestoreMainViewEvent());
-            eventPublisher.publishEvent(
-                    new TransitoryStatusUpdateEvent(
-                            "Configuración guardada con éxito",
-                            StatusViewModel.TransitionTime.SHORT,
-                            StatusType.SUCCESS));
+            }), error -> Platform.runLater(() -> {
+                saveButton.setDisable(false);
+                saveButton.setText("Crear Gemelo");
+                showAlert(Alert.AlertType.ERROR, "Error", "Fallo al guardar: " + error.getMessage());
+            }));
+        }else {
+            twinService.updateTwin(editingTwinId ,request).subscribe(summary -> Platform.runLater(() -> {
+                saveButton.setDisable(false);
+                saveButton.setText("Crear Gemelo");
+                showAlert(Alert.AlertType.INFORMATION, "Éxito", "Gemelo Digital '" + summary.name() + "' creado correctamente.");
 
-        }), error -> Platform.runLater(() -> {
-            saveButton.setDisable(false);
-            saveButton.setText("Crear Gemelo");
-            showAlert(Alert.AlertType.ERROR, "Error", "Fallo al guardar: " + error.getMessage());
-        }));
+                eventPublisher.publishEvent(new TwinListRefreshEvent());
+                eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
+                eventPublisher.publishEvent(new RestoreMainViewEvent());
+                eventPublisher.publishEvent(
+                        new TransitoryStatusUpdateEvent(
+                                "Configuración guardada con éxito",
+                                StatusViewModel.TransitionTime.SHORT,
+                                StatusType.SUCCESS));
+
+            }), error -> Platform.runLater(() -> {
+                saveButton.setDisable(false);
+                saveButton.setText("Crear Gemelo");
+                showAlert(Alert.AlertType.ERROR, "Error", "Fallo al guardar: " + error.getMessage());
+            }));
+        }
     }
 
     @FXML
@@ -569,9 +634,9 @@ public class RiverEditorController {
         loadConfigToUI(RiverPresets.standard());
         nameField.clear();
         descField.clear();
-        previewChart.getData().clear();
         drawRiverPreview();
 
+        eventPublisher.publishEvent(new TwinListRefreshEvent());
         eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
         eventPublisher.publishEvent(new RestoreMainViewEvent());
     }

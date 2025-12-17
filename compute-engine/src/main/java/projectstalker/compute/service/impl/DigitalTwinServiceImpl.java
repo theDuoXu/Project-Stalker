@@ -196,7 +196,6 @@ public class DigitalTwinServiceImpl implements DigitalTwinService {
                 .description(entity.getDescription())
                 .config(entity.getConfig())
                 .events(entity.getEvents())
-                .geometry(entity.getGeometry())
                 .build();
     }
 }
