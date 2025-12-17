@@ -1,6 +1,7 @@
 package projectstalker.domain.river;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Data;
@@ -371,6 +372,7 @@ public final class RiverGeometry {
         return sectionTypes.clone();
     }
 
+    @JsonIgnore
     public float getTotalLength() {
         return cellCount * spatialResolution;
     }
