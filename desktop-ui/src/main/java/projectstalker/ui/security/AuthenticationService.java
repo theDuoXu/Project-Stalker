@@ -146,12 +146,11 @@ public class AuthenticationService {
 
             // Responder al navegador para que el usuario sepa que puede cerrar
             OutputStream out = clientSocket.getOutputStream();
-            String responseBody = "<html><body><h1>Login completado</h1><p>Puedes cerrar esta ventana y volver a la aplicacion.</p><script>window.close()</script></body></html>";
-            String httpResponse = "HTTP/1.1 200 OK\r\n" +
-                    "Content-Type: text/html\r\n" +
-                    "Content-Length: " + responseBody.length() + "\r\n" +
-                    "\r\n" +
-                    responseBody;
+            String successUrl = "https://auth.protonenergyindustries.com/login-success";
+            String httpResponse = "HTTP/1.1 302 Found\r\n" +
+                    "Location: " + successUrl + "\r\n" +
+                    "Connection: close\r\n" +
+                    "\r\n";
             out.write(httpResponse.getBytes(StandardCharsets.UTF_8));
             out.flush();
 
