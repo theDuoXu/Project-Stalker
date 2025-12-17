@@ -1,8 +1,9 @@
 package projectstalker.config;
 
-
+import com.fasterxml.jackson.annotation.JsonView;
 import lombok.Builder;
 import lombok.With;
+import projectstalker.domain.sensors.SensorViews;
 
 /**
  * Un objeto de valor inmutable para contener todos los parámetros de configuración
@@ -52,6 +53,7 @@ import lombok.With;
  */
 @Builder
 @With
+@JsonView(SensorViews.Internal.class)
 public record RiverConfig(
         // --- Parámetros de Generación Procedural ---
         long seed,
