@@ -1,5 +1,7 @@
 package projectstalker.ui.security;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -33,6 +38,9 @@ public class AuthenticationService {
 
     // Guardamos el token en memoria
     private TokenResponse currentToken;
+
+    // Instancia de Jackson para leer el JSON del token
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AuthenticationService(
             WebClient.Builder webClientBuilder,
@@ -211,5 +219,54 @@ public class AuthenticationService {
 
     public boolean isAuthenticated() {
         return currentToken != null;
+    }
+
+
+    /**
+     * Decodifica el Access Token (JWT) y extrae los roles.
+     * Busca en 'realm_access' y 'resource_access' (client roles).
+     */
+    public Set<String> getCurrentRoles() {
+        if (currentToken == null || currentToken.accessToken() == null) {
+            return Collections.emptySet();
+        }
+
+        try {
+            // 1. El JWT tiene 3 partes: Header.Payload.Signature
+            // Nos interesa el Payload
+            String[] chunks = currentToken.accessToken().split("\\.");
+            if (chunks.length < 2) {
+                return Collections.emptySet();
+            }
+
+            // 2. Decodificar Base64Url
+            Base64.Decoder decoder = Base64.getUrlDecoder();
+            String payload = new String(decoder.decode(chunks[1]), StandardCharsets.UTF_8);
+
+            // 3. Parsear el JSON
+            JsonNode rootNode = objectMapper.readTree(payload);
+            Set<String> roles = new HashSet<>();
+
+            // 4. Extraer REALM ROLES (realm_access.roles)
+            // Estructura: "realm_access": { "roles": ["ADMIN", "USER"] }
+            JsonNode realmAccess = rootNode.path("realm_access");
+            if (!realmAccess.isMissingNode() && realmAccess.has("roles")) {
+                realmAccess.get("roles").forEach(roleNode -> roles.add(roleNode.asText()));
+            }
+
+            // 5. Extraer CLIENT ROLES (resource_access.clientId.roles)
+            // Estructura: "resource_access": { "my-client": { "roles": [...] } }
+            // Apunte, solo hay realm roles por ahora pero ya lo dejamos listo para el futuro
+            JsonNode resourceAccess = rootNode.path("resource_access").path(clientId);
+            if (!resourceAccess.isMissingNode() && resourceAccess.has("roles")) {
+                resourceAccess.get("roles").forEach(roleNode -> roles.add(roleNode.asText()));
+            }
+
+            return roles;
+
+        } catch (Exception e) {
+            System.err.println("Error decodificando roles del token: " + e.getMessage());
+            return Collections.emptySet();
+        }
     }
 }
