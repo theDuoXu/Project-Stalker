@@ -49,6 +49,10 @@ public class SecurityConfig {
                                 UserRole.OFFICER.name(),
                                 UserRole.ADMIN.name()
                         )
+                        // Creación de sensores nuevos
+                        .requestMatchers(HttpMethod.POST,
+                                ApiRoutes.SENSORS + "/**"
+                        ).hasAnyRole(UserRole.ANALYST.name(), UserRole.ADMIN.name())
 
                         // 3. ADMIN GLOBAL
                         .requestMatchers(ApiRoutes.ADMIN + "/**").hasRole(UserRole.ADMIN.name())

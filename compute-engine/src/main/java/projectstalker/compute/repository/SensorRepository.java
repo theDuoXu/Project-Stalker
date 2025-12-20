@@ -1,11 +1,13 @@
 package projectstalker.compute.repository;
 
+import projectstalker.compute.entity.SensorEntity;
 import projectstalker.domain.dto.sensor.SensorHealthDTO;
 import projectstalker.domain.dto.sensor.SensorReadingDTO;
 import projectstalker.domain.sensors.SensorType;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface SensorRepository {
     /**
@@ -34,5 +36,22 @@ public interface SensorRepository {
     List<SensorHealthDTO> findHealthStatusByType(String stationId, SensorType type);
 
     List<SensorReadingDTO> findReadingsByDateRange(String stationId, String parameter, LocalDateTime from, LocalDateTime to);
+
+    boolean existsById(String id);
+
+    /**
+     * Guardar sensor completo
+     */
+    SensorEntity save(SensorEntity sensor);
+
+    /**
+     * Buscar todos los sensores de un río específico
+     */
+    List<SensorEntity> findAllByTwinId(String twinId);
+
+    /**
+     * Buscar un sensor y devolver la entidad (útil para verificar antes de borrar/editar)
+     */
+    Optional<SensorEntity> findById(String id);
 
 }

@@ -2,11 +2,13 @@ package projectstalker.compute.api;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import projectstalker.config.ApiRoutes;
 import projectstalker.compute.service.SensorService;
+import projectstalker.domain.dto.sensor.SensorCreationDTO;
 import projectstalker.domain.dto.sensor.SensorHealthResponseDTO;
 import projectstalker.domain.dto.sensor.SensorReadingDTO;
 import projectstalker.domain.dto.sensor.SensorResponseDTO;
@@ -80,5 +82,9 @@ public class SensorController {
         // De momento devolvemos JSON
         return ResponseEntity.ok(exportData);
     }
-
+    @PostMapping
+    public ResponseEntity<SensorResponseDTO> registerSensor(@RequestBody SensorCreationDTO request) {
+        SensorResponseDTO created = sensorService.registerSensor(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
 }

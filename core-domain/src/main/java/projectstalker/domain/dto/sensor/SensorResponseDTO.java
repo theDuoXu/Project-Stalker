@@ -11,6 +11,7 @@ import java.util.List;
 @With
 @JsonView(SensorViews.Public.class)
 public record SensorResponseDTO(
+        String stationId,
         String name,
         String signalType,
         String unit,

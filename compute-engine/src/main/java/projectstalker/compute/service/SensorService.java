@@ -1,5 +1,6 @@
 package projectstalker.compute.service;
 
+import projectstalker.domain.dto.sensor.SensorCreationDTO;
 import projectstalker.domain.dto.sensor.SensorHealthResponseDTO;
 import projectstalker.domain.dto.sensor.SensorReadingDTO;
 import projectstalker.domain.dto.sensor.SensorResponseDTO;
@@ -21,4 +22,5 @@ public interface SensorService {
     List<SensorReadingDTO> getRealtime(String stationId, String parameter);
 
     public SensorResponseDTO getExportData(String stationId, String parameter, LocalDateTime from, LocalDateTime to);
+    SensorResponseDTO registerSensor(SensorCreationDTO request);
 }
