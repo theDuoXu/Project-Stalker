@@ -23,6 +23,4 @@ public interface DigitalTwinRepository extends JpaRepository<DigitalTwinEntity, 
      */
     boolean existsByName(String name);
 
-    // findAll(Pageable) y findById(String) ya vienen incluidos en JpaRepository.
-    // No hace falta declararlos explícitamente.
 }
