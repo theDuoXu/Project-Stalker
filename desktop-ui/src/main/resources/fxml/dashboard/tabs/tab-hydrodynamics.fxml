@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.chart.*?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<VBox spacing="10" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="projectstalker.ui.view.dashboard.tabs.HydroTabController"
+      styleClass="tab-container">
+
+    <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+
+    <StackPane VBox.vgrow="ALWAYS" styleClass="simulation-viewport">
+        <Label text="Visualización Hidrodinámica en Tiempo Real (Canvas)" styleClass="text-muted"/>
+    </StackPane>
+
+    <HBox spacing="15" prefHeight="280" styleClass="card">
+        <padding><Insets top="15" right="15" bottom="15" left="15"/></padding>
+
+        <VBox spacing="15" minWidth="280" maxWidth="300">
+            <Label text="Fuente de Entrada" styleClass="h4"/>
+
+            <HBox spacing="15" alignment="CENTER_LEFT">
+                <RadioButton text="Manual" selected="true" userData="MANUAL">
+                    <toggleGroup><ToggleGroup fx:id="sourceModeGroup"/></toggleGroup>
+                </RadioButton>
+                <RadioButton text="Sensores Real-Time" userData="REAL" toggleGroup="$sourceModeGroup"/>
+            </HBox>
+
+            <Separator/>
+
+            <StackPane VBox.vgrow="ALWAYS" alignment="TOP_LEFT" minHeight="180" prefHeight="180">
+
+                <VBox fx:id="manualControls" spacing="15">
+                    <VBox spacing="5">
+                        <Label text="Intensidad de Lluvia (mm/h)" styleClass="text-small"/>
+                        <Slider fx:id="rainSlider" min="0" max="100" showTickLabels="true" showTickMarks="true"/>
+                    </VBox>
+
+                    <VBox spacing="5">
+                        <Label text="Caudal Base (m³/s)" styleClass="text-small"/>
+                        <Slider fx:id="flowSlider" min="0" max="50" showTickLabels="true" showTickMarks="true"/>
+                    </VBox>
+
+                    <Region VBox.vgrow="ALWAYS"/>
+
+                    <Button text="Actualizar Simulación" styleClass="btn-primary" maxWidth="Infinity" onAction="#onUpdateSimulation">
+                        <graphic><FontIcon iconLiteral="mdi2p-play"/></graphic>
+                    </Button>
+                </VBox>
+
+                <VBox fx:id="sensorControls" spacing="15" visible="false" managed="false">
+                    <VBox spacing="5">
+                        <Label text="Caudalímetro Maestro" styleClass="text-small"/>
+                        <ComboBox fx:id="flowSensorSelector" promptText="Seleccionar sensor de entrada..." maxWidth="Infinity"/>
+                    </VBox>
+
+                    <Label text="El sistema se sincronizará automáticamente con las lecturas del sensor seleccionado vía HPC."
+                           wrapText="true" style="-fx-text-fill: -color-fg-muted; -fx-font-size: 11px;"/>
+                </VBox>
+
+            </StackPane>
+        </VBox>
+
+        <Separator orientation="VERTICAL"/>
+
+        <LineChart fx:id="levelChart" title="Nivel de Agua (h) - Tiempo Real" HBox.hgrow="ALWAYS" createSymbols="false">
+            <xAxis><NumberAxis label="Tiempo (s)"/></xAxis>
+            <yAxis><NumberAxis label="Metros"/></yAxis>
+        </LineChart>
+    </HBox>
+</VBox>

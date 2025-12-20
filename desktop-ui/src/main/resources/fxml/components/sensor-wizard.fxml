@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="projectstalker.ui.view.components.SensorWizardController"
+            stylesheets="@../../css/dashboard.css"
+            prefWidth="600" prefHeight="750">
+
+    <top>
+        <VBox spacing="5" style="-fx-background-color: -color-bg-subtle; -fx-border-color: -color-border-subtle; -fx-border-width: 0 0 1 0;">
+            <padding><Insets top="20" right="25" bottom="20" left="25"/></padding>
+            <Label text="Nuevo Sensor de Calidad" styleClass="h3"/>
+            <Label text="Configura la fuente de datos y la ubicación en el tramo." styleClass="text-muted"/>
+        </VBox>
+    </top>
+
+    <center>
+        <ScrollPane fitToWidth="true" styleClass="transparent-scroll">
+            <VBox spacing="20">
+                <padding><Insets top="25" right="25" bottom="25" left="25"/></padding>
+
+                <VBox spacing="10">
+                    <Label text="Información General" styleClass="h4"/>
+                    <GridPane hgap="15" vgap="15">
+                        <columnConstraints>
+                            <ColumnConstraints percentWidth="50"/>
+                            <ColumnConstraints percentWidth="50"/>
+                        </columnConstraints>
+
+                        <VBox spacing="5" GridPane.columnIndex="0">
+                            <Label text="Identificador" styleClass="text-small"/>
+                            <TextField fx:id="nameField" promptText="Ej: S-PH-001"/>
+                        </VBox>
+
+                        <VBox spacing="5" GridPane.columnIndex="1">
+                            <Label text="Variable a Medir" styleClass="text-small"/>
+                            <ComboBox fx:id="sensorTypeCombo" maxWidth="Infinity" promptText="Seleccionar..."/>
+                        </VBox>
+
+                        <VBox spacing="5" GridPane.columnSpan="2" GridPane.rowIndex="1">
+                            <Label text="Ubicación en el Tramo" styleClass="text-small"/>
+                            <Slider fx:id="locationSlider" showTickLabels="true" showTickMarks="true"/>
+                            <HBox>
+                                <Label fx:id="locationLabel" text="Km 0.0" style="-fx-font-weight: bold;"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label fx:id="cellLabel" text="Celda ID: --" style="-fx-text-fill: -color-accent-fg;"/>
+                            </HBox>
+                        </VBox>
+                    </GridPane>
+                </VBox>
+
+                <Separator/>
+
+                <VBox spacing="10">
+                    <Label text="Fuente de Datos" styleClass="h4"/>
+                    <HBox spacing="0" styleClass="segmented-button-bar">
+                        <ToggleButton fx:id="virtualToggle" text="Virtual (Generador)" selected="true" maxWidth="Infinity" HBox.hgrow="ALWAYS">
+                            <toggleGroup><ToggleGroup fx:id="strategyGroup"/></toggleGroup>
+                            <graphic><FontIcon iconLiteral="mdi2f-function-variant"/></graphic>
+                        </ToggleButton>
+                        <ToggleButton fx:id="realToggle" text="Sensor Físico (IoT)" toggleGroup="$strategyGroup" maxWidth="Infinity" HBox.hgrow="ALWAYS">
+                            <graphic><FontIcon iconLiteral="mdi2t-transmission-tower"/></graphic>
+                        </ToggleButton>
+                    </HBox>
+                </VBox>
+
+                <StackPane fx:id="strategyContainer" styleClass="card" style="-fx-padding: 20;">
+
+                    <VBox fx:id="virtualPanel" spacing="15">
+                        <HBox alignment="CENTER_LEFT" spacing="10">
+                            <Label text="Función Generadora:" styleClass="text-bold"/>
+                            <ComboBox fx:id="virtualStrategyCombo" prefWidth="200"/>
+                        </HBox>
+                        <Separator/>
+
+                        <StackPane>
+                            <GridPane fx:id="paramsRandomPanel" hgap="10" vgap="10" visible="false">
+                                <Label text="Valor Base:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                <TextField fx:id="baseValueField" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                                <Label text="Volatilidad (Ruido):" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                <Slider fx:id="volatilitySlider" min="0" max="1" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+                            </GridPane>
+
+                            <GridPane fx:id="paramsSinePanel" hgap="10" vgap="10" visible="false">
+                                <Label text="Offset (Media):" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                                <TextField fx:id="sineOffsetField" promptText="7.0" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+
+                                <Label text="Amplitud:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                                <TextField fx:id="sineAmplitudeField" promptText="1.5" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+
+                                <Label text="Frecuencia (Hz):" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+                                <TextField fx:id="sineFreqField" promptText="0.1" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+                            </GridPane>
+                        </StackPane>
+
+                        <VBox spacing="5" style="-fx-background-color: -color-bg-canvas; -fx-border-color: -color-border-subtle; -fx-border-radius: 4;">
+                            <Pane prefHeight="120"/> <Label text="Vista previa de señal (120s)" style="-fx-font-size: 9px; -fx-padding: 0 5 5 5;" alignment="CENTER" maxWidth="Infinity"/>
+                        </VBox>
+                    </VBox>
+
+                    <VBox fx:id="realPanel" spacing="15" visible="false" managed="false">
+                        <Label text="Configuración de Conexión" styleClass="text-bold"/>
+                        <VBox spacing="5">
+                            <Label text="Endpoint URL" styleClass="text-small"/>
+                            <TextField fx:id="webhookUrlField" promptText="https://..."/>
+                        </VBox>
+                        <VBox spacing="5">
+                            <Label text="Token Autenticación" styleClass="text-small"/>
+                            <PasswordField fx:id="apiTokenField"/>
+                        </VBox>
+                    </VBox>
+                </StackPane>
+            </VBox>
+        </ScrollPane>
+    </center>
+
+    <bottom>
+        <HBox spacing="10" alignment="CENTER_RIGHT" style="-fx-background-color: -color-bg-subtle; -fx-border-color: -color-border-subtle; -fx-border-width: 1 0 0 0;">
+            <padding><Insets top="15" right="25" bottom="15" left="25"/></padding>
+            <Button text="Cancelar" cancelButton="true" onAction="#onCancel"/>
+            <Button fx:id="saveButton" text="Crear Sensor" defaultButton="true" styleClass="btn-primary" onAction="#onSave"/>
+        </HBox>
+    </bottom>
+</BorderPane>

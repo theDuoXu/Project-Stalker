@@ -11,12 +11,20 @@
             stylesheets="@../../css/dashboard.css">
 
     <top>
-        <HBox spacing="20" alignment="CENTER_LEFT" styleClass="dashboard-header">
+        <HBox spacing="15" alignment="CENTER_LEFT" styleClass="dashboard-header">
             <padding><Insets top="15" right="20" bottom="15" left="20"/></padding>
 
+            <Button onAction="#onCloseDashboard" styleClass="btn-icon, btn-transparent">
+                <graphic><FontIcon iconLiteral="mdi2a-arrow-left" iconSize="24" iconColor="#6c757d"/></graphic>
+                <tooltip><Tooltip text="Cerrar proyecto y volver"/></tooltip>
+            </Button>
+
+            <Separator orientation="VERTICAL"/>
+
             <VBox spacing="5">
-                <Label fx:id="twinNameLabel" text="Cargando Río..." styleClass="h2"/>
+                <Label fx:id="twinNameLabel" text="Cargando Río..." styleClass="h1"/>
                 <Label fx:id="twinDescLabel" text="..." styleClass="text-muted"/>
+
                 <HBox spacing="10" alignment="CENTER_LEFT">
                     <Label fx:id="hpcStatusLabel" text="HPC: Inicializando" styleClass="status-badge"/>
                     <Button text="Reconectar" onAction="#reconnectHpc" styleClass="btn-xs, btn-outline"/>
@@ -37,12 +45,12 @@
 
             <Tab fx:id="hydroTab" text="Hidrodinámica">
                 <graphic><FontIcon iconLiteral="mdi2w-water" iconSize="18"/></graphic>
-                <fx:include source="tabs/tab-hydrodynamics.fxml"/>
+                <fx:include fx:id="hydroView" source="tabs/tab-hydrodynamics.fxml"/>
             </Tab>
 
             <Tab fx:id="qualityTab" text="Calidad y Transporte">
                 <graphic><FontIcon iconLiteral="mdi2f-flask" iconSize="18"/></graphic>
-                <fx:include source="tabs/tab-quality.fxml"/>
+                <fx:include fx:id="qualityView" source="tabs/tab-quality.fxml"/>
             </Tab>
 
             <Tab fx:id="alertsTab" text="Centro de Alertas">
