@@ -50,6 +50,9 @@ import projectstalker.domain.sensors.SensorViews;
  * @param widthHeatingFactor       Factor que determina cuánto se calienta el agua en tramos anchos y llanos.
  * @param slopeCoolingFactor       Factor que determina cuánto se enfría el agua en tramos de alta pendiente (rápidos).
  * @param temperatureNoiseAmplitude Amplitud de la variación aleatoria de la temperatura en °C para simular efectos locales.
+ * @param originLatitude            Latitud del nacimiento (Punto 0,0 local)
+ * @param originLongitud            Longitud del nacimiento
+ * @param azimuthAngle              Rotación en grados respecto al Norte geográfico
  */
 @Builder
 @With
@@ -103,7 +106,13 @@ public record RiverConfig(
         float headwaterCoolingDistance,
         float widthHeatingFactor,
         float slopeCoolingFactor,
-        float temperatureNoiseAmplitude
+        float temperatureNoiseAmplitude,
+
+        // --- Parámetros de localización geoespacial ---
+        double originLatitude,
+        double originLongitud,
+        double azimuthAngle
+
 ) {
     // El 'record' se encarga de los getters, constructor, etc.
     public static RiverConfig getTestingRiver(){
@@ -143,6 +152,9 @@ public record RiverConfig(
                 .widthHeatingFactor(1.5F)
                 .slopeCoolingFactor(1.0F)
                 .temperatureNoiseAmplitude(0.25F)
+                .originLatitude(0)
+                .originLongitud(0)
+                .azimuthAngle(0)
                 .build();
     }
 }

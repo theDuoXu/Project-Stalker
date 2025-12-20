@@ -3,6 +3,7 @@ package projectstalker.compute.repository.mock;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
+import projectstalker.compute.entity.SensorEntity;
 import projectstalker.compute.repository.SensorRepository;
 import projectstalker.domain.dto.sensor.SensorHealthDTO;
 import projectstalker.domain.dto.sensor.SensorReadingDTO;
@@ -10,6 +11,7 @@ import projectstalker.domain.sensors.SensorType;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 
 @Repository
@@ -110,5 +112,25 @@ public class MockSensorRepository implements SensorRepository {
         return List.of(
                 mockReading(stationId, parameter, 10.0).withTimestamp(from.toString())
         );
+    }
+
+    @Override
+    public boolean existsById(String id) {
+        return false;
+    }
+
+    @Override
+    public SensorEntity save(SensorEntity sensor) {
+        return null;
+    }
+
+    @Override
+    public List<SensorEntity> findAllByTwinId(String twinId) {
+        return List.of();
+    }
+
+    @Override
+    public Optional<SensorEntity> findById(String id) {
+        return Optional.empty();
     }
 }
