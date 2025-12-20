@@ -20,13 +20,6 @@ public class SecurityConfig {
 
     private final KeycloakJwtConverter keycloakJwtConverter;
 
-    // Constantes para Roles
-    private static final String ADMIN = "ADMIN";
-    private static final String ANALYST = "ANALYST";
-    private static final String TECHNICIAN = "TECHNICIAN";
-    private static final String OFFICER = "OFFICER";
-    private static final String GUEST = "GUEST";
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -49,37 +42,43 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET,
                                 ApiRoutes.SENSORS + "/*/history",
                                 ApiRoutes.SENSORS + "/export/**"
-                        ).hasAnyRole(GUEST, TECHNICIAN, ANALYST, OFFICER, ADMIN)
+                        ).hasAnyRole(
+                                UserRole.GUEST.name(),
+                                UserRole.TECHNICIAN.name(),
+                                UserRole.ANALYST.name(),
+                                UserRole.OFFICER.name(),
+                                UserRole.ADMIN.name()
+                        )
 
                         // 3. ADMIN GLOBAL
-                        .requestMatchers(ApiRoutes.ADMIN + "/**").hasRole(ADMIN)
+                        .requestMatchers(ApiRoutes.ADMIN + "/**").hasRole(UserRole.ADMIN.name())
 
                         // 4. SIMULACIONES & DIGITAL TWINS
                         .requestMatchers(HttpMethod.POST,
                                 ApiRoutes.TWINS + "/**",
                                 ApiRoutes.SIMULATIONS + "/**"
-                        ).hasAnyRole(ANALYST, ADMIN)
+                        ).hasAnyRole(UserRole.ANALYST.name(), UserRole.ADMIN.name())
                         .requestMatchers(HttpMethod.PUT,
                                 ApiRoutes.TWINS + "/**"
-                        ).hasAnyRole(ANALYST, ADMIN)
+                        ).hasAnyRole(UserRole.ANALYST.name(), UserRole.ADMIN.name())
                         .requestMatchers(HttpMethod.DELETE,
                                 ApiRoutes.TWINS + "/**"
-                        ).hasRole(ADMIN)
+                        ).hasRole(UserRole.ADMIN.name())
                         .requestMatchers(HttpMethod.GET,
                                 ApiRoutes.TWINS + "/**",
                                 ApiRoutes.SIMULATIONS + "/**"
-                        ).hasAnyRole(TECHNICIAN, ANALYST, ADMIN)
+                        ).hasAnyRole(UserRole.TECHNICIAN.name(), UserRole.ANALYST.name(), UserRole.ADMIN.name())
 
                         // 5. OPERACIONES (Alertas e Informes)
                         .requestMatchers(HttpMethod.POST,
                                 ApiRoutes.ALERTS + "/manual"
-                        ).hasAnyRole(TECHNICIAN, ANALYST, ADMIN)
+                        ).hasAnyRole(UserRole.TECHNICIAN.name(), UserRole.ANALYST.name(), UserRole.ADMIN.name())
                         .requestMatchers(HttpMethod.PUT,
                                 ApiRoutes.ALERTS + "/**"
-                        ).hasAnyRole(OFFICER, ADMIN)
+                        ).hasAnyRole(UserRole.OFFICER.name(), UserRole.ADMIN.name())
                         .requestMatchers(
                                 ApiRoutes.REPORTS + "/**"
-                        ).hasAnyRole(OFFICER, ANALYST, ADMIN)
+                        ).hasAnyRole(UserRole.OFFICER.name(), UserRole.ANALYST.name(), UserRole.ADMIN.name())
 
                         // 6. DEFAULT
                         .anyRequest().authenticated()
