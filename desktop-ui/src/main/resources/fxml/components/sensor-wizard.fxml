@@ -68,53 +68,26 @@
                     </HBox>
                 </VBox>
 
-                <StackPane fx:id="strategyContainer" styleClass="card" style="-fx-padding: 20;">
+                <StackPane styleClass="card" style="-fx-padding: 20;">
+                    <VBox spacing="15">
 
-                    <VBox fx:id="virtualPanel" spacing="15">
                         <HBox alignment="CENTER_LEFT" spacing="10">
-                            <Label text="Función Generadora:" styleClass="text-bold"/>
-                            <ComboBox fx:id="virtualStrategyCombo" prefWidth="200"/>
+                            <Label text="Estrategia:" styleClass="text-bold"/>
+                            <ComboBox fx:id="strategySelector" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
                         </HBox>
+
                         <Separator/>
 
-                        <StackPane>
-                            <GridPane fx:id="paramsRandomPanel" hgap="10" vgap="10" visible="false">
-                                <Label text="Valor Base:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-                                <TextField fx:id="baseValueField" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
-
-                                <Label text="Volatilidad (Ruido):" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-                                <Slider fx:id="volatilitySlider" min="0" max="1" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
-                            </GridPane>
-
-                            <GridPane fx:id="paramsSinePanel" hgap="10" vgap="10" visible="false">
-                                <Label text="Offset (Media):" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-                                <TextField fx:id="sineOffsetField" promptText="7.0" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
-
-                                <Label text="Amplitud:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-                                <TextField fx:id="sineAmplitudeField" promptText="1.5" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
-
-                                <Label text="Frecuencia (Hz):" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
-                                <TextField fx:id="sineFreqField" promptText="0.1" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
-                            </GridPane>
-                        </StackPane>
+                        <StackPane fx:id="dynamicConfigContainer" minHeight="150" alignment="TOP_LEFT"/>
 
                         <VBox spacing="5" style="-fx-background-color: -color-bg-canvas; -fx-border-color: -color-border-subtle; -fx-border-radius: 4;">
-                            <Pane prefHeight="120"/> <Label text="Vista previa de señal (120s)" style="-fx-font-size: 9px; -fx-padding: 0 5 5 5;" alignment="CENTER" maxWidth="Infinity"/>
+                            <Pane prefHeight="80"/>
+                            <Label text="Vista previa de señal" style="-fx-font-size: 9px; -fx-padding: 0 5 5 5;" alignment="CENTER" maxWidth="Infinity"/>
                         </VBox>
-                    </VBox>
 
-                    <VBox fx:id="realPanel" spacing="15" visible="false" managed="false">
-                        <Label text="Configuración de Conexión" styleClass="text-bold"/>
-                        <VBox spacing="5">
-                            <Label text="Endpoint URL" styleClass="text-small"/>
-                            <TextField fx:id="webhookUrlField" promptText="https://..."/>
-                        </VBox>
-                        <VBox spacing="5">
-                            <Label text="Token Autenticación" styleClass="text-small"/>
-                            <PasswordField fx:id="apiTokenField"/>
-                        </VBox>
                     </VBox>
                 </StackPane>
+
             </VBox>
         </ScrollPane>
     </center>
@@ -126,4 +99,5 @@
             <Button fx:id="saveButton" text="Crear Sensor" defaultButton="true" styleClass="btn-primary" onAction="#onSave"/>
         </HBox>
     </bottom>
+
 </BorderPane>
