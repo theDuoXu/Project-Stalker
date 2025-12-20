@@ -2,6 +2,7 @@ package projectstalker.ui.view;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.javafx.scene.control.LabeledText;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
 import javafx.animation.Timeline;
@@ -13,6 +14,9 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
@@ -94,15 +98,7 @@ public class MainController {
         publishPermanentStatus("Sistema DSS Inicializado... Esperando login");
         publishPermanentStatus("HPC: Desconectado", StatusType.DEFAULT, StatusTarget.HPC);
 
-        projectListView.setCellFactory(listView -> new TwinListCell());
-        projectListView.setOnMouseClicked(event -> {
-            if (event.getClickCount() == 2) {
-                TwinSummaryDTO selected = projectListView.getSelectionModel().getSelectedItem();
-                if (selected != null) {
-                    openEditorForTwin(selected);
-                }
-            }
-        });
+        setupListView();
 
         newProjectButton.setDisable(true);
 
@@ -111,6 +107,64 @@ public class MainController {
                 originalSidebarWidth = twinsSideBar.getWidth();
             }
         });
+    }
+
+    private void setupListView() {
+        // 1. CONFIGURACIÓN DE LAS CELDAS
+        projectListView.setCellFactory(listView -> {
+            TwinListCell cell = new TwinListCell();
+
+            // Usamos setOnMouseClicked para Single y Double click
+            // Esto garantiza que la selección nativa de JavaFX ya ocurrió (en el MousePressed)
+            // antes de que nosotros hagamos cambios en la UI.
+            cell.setOnMouseClicked(event -> {
+                // Seguridad: Si la celda está vacía, no hacemos nada
+                if (cell.isEmpty() || cell.getItem() == null) {
+                    return;
+                }
+
+                // Solo botón izquierdo
+                if (event.getButton() == MouseButton.PRIMARY) {
+
+                    // CASO A: Doble Click -> Editor
+                    if (event.getClickCount() == 2) {
+                        log.info("Doble click: Abriendo Editor");
+                        openEditorForTwin(cell.getItem());
+
+                        // CASO B: Click Simple -> Dashboard
+                    } else if (event.getClickCount() == 1) {
+                        log.info("Click simple: Abriendo Dashboard");
+                        openDashBoardForTwin(cell.getItem());
+                    }
+                    event.consume();
+                }
+            });
+
+            return cell;
+        });
+
+        // 2. DESELECCIONAR AL PULSAR EN VACÍO
+        projectListView.setOnMouseClicked(event -> {
+            // Si el click fue consumido por la celda (arriba), el target no llegará aquí igual.
+            // Pero por seguridad verificamos:
+
+            if (event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 1) {
+                // El truco es que si diste en una celda, el evento lo manejó 'cell.setOnMouseClicked'
+                // Pero si diste en el fondo, JavaFX propaga el evento hasta aquí.
+
+                // Verificamos si hay algún item seleccionado y el click no fue en una celda
+                // (Una forma "barata" es ver si el target es la propia ListView o el contenedor virtual)
+                if (event.getTarget() instanceof ListView ||
+                        event.getTarget() instanceof Region) { // flow
+
+                    projectListView.getSelectionModel().clearSelection();
+                }
+            }
+        });
+    }
+
+    private void openDashBoardForTwin(TwinSummaryDTO twin) {
+
     }
 
     private void openEditorForTwin(TwinSummaryDTO twin) {

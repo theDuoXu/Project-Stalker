@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="projectstalker.ui.view.dashboard.tabs.AlertsTabController">
+
+    <padding><Insets top="15" right="15" bottom="15" left="15"/></padding>
+
+    <top>
+        <HBox spacing="10" alignment="CENTER_LEFT" style="-fx-padding: 0 0 15 0;">
+            <Label text="Incidencias Activas" styleClass="h3"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button text="Configurar Reglas" styleClass="btn-outline">
+                <graphic><FontIcon iconLiteral="mdi2c-cog"/></graphic>
+            </Button>
+            <Button text="Exportar Log" styleClass="btn-outline">
+                <graphic><FontIcon iconLiteral="mdi2d-download"/></graphic>
+            </Button>
+        </HBox>
+    </top>
+
+    <center>
+        <TableView fx:id="alertsTable" VBox.vgrow="ALWAYS">
+            <columns>
+                <TableColumn text="Gravedad" prefWidth="100"/>
+                <TableColumn text="Hora" prefWidth="150"/>
+                <TableColumn text="Mensaje" prefWidth="400"/>
+                <TableColumn text="Sensor" prefWidth="150"/>
+                <TableColumn text="Estado" prefWidth="100"/>
+            </columns>
+            <columnResizePolicy><TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/></columnResizePolicy>
+            <placeholder>
+                <Label text="No hay alertas registradas en este periodo."/>
+            </placeholder>
+        </TableView>
+    </center>
+</BorderPane>

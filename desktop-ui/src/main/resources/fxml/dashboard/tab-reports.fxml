@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<GridPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+          fx:controller="projectstalker.ui.view.dashboard.tabs.ReportsTabController"
+          hgap="20" vgap="20" style="-fx-padding: 30;">
+
+    <columnConstraints>
+        <ColumnConstraints percentWidth="30"/>
+        <ColumnConstraints percentWidth="70"/>
+    </columnConstraints>
+
+    <VBox spacing="15" styleClass="card" GridPane.columnIndex="0" GridPane.rowIndex="0">
+        <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+
+        <Label text="Generar Informe" styleClass="h3"/>
+        <Separator/>
+
+        <Label text="Rango de Fechas"/>
+        <DatePicker fx:id="startDatePicker" promptText="Desde" maxWidth="Infinity"/>
+        <DatePicker fx:id="endDatePicker" promptText="Hasta" maxWidth="Infinity"/>
+
+        <Label text="Tipo de Informe"/>
+        <ComboBox fx:id="reportTypeCombo" maxWidth="Infinity" promptText="Seleccionar..."/>
+
+        <Region VBox.vgrow="ALWAYS"/>
+
+        <Button text="Generar PDF" maxWidth="Infinity" styleClass="btn-primary">
+            <graphic><FontIcon iconLiteral="mdi2f-file-pdf-box"/></graphic>
+        </Button>
+        <Button text="Exportar CSV" maxWidth="Infinity" styleClass="btn-outline">
+            <graphic><FontIcon iconLiteral="mdi2f-file-delimited"/></graphic>
+        </Button>
+    </VBox>
+
+    <VBox spacing="10" GridPane.columnIndex="1" GridPane.rowIndex="0" styleClass="card">
+        <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+        <Label text="Historial de Informes Generados" styleClass="h4"/>
+        <ListView fx:id="generatedReportsList" VBox.vgrow="ALWAYS"/>
+    </VBox>
+
+</GridPane>

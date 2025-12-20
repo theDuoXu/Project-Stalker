@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.chart.*?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<VBox spacing="10" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="projectstalker.ui.view.dashboard.tabs.HydroTabController"
+      styleClass="tab-container">
+
+    <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+
+    <StackPane VBox.vgrow="ALWAYS" styleClass="simulation-viewport">
+        <Label text="Visualización Hidrodinámica en Tiempo Real (Canvas)" styleClass="text-muted"/>
+    </StackPane>
+
+    <HBox spacing="15" prefHeight="200" styleClass="card">
+        <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+
+        <VBox spacing="10" minWidth="250">
+            <Label text="Parámetros de Entrada" styleClass="h4"/>
+
+            <Label text="Intensidad de Lluvia (mm/h)"/>
+            <Slider fx:id="rainSlider" min="0" max="100" showTickLabels="true" showTickMarks="true"/>
+
+            <Label text="Caudal Base (m³/s)"/>
+            <Slider fx:id="flowSlider" min="0" max="50" showTickLabels="true"/>
+
+            <Button text="Actualizar Simulación" styleClass="btn-primary" maxWidth="Infinity">
+                <graphic><FontIcon iconLiteral="mdi2p-play"/></graphic>
+            </Button>
+        </VBox>
+
+        <Separator orientation="VERTICAL"/>
+
+        <LineChart fx:id="levelChart" title="Nivel de Agua (h)" HBox.hgrow="ALWAYS" createSymbols="false">
+            <xAxis><NumberAxis label="Tiempo (s)"/></xAxis>
+            <yAxis><NumberAxis label="Metros"/></yAxis>
+        </LineChart>
+    </HBox>
+</VBox>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import org.kordamp.ikonli.javafx.FontIcon?>
+
+<SplitPane dividerPositions="0.65" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+           fx:controller="projectstalker.ui.view.dashboard.tabs.QualityTabController"
+           styleClass="tab-container">
+
+    <StackPane fx:id="heatmapContainer" styleClass="simulation-viewport">
+        <Label text="Visualización de Dispersión (Heatmap PINN)" styleClass="text-muted"/>
+    </StackPane>
+
+    <VBox spacing="10" styleClass="sidebar-panel">
+        <padding><Insets top="15" right="15" bottom="15" left="15"/></padding>
+
+        <HBox alignment="CENTER_LEFT" spacing="10">
+            <Label text="Red de Sensores" styleClass="h3"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button fx:id="addSensorBtn" text="Nuevo" onAction="#onAddSensor" styleClass="btn-sm, btn-primary">
+                <graphic><FontIcon iconLiteral="mdi2p-plus"/></graphic>
+            </Button>
+        </HBox>
+
+        <TextField promptText="Filtrar sensores..." styleClass="search-field"/>
+
+        <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" styleClass="transparent-scroll">
+            <FlowPane fx:id="sensorsFlowPane" hgap="10" vgap="10" prefWrapLength="250">
+            </FlowPane>
+        </ScrollPane>
+    </VBox>
+
+</SplitPane>
