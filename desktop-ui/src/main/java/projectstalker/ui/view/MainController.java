@@ -32,6 +32,7 @@ import projectstalker.ui.event.*;
 import projectstalker.ui.security.AuthenticationService;
 import projectstalker.ui.service.DigitalTwinClientService;
 import projectstalker.ui.view.components.TwinListCell;
+import projectstalker.ui.view.dashboard.TwinDashboardController;
 import projectstalker.ui.viewmodel.StatusTarget;
 import projectstalker.ui.viewmodel.StatusType;
 import projectstalker.ui.viewmodel.StatusViewModel;
@@ -164,7 +165,29 @@ public class MainController {
     }
 
     private void openDashBoardForTwin(TwinSummaryDTO twin) {
+        log.info("Abriendo Dashboard para: {}", twin.name());
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/dashboard/twin-dashboard.fxml"));
 
+            loader.setControllerFactory(springContext::getBean);
+
+            Parent view = loader.load();
+
+            // Obtener el controlador principal del Dashboard y pasarle los datos
+            TwinDashboardController controller = loader.getController();
+            controller.setTwin(twin);
+
+            // Renderizar en el área central
+            contentArea.getChildren().clear();
+            contentArea.getChildren().add(view);
+
+            // Ocultar la barra lateral para dar protagonismo al Dashboard
+            toggleSidebar(false);
+
+        } catch (IOException e) {
+            log.error("Error fatal cargando el Dashboard", e);
+            showErrorAlert(new RuntimeException("No se pudo cargar la vista del Dashboard. \n" + e.getMessage()));
+        }
     }
 
     private void openEditorForTwin(TwinSummaryDTO twin) {
