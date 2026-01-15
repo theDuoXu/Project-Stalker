@@ -5,7 +5,7 @@ import os
 
 # --- CONFIGURACIÓN ---
 INPUT_FILE = 'saica_stations_master_list.json'
-OUTPUT_FILE = 'saica_stations_maestro_coords.json'
+OUTPUT_FILE = '../../data/datasets/raw/saica_stations_maestro_coords.json'
 
 # Cabeceras para simular un navegador real y evitar bloqueos
 HEADERS = {
