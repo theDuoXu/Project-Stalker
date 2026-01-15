@@ -1,0 +1,5 @@
+cufile.log
+neo4j_data/
+neo4j_logs/
+notebooks.iml
+*.parquet
