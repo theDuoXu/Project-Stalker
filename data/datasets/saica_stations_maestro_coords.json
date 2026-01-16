@@ -1,0 +1,272 @@
+[
+    {
+        "codigo": "C322",
+        "nombre": "SAICA CARCABOSO",
+        "subcuenca": "ALAGÓN",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhewVO83ELxAsnz8kw3FvoHqOQ62PLmgAp%2Bd%2B0T1DPINAtkTWQ%2FEKSdOhRZDJmrPJTcQe3ajUdOMZzuxo21oa0lk%3D",
+        "utm_x": "226397.0",
+        "utm_y": "4437976.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C323",
+        "nombre": "SAICA BEJAR",
+        "subcuenca": "ALAGÓN",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhV3RIftV%2FhjZx7UPHMHit585wNSb2thvsiymRFN0VDVh7cZeq0FZWgqW0UN8APSDV0RBcLOM4p2maA5OsDrUZjA%3D",
+        "utm_x": "262857.0",
+        "utm_y": "4474673.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C313",
+        "nombre": "SAICA CAZALEGAS",
+        "subcuenca": "ALBERCHE",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhdqVqOP%2FWkj%2FzxQv2UeTOiXZieGVjc66HTyNAFp8A0cZaVqF1RQuBwYmCjtZxns02mM8K2P7rK8zs9lx59VLHfQ%3D",
+        "utm_x": "354250.0",
+        "utm_y": "4430700.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C326",
+        "nombre": "SAICA ESCALONA",
+        "subcuenca": "ALBERCHE",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhS8VBxWNndPtHh6UcpWMBbPFx2MrARPMEqeX%2BHc%2FJv3LrYTrT%2FlHXjQT%2FkHg0lBxYB%2BAF5l9z9YIqP%2BZn3gtxcU%3D",
+        "utm_x": "380680.0",
+        "utm_y": "4447011.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C342",
+        "nombre": "SAICA PICADAS",
+        "subcuenca": "ALBERCHE",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhYY7w5As90n7gHopIWz3mD49yWMyM9t%2BvwWCo8XDCuE3%2FrN7aReFxI8JIvGL1bibW8jcExmNZ7Igm39JgJRTdz4%3D",
+        "utm_x": "393858.0",
+        "utm_y": "4465945.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C317",
+        "nombre": "SAICA ALMARAZ",
+        "subcuenca": "BAJO TAJO",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhaNk2IbwxE64W0om7V1ymnxECeb7DEKWlrmGuFpcr30jhOdxDUOpKYd9CidwuRVBzAHe%2FaN6jW4aGUYHD%2FZ0SYI%3D",
+        "utm_x": "265358.0",
+        "utm_y": "4407368.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C331",
+        "nombre": "SAICA CEDILLO",
+        "subcuenca": "BAJO TAJO",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhceuCc%2BXr1LzPSAXHQNvXsb5sveh1LozTpRc1fRvYHu0xpLCX%2FLwpoOPBV%2BByrDIkdZ3JRmQZL0nVK0yMQCyVl0%3D",
+        "utm_x": "110480.0",
+        "utm_y": "4400485.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C343",
+        "nombre": "SAICA VALDECAÑAS",
+        "subcuenca": "BAJO TAJO",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhdkW8EvY5ZUHu6GNnGGc%2FhTVUxcCyRt%2BOHIX4yxJKuTs50B0vT25%2BIwHLXB0IStGaq9zyNo2DFftcDZeE9OU6gI%3D",
+        "utm_x": "276434.0",
+        "utm_y": "4406558.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C345",
+        "nombre": "SAICA TORREJON-TAJO",
+        "subcuenca": "BAJO TAJO",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2Fyxpbhc%2BGjsF6zFnufOYinWO2jYRhMEp%2FEZlAmUlA55Og6TwO9hnA1iMfYvATsxfc9P7mvUb%2BN5OexcWo5hw52bpnWqk%3D",
+        "utm_x": "244413.0",
+        "utm_y": "4413568.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C302",
+        "nombre": "SAICA ARANJUEZ",
+        "subcuenca": "CABECERA",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhZDfgASxhWlaox8EvBWYvNkEDCxrAhGJXlgnFq8ROwp7AJEbIB6erho%2BHgiyGNl4RHVYmypFJVoD%2BJqSACQ8u7Y%3D",
+        "utm_x": "452074.0",
+        "utm_y": "4432921.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C312",
+        "nombre": "SAICA VILLARRUBIA",
+        "subcuenca": "CABECERA",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhWMhzvOqw9mo2ZpV9WW9c9j%2BO6musN1xCGd0LjaULqxYeEkTY%2F5CFWlTL%2BvHekzEZ7k6gcZHnaJaTZ66N0q1iYM%3D",
+        "utm_x": "468358.0",
+        "utm_y": "4432399.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C316",
+        "nombre": "SAICA TRILLO",
+        "subcuenca": "CABECERA",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhXYhH0hSJErEvEovW%2F%2BfAVl8cIYESIiCnUCZieD9YaKCPQWDhA%2BsSZu%2FhrXK%2FQXsE9K8QaKUgqCca%2Fa2JSTT65g%3D",
+        "utm_x": "533000.0",
+        "utm_y": "4504773.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C320",
+        "nombre": "SAICA ZORITA",
+        "subcuenca": "CABECERA",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhVUxj0fekq6FiJI1n7v7CdZHbidvEJNeAOELlAJM9SG12FKSA8%2BA3maONPri6HcfxZ6B0VLRzuWZOBgC%2BU2WMNA%3D",
+        "utm_x": "509629.0",
+        "utm_y": "4466768.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C307",
+        "nombre": "SAICA SANTOS DE LA HUMOSA",
+        "subcuenca": "HENARES",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhfJlDCs8SDUITGcGFJWdkjcANzXyxc3pnQhGk59%2F1VgpGNPAoHTJjHtkucuhSbZSaiHcMYd0mDnZ38%2FKN1QOvY8%3D",
+        "utm_x": "476319.0",
+        "utm_y": "4486546.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C309",
+        "nombre": "SAICA ESPINILLOS",
+        "subcuenca": "HENARES",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhdVlWFCBwPn05gQkieJkfMoxcycQG%2F3oguvVVGijtZJMNiUlfpyZzV7u32bqlERD7%2FDM1cv%2BWepCJhBhoPnjUyU%3D",
+        "utm_x": "464365.0",
+        "utm_y": "4479085.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C303",
+        "nombre": "SAICA LAS NIEVES",
+        "subcuenca": "MADRID",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhRH1PQL8jF2UQuhaKkgsw%2BeopsXsrvYqvawtl6c216NIavszjzEKoHYeSc3I8PbnDFjRjU%2Fb2rFL48MMVxbP5KE%3D",
+        "utm_x": "416269.0",
+        "utm_y": "4495632.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C304",
+        "nombre": "SAICA PUENTE LARGO",
+        "subcuenca": "MADRID",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2Fyxpbhc4c7bOqPAdeKSYfQgjZwd6qu4SaSzKFd%2BOgjR0bBNHf4NhVIU3QRuS54facPPpymHcLuSGTZIe5Bk%2BCanXzJI0%3D",
+        "utm_x": "444264.0",
+        "utm_y": "4437541.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C306",
+        "nombre": "SAICA RIVAS",
+        "subcuenca": "MADRID",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhcYWKhFTX4pXb%2BymJc0VQOa2FcyXVuCUXeezA1lQfq68i97SnJwKPy2C3CJajgqBECxfMjMGFL4GaZiuy7Vh5Ug%3D",
+        "utm_x": "455343.0",
+        "utm_y": "4463531.1",
+        "huso": 30
+    },
+    {
+        "codigo": "C308",
+        "nombre": "SAICA BATRES",
+        "subcuenca": "MADRID",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhSWkhYFRyc4n0W6hr3XVyhgxgnuMAshOly7%2FWpIZS0wtQ7DfZJySSIEQbnxdff0eqywuYLUjm832Ivxtjj1t4ms%3D",
+        "utm_x": "419358.0",
+        "utm_y": "4452484.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C314",
+        "nombre": "SAICA BARGAS",
+        "subcuenca": "MADRID",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhYYwxFS1R77pEZvH8BC7zlbh8nTQKc72RKMqPCu%2FDZqQZipWzOe4FeV40QE6Q%2Fc8weAStB6AAGxK24Pow%2FC6LP0%3D",
+        "utm_x": "411677.0",
+        "utm_y": "4427744.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C327",
+        "nombre": "SAICA PRESA DEL REY",
+        "subcuenca": "MADRID",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2Fyxpbha9hf7myJdOnf%2FBSi%2BHnEMVfXeVVqNbhggNqUHsiFpPXFHJa5%2FhmcQhN56sahRPIJlS2XU2VdiDbMDein397was%3D",
+        "utm_x": "453844.0",
+        "utm_y": "4461107.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C328",
+        "nombre": "SAICA MEJORADA",
+        "subcuenca": "MADRID",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhSB9hTjLQaEmG%2B1huOL0iw1pMua1cyIISksDhYEs2TrwxZl4juTF1U1RYeMnQ1iT912wH%2FPfdOpt%2FgyQYq9m6%2Bc%3D",
+        "utm_x": "454861.0",
+        "utm_y": "4471968.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C330",
+        "nombre": "SAICA ALGETE",
+        "subcuenca": "MADRID",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2Fyxpbhe1qZ%2FaOKvBJ%2Fkozd9Ca5Za%2FsuDYbQN1Dg3OcZb5BDZ93Pj0suw7oRVup5kZ53D09AsgSK%2FGwypC%2FUbNYJX6HCA%3D",
+        "utm_x": "451900.0",
+        "utm_y": "4492875.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C310",
+        "nombre": "SAICA TALAVERA",
+        "subcuenca": "TAJO IZQUIERDA",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2Fyxpbhd3cvpVg6PMY64pdOsKx3sihm9LtkoMrzTkwGGoSEEoOPovMtGiL6xyd2xBb61fHw%2FbX0Z8wyt73xFaQtFf4PxM%3D",
+        "utm_x": "344864.0",
+        "utm_y": "4424368.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C315",
+        "nombre": "SAICA SAFONT",
+        "subcuenca": "TAJO IZQUIERDA",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhVy7udRY6miHsZ9hfEme7txKxzz%2FIuhhySrRRSxUDBiweiAGxjm3tQtpgWHKLu0U9O8T3eViwrxOKa5U%2BimeZ7s%3D",
+        "utm_x": "413381.0",
+        "utm_y": "4413988.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C329",
+        "nombre": "SAICA TITULCIA",
+        "subcuenca": "TAJO IZQUIERDA",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhebKsoNavb3uMYsa9Ok2QfZw6JcmHXHnu2WT627%2B1VgmTNNe5CAHeJ%2FSMYrcQMNc57L8Be2tQ04%2BAXYNEnjvcFs%3D",
+        "utm_x": "451128.0",
+        "utm_y": "4442512.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C333",
+        "nombre": "SAICA ESTIVIEL",
+        "subcuenca": "TAJO IZQUIERDA",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhRVdeaerVA14scfSRt8BRL8MtJSqqsbofGjrz9WyP6LA9MeYGczBTJjv%2F18OKcTA9Wz5CkwLFCWshmrG27PdofM%3D",
+        "utm_x": "403842.0",
+        "utm_y": "4414436.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C344",
+        "nombre": "SAICA AZUTAN",
+        "subcuenca": "TAJO IZQUIERDA",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhYK%2Br7zXZK0mT28b2LMi%2FuhdDCYYnQ4HvTZA3iAWZAzu%2F0jYTIkZyMRk083B6uTb%2B7%2Fa%2Bdj1aOoxe031Gee5DG0%3D",
+        "utm_x": "321176.0",
+        "utm_y": "4405278.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C325",
+        "nombre": "SAICA MONFRAGÜE",
+        "subcuenca": "TIÉTAR",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhYbxTxl1y2HsBUTmuWKKssWkaflk0M%2B57WFvLAnMC8oqt%2B0NzmVQqQ52o5AJ50MvMCKW4KIS9kgCdOewPgZihoU%3D",
+        "utm_x": "244235.0",
+        "utm_y": "4414144.0",
+        "huso": 30
+    },
+    {
+        "codigo": "C321",
+        "nombre": "SAICA RIVERA DE GATA",
+        "subcuenca": "ÁRRAGO",
+        "url_detalles": "https://saihtajo.chtajo.es/index.php?w=get-estacion&x=%2F4ZGs%2B6M%2BZWfvq6%2FyxpbhSjDiMJQ%2Fvedv1X69%2Fa6MbSiiToGrW8WfM0iiH76%2BmzdiYReXcPcGpDlJcLJj%2Fh09bUAX9eKgNYHnCU43GMiBDg%3D",
+        "utm_x": "190677.0",
+        "utm_y": "4449158.0",
+        "huso": 30
+    }
+]
