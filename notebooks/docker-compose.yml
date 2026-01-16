@@ -29,6 +29,62 @@ services:
     networks:
       - intelligence_net
 
+  cassandra:
+    image: cassandra:4.1.10
+    container_name: stalker_cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=StalkerCluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - JVM_OPTS=-Xms2G -Xmx2G
+      - MALLOC_ARENA_MAX=2
+    volumes:
+      - ./cassandra_data:/var/lib/cassandra
+    ulimits:
+      memlock: -1
+      nproc: 32768
+    restart: unless-stopped
+    networks:
+      - intelligence_net
+    healthcheck:
+      test: [ "CMD-SHELL", "[ $$(nodetool statusgossip) = running ]" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+
+  prometheus:
+    image: prom/prometheus
+    container_name: stalker_prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    restart: unless-stopped
+    networks:
+      - intelligence_net
+
+  grafana:
+    image: grafana/grafana
+    container_name: stalker_grafana
+    user: "0"
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    networks:
+      - intelligence_net
+
 networks:
   intelligence_net:
     driver: bridge
