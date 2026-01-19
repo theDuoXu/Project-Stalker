@@ -1,5 +1,8 @@
 cufile.log
 neo4j_data/
 neo4j_logs/
+grafana_data/
+cassandra_data/
+neo4j_import/
 notebooks.iml
 *.parquet

@@ -1,0 +1,20 @@
+# --- HARD LIMITS CONFIGURATION ---
+HARD_LIMITS = {
+    'AMONIO': (0.0, 20.0),
+    'CARBONO ORGANICO': (0.0, 50.0), # Corrected name
+    'CLOROFILA': (0.0, 500.0),
+    'CONDUCTIVIDAD': (20.0, 5000.0),
+    'FICOCIANINAS': (0.0, 1000.0),
+    'FOSFATOS': (0.0, 10.0),
+    'NITRATOS': (0.0, 250.0),
+    'NIVEL': (0.0, 20.0),
+    'OXIGENO DISUELTO': (0.0, 20.0), # Corrected name
+    'PH': (4.0, 10.5), # No Cero Exacto
+    'TEMPERATURA': (0.0, 38.0), # No Cero Exacto
+    'TURBIDEZ': (0.0, 2000.0),
+}
+
+# --- SMART INFILLING GROUPS ---
+GROUP_A_INERTIAL = ['TEMPERATURA', 'NIVEL', 'CONDUCTIVIDAD'] # Linear, 6h
+GROUP_B_BIOLOGICAL = ['OXIGENO DISUELTO', 'CLOROFILA', 'FICOCIANINAS', 'PH'] # Spline, 3h
+GROUP_C_EVENT = ['TURBIDEZ', 'AMONIO', 'NITRATOS', 'FOSFATOS', 'CARBONO ORGANICO'] # Linear, 2h
