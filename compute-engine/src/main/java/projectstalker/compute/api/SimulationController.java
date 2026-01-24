@@ -1,25 +1,35 @@
 package projectstalker.compute.api;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import projectstalker.compute.entity.SimulationEntity;
+import projectstalker.compute.repository.SimulationRepository;
+import projectstalker.compute.service.SimulationResultService;
 import projectstalker.config.ApiRoutes;
 import projectstalker.config.SimulationConfig;
-import projectstalker.domain.simulation.SimulationResponseDTO;
 import projectstalker.domain.simulation.IManningResult;
+import projectstalker.domain.simulation.SimulationResponseDTO;
 import projectstalker.physics.simulator.ManningSimulator;
+import projectstalker.compute.service.SimulationService;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping(ApiRoutes.SIMULATIONS)
 @Slf4j
+@RequiredArgsConstructor
 public class SimulationController {
 
-    // Simulación de "Persistencia en Memoria" temporal para la demo.
-    // Guardamos los resultados aquí para que el cliente los descargue en binario después.
-    private final ConcurrentHashMap<String, IManningResult> resultCache = new ConcurrentHashMap<>();
+    private final SimulationService simulationService;
+    private final SimulationResultService resultService;
 
     /**
      * Endpoint PRINCIPAL: Lanza la simulación en la GPU.
@@ -27,37 +37,11 @@ public class SimulationController {
      */
     @PostMapping("/run")
     public ResponseEntity<SimulationResponseDTO> runSimulation(@RequestBody SimulationConfig config) {
-        log.info(">>> API: Recibida petición de simulación (Steps: {}, GPU: {})",
-                config.getTotalTimeSteps(), config.isUseGpuAccelerationOnManning());
-
+        log.info(">>> API: Recibida petición de simulación");
         try {
-            // 1. Instanciar el Simulador (Crea el BatchProcessor y conecta con JNI)
-            // Usamos try-with-resources para asegurar que se libera la memoria nativa al terminar si falla algo
-            // PERO: El resultado lo queremos mantener en caché, así que cuidado con cerrar buffers si son off-heap.
-            // En tu caso, IManningResult copia los datos a Java Heap, así que es seguro cerrar el simulador.
-
-            IManningResult result;
-            try (ManningSimulator simulator = new ManningSimulator(config.getRiverConfig(), config)) {
-                result = simulator.runFullSimulation();
-            }
-
-            // 2. Guardar en Caché Temporal (simulando Redis)
-            String simId = UUID.randomUUID().toString();
-            resultCache.put(simId, result);
-
-            // 3. Devolver Resumen JSON
-            SimulationResponseDTO response = new SimulationResponseDTO(
-                    result.getSimulationTime(),
-                    result.getTimestepCount(),
-                    result.getGeometry().getCellCount(),
-                    "COMPLETED",
-                    "/api/v1/simulation/" + simId + "/binary" // Link para descarga
-            );
-
+            SimulationResponseDTO response = simulationService.runSimulation(config);
             return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            log.error("Error ejecutando simulación", e);
+        } catch (RuntimeException e) {
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -65,11 +49,34 @@ public class SimulationController {
     /**
      * Endpoint SECUNDARIO: Descarga binaria de alta velocidad.
      * GET http://localhost:8080/api/v1/simulation/{id}/binary
-     * (Implementación pendiente: Aquí volcaremos los float[] al OutputStream)
      */
     @GetMapping("/{id}/binary")
     public ResponseEntity<byte[]> downloadBinaryResult(@PathVariable String id) {
-        // TODO: Implementar serialización binaria rápida
-        return ResponseEntity.notFound().build();
+        IManningResult result = resultService.getResult(id);
+        if (result == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                DataOutputStream dos = new DataOutputStream(baos)) {
+
+            // Simple serialization format:
+            // 1. Simulation Time (long)
+            dos.writeLong(result.getSimulationTime());
+            // 2. Timesteps (int)
+            dos.writeInt(result.getTimestepCount());
+            // 3. Cell Count (int)
+            dos.writeInt(result.getGeometry().getCellCount());
+
+            // TODO: Write actual float arrays from result.getStates()
+            // This depends on the IManningResult structure. For now, writing header.
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"sim_" + id + ".bin\"")
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .body(baos.toByteArray());
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }

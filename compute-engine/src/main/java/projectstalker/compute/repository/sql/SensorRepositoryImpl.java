@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-@Profile("sql")
+@Profile("!mock")
 @RequiredArgsConstructor
 public class SensorRepositoryImpl implements SensorRepository {
 
@@ -75,7 +75,8 @@ public class SensorRepositoryImpl implements SensorRepository {
     }
 
     @Override
-    public List<SensorReadingDTO> findReadingsByDateRange(String stationId, String parameter, LocalDateTime from, LocalDateTime to) {
+    public List<SensorReadingDTO> findReadingsByDateRange(String stationId, String parameter, LocalDateTime from,
+            LocalDateTime to) {
         return List.of();
     }
 }

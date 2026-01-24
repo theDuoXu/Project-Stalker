@@ -11,12 +11,12 @@ import projectstalker.domain.sensors.SensorViews;
  */
 @Builder
 @With
-@JsonView(SensorViews.Internal.class)
+@JsonView(SensorViews.Public.class)
 public record TwinSummaryDTO(
-        String id,
-        String name,
-        String description,
-        String createdAt,
-        float totalLengthKm,
-        int cellCount
-) {}
+                String id,
+                String name,
+                String description,
+                String createdAt,
+                float totalLengthKm,
+                int cellCount) {
+}

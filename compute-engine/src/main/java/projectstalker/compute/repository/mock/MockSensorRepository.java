@@ -19,6 +19,7 @@ import java.util.Random;
 public class MockSensorRepository implements SensorRepository {
 
     private final Random random = new Random();
+    private final java.util.Map<String, SensorEntity> store = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
     public List<SensorReadingDTO> findReadings(String stationId, String parameter) {
@@ -52,8 +53,7 @@ public class MockSensorRepository implements SensorRepository {
                 mockReading(stationId, "TEMPERATURA", 20.0 + random.nextDouble()),
                 mockReading(stationId, "PH", 7.0 + random.nextDouble()),
                 mockReading(stationId, "OXIGENO_DISUELTO", 8.5 + random.nextDouble()),
-                mockReading(stationId, "TURBIDEZ", 5.0 + random.nextDouble())
-        );
+                mockReading(stationId, "TURBIDEZ", 5.0 + random.nextDouble()));
     }
 
     @Override
@@ -61,8 +61,7 @@ public class MockSensorRepository implements SensorRepository {
         // Simula el dato en tiempo real solo para el tipo solicitado
         double simulatedValue = 10.0 + random.nextDouble(); // Valor arbitrario
         return List.of(
-                mockReading(stationId, type.getCode(), simulatedValue)
-        );
+                mockReading(stationId, type.getCode(), simulatedValue));
     }
 
     @Override
@@ -72,8 +71,7 @@ public class MockSensorRepository implements SensorRepository {
                 mockHealth(stationId, "TEMPERATURA"),
                 mockHealth(stationId, "PH"),
                 mockHealth(stationId, "AMONIO"),
-                mockHealth(stationId, "TURBIDEZ")
-        );
+                mockHealth(stationId, "TURBIDEZ"));
     }
 
     @Override
@@ -92,6 +90,7 @@ public class MockSensorRepository implements SensorRepository {
                 .stationId(stationId)
                 .build();
     }
+
     // Helper privado para Health
     private SensorHealthDTO mockHealth(String stationId, String paramCode) {
         // Simulamos batería entre 10% y 100% para probar el flag isAllOk a veces false
@@ -105,23 +104,25 @@ public class MockSensorRepository implements SensorRepository {
     }
 
     @Override
-    public List<SensorReadingDTO> findReadingsByDateRange(String stationId, String parameter, LocalDateTime from, LocalDateTime to) {
+    public List<SensorReadingDTO> findReadingsByDateRange(String stationId, String parameter, LocalDateTime from,
+            LocalDateTime to) {
         // Retorna algo simple para probar
-        if (from == null) from = LocalDateTime.now().minusDays(1); // Fallback visual
+        if (from == null)
+            from = LocalDateTime.now().minusDays(1); // Fallback visual
 
         return List.of(
-                mockReading(stationId, parameter, 10.0).withTimestamp(from.toString())
-        );
+                mockReading(stationId, parameter, 10.0).withTimestamp(from.toString()));
     }
 
     @Override
     public boolean existsById(String id) {
-        return false;
+        return store.containsKey(id);
     }
 
     @Override
     public SensorEntity save(SensorEntity sensor) {
-        return null;
+        store.put(sensor.getId(), sensor);
+        return sensor;
     }
 
     @Override
@@ -131,6 +132,6 @@ public class MockSensorRepository implements SensorRepository {
 
     @Override
     public Optional<SensorEntity> findById(String id) {
-        return Optional.empty();
+        return Optional.ofNullable(store.get(id));
     }
 }

@@ -33,6 +33,12 @@ dependencies {
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 
+    // --- WEBSOCKET & REAL-TIME ---
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    implementation 'org.springframework.integration:spring-integration-stomp'
+    implementation 'org.springframework.integration:spring-integration-websocket'
+
+
     // --- UI UX & THEMING (Look & Feel Profesional) ---
     // AtlantaFX: Tema moderno (Nord/Primer) - Estandariza CSS
     implementation 'io.github.mkpaz:atlantafx-base:2.1.0'

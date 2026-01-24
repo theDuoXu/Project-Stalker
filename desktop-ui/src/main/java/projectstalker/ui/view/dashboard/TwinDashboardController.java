@@ -27,19 +27,33 @@ public class TwinDashboardController {
     private final AuthenticationService authService;
     private final ApplicationEventPublisher eventPublisher;
     // --- Header UI Components ---
-    @FXML private Label twinNameLabel;
-    @FXML private Label twinDescLabel;
-    @FXML private Label hpcStatusLabel;
-    @FXML private WebView miniMapWebView;
+    @FXML
+    private Label twinNameLabel;
+    @FXML
+    private Label twinDescLabel;
+    @FXML
+    private Label hpcStatusLabel;
+
+    // Inyectamos el controlador del include fx:id="miniMap"
+    // Regla de FXML: nombre del id + "Controller"
+    @FXML
+    private projectstalker.ui.view.dashboard.tabs.LeafletMapController miniMapController;
 
     // --- Tab System ---
-    @FXML private TabPane mainTabPane;
-    @FXML private Tab hydroTab;    // Hidrodinámica
-    @FXML private Tab qualityTab;  // Calidad (Sensores)
-    @FXML private Tab alertsTab;   // Alertas
-    @FXML private Tab reportsTab;  // Informes
-    @FXML private HydroTabController hydroViewController;
-    @FXML private QualityTabController qualityViewController;
+    @FXML
+    private TabPane mainTabPane;
+    @FXML
+    private Tab hydroTab; // Hidrodinámica
+    @FXML
+    private Tab qualityTab; // Calidad (Sensores)
+    @FXML
+    private Tab alertsTab; // Alertas
+    @FXML
+    private Tab reportsTab; // Informes
+    @FXML
+    private HydroTabController hydroViewController;
+    @FXML
+    private QualityTabController qualityViewController;
     private TwinSummaryDTO currentTwin;
 
     /**
@@ -64,7 +78,7 @@ public class TwinDashboardController {
 
         // Si el de Hidro necesitara el ID en el futuro:
         // if (hydroViewController != null) {
-        //     hydroViewController.setTwinContext(twin.id());
+        // hydroViewController.setTwinContext(twin.id());
         // }
 
         // 3. Cargar Mapa y Seguridad
@@ -110,14 +124,21 @@ public class TwinDashboardController {
      * De momento solo logueamos la intención.
      */
     private void loadMiniMap(TwinSummaryDTO twin) {
-        // TODO: Implementar carga real de Leaflet/OpenLayers en el WebView
-        // TODO: Calcular coordenadas reales basadas en RiverConfig (lat/lon)
-        log.info("[STUB] Cargando MiniMapa geoespacial para el río '{}' (ID: {})", twin.name(), twin.id());
+        // Delegamos al controlador del mapa
+        if (miniMapController != null) {
+            log.info("Cargando datos geoespaciales en MiniMapa...");
+            // Usamos Platform.runLater para asegurar que el WebView esté listo si hubo
+            // delay
+            Platform.runLater(() -> miniMapController.loadData());
+        } else {
+            log.warn("LeafletMapController no ha sido inyectado correctamente.");
+        }
     }
 
     @FXML
     public void reconnectHpc() {
-        // TODO: Implementar lógica de reconexión WebSocket con el backend de computación
+        // TODO: Implementar lógica de reconexión WebSocket con el backend de
+        // computación
         log.info("[STUB] Iniciando secuencia de reconexión manual con HPC Engine...");
     }
 

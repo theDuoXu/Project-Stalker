@@ -16,11 +16,11 @@ import java.util.List;
  */
 @Builder
 @With
-@JsonView(SensorViews.Internal.class)
+@JsonView(SensorViews.Public.class)
 public record TwinDetailDTO(
-        String id,
-        String name,
-        String description,
-        RiverConfig config,
-        List<GeologicalEvent> events
-) {}
+                String id,
+                String name,
+                String description,
+                RiverConfig config,
+                List<GeologicalEvent> events) {
+}

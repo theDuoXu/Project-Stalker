@@ -1,0 +1,82 @@
+/* --- Dashboard Styles --- */
+
+.dashboard-header {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: transparent transparent -color-border-subtle transparent;
+    -fx-border-width: 1;
+}
+
+.h1 {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-default;
+}
+
+.h3 {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-default;
+}
+
+.text-muted {
+    -fx-text-fill: -color-fg-muted;
+}
+
+/* --- Metrics & Status --- */
+
+.status-badge {
+    -fx-padding: 3 8;
+    -fx-background-radius: 4;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 11px;
+}
+
+.status-online {
+    -fx-background-color: -color-success-emphasis;
+}
+
+.status-offline {
+    -fx-background-color: -color-danger-emphasis;
+}
+
+/* --- Buttons --- */
+
+.btn-icon {
+    -fx-cursor: hand;
+}
+
+.btn-transparent {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.btn-transparent:hover {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.btn-xs {
+    -fx-padding: 2 6;
+    -fx-font-size: 11px;
+}
+
+/* --- TableView Adjustments --- */
+
+.table-view {
+    -fx-border-color: transparent;
+}
+
+.table-view .column-header-background {
+    -fx-background-color: -color-bg-subtle;
+}
+
+/* --- Alerts --- */
+
+.alert-critical {
+    -fx-text-fill: -color-danger-fg;
+    -fx-font-weight: bold;
+}
+
+.alert-warning {
+    -fx-text-fill: -color-warning-fg;
+}

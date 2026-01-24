@@ -67,7 +67,7 @@
         <Separator orientation="VERTICAL"/>
 
         <LineChart fx:id="levelChart" title="Nivel de Agua (h) - Tiempo Real" HBox.hgrow="ALWAYS" createSymbols="false">
-            <xAxis><NumberAxis label="Tiempo (s)"/></xAxis>
+            <xAxis><CategoryAxis label="Tiempo"/></xAxis>
             <yAxis><NumberAxis label="Metros"/></yAxis>
         </LineChart>
     </HBox>

@@ -12,7 +12,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: projectstalker_db
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       # 1. Persistencia: Para no perder los datos al apagar
       - postgres_data:/var/lib/postgresql/data
@@ -23,21 +23,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # Interfaz gráfica para ver la BD (Opcional pero recomendada)
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: projectstalker-pgadmin
-    restart: always
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    depends_on:
-      - postgres-db
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
 
 volumes:
   postgres_data:

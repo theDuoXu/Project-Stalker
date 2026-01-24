@@ -26,11 +26,12 @@
     <center>
         <TableView fx:id="alertsTable" VBox.vgrow="ALWAYS">
             <columns>
-                <TableColumn text="Gravedad" prefWidth="100"/>
-                <TableColumn text="Hora" prefWidth="150"/>
-                <TableColumn text="Mensaje" prefWidth="400"/>
-                <TableColumn text="Sensor" prefWidth="150"/>
-                <TableColumn text="Estado" prefWidth="100"/>
+                <TableColumn fx:id="colSeverity" text="Gravedad" prefWidth="100"/>
+                <TableColumn fx:id="colTime" text="Hora" prefWidth="150"/>
+                <TableColumn fx:id="colMessage" text="Mensaje" prefWidth="400"/>
+                <TableColumn fx:id="colSensor" text="Sensor" prefWidth="150"/>
+                <TableColumn fx:id="colStatus" text="Estado" prefWidth="100"/>
+                <TableColumn fx:id="colActions" text="Acciones" prefWidth="120" sortable="false"/>
             </columns>
             <columnResizePolicy><TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/></columnResizePolicy>
             <placeholder>
