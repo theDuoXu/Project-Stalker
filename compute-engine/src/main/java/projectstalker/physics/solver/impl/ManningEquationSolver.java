@@ -40,7 +40,7 @@ public final class ManningEquationSolver {
      * @param n               Coeficiente de Manning
      * @param b               Ancho del fondo (m)
      * @param m               Pendiente lateral (z)
-     * @param initialGuess    (Opcional) Semilla inicial. Si es <=0 se usa 1.0m
+     * @param initialGuess    (Opcional) Semilla inicial. Si es menor igual 0 se usa 1.0m
      */
     public static float calculateNormalDepth(float targetDischarge, float slope, float n, float b, float m, float initialGuess) {
         // Validaciones físicas

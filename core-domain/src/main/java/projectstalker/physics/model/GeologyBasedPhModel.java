@@ -10,7 +10,7 @@ import projectstalker.config.RiverConfig;
  * transiciones entre diferentes tipos de roca madre.
  * <ul>
  * <li><b>Zona Positiva (> 0):</b> Terrenos básicos (ej: Caliza). pH tiende a subir.</li>
- * <li><b>Zona Negativa (< 0):</b> Terrenos ácidos (ej: Granito/Turba). pH tiende a bajar.</li>
+ * <li><b>Zona Negativa (&lt; 0):</b> Terrenos ácidos (ej: Granito/Turba). pH tiende a bajar.</li>
  * </ul>
  */
 public class GeologyBasedPhModel implements SpatialModel {

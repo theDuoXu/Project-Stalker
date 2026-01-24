@@ -8,7 +8,7 @@ import projectstalker.config.RiverConfig;
  * <ul>
  * <li><b>Pendiente > Media:</b> Alta energía cinética. Erosión de finos.
  * Lecho de rocas/cantos rodados -> <b>Mayor Manning</b>.</li>
- * <li><b>Pendiente < Media:</b> Baja energía cinética. Sedimentación.
+ * <li><b>Pendiente menor que Media:</b> Baja energía cinética. Sedimentación.
  * Lecho de arena/limo -> <b>Menor Manning</b>.</li>
  * </ul>
  * <p>

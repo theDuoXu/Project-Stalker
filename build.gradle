@@ -58,3 +58,37 @@ subprojects {
         }
     }
 }
+
+evaluationDependsOnChildren()
+
+tasks.register('alljavadoc', Javadoc) {
+    group = 'documentation'
+    description = 'Genera Javadoc unificado para todo el proyecto.'
+
+    // 1. Destino en la raíz
+    destinationDir = file("${layout.buildDirectory.get()}/docs/javadoc")
+
+    // 2. Título
+    title = "Project Stalker ${project.version} API"
+
+    // 3. Configuración específica de Javadoc
+    options {
+        encoding = 'UTF-8'
+        charSet = 'UTF-8'
+        author = true
+        version = true
+        windowTitle = "Project Stalker ${project.version}"
+        // Evitamos que falle por HTML estricto de Java 21
+        addStringOption('Xdoclint:none', '-quiet')
+    }
+
+    // 4. Lógica para buscar fuentes en los hijos (excluyendo native-lib)
+    // Hacemos esto en doFirst o mediante asignación directa lazy para asegurar que los hijos ya existen
+    def javaProjects = subprojects.findAll { it.plugins.hasPlugin('java') }
+
+    // Agregamos el código fuente de los hijos
+    source javaProjects.collect { it.sourceSets.main.allJava }
+
+    // Agregamos el classpath de los hijos
+    classpath = files(javaProjects.collect { it.sourceSets.main.compileClasspath })
+}

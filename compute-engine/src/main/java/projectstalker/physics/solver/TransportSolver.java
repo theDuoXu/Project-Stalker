@@ -27,7 +27,7 @@ public interface TransportSolver {
      * La implementación NO debe asumir que {@code dt} es seguro. Debe calcular internamente
      * el número de Courant (CFL) y, si es necesario, dividir el paso de tiempo global
      * en múltiples sub-pasos (sub-stepping) para garantizar la estabilidad numérica
-     * (CFL <= 1.0 o 0.9).
+     * (CFL menor igual 1.0 o 0.9).
      *
      * @param currentState El estado del río en el tiempo t.
      * Se asume que H (profundidad) y u (velocidad) ya están actualizados

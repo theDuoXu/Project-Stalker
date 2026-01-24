@@ -40,7 +40,7 @@ public class SplitOperatorTransportSolver implements TransportSolver {
      * @param advectionSolver Solver de advección.
      * @param diffusionSolver Solver de difusión.
      * @param reactionSolver  Solver de reacción.
-     * @param cflSafetyFactor Factor de seguridad CFL (típicamente 0.9). Si es <= 0, se fuerza a 0.9.
+     * @param cflSafetyFactor Factor de seguridad CFL (típicamente 0.9). Si es menor igual 0, se fuerza a 0.9.
      */
     public SplitOperatorTransportSolver(AdvectionSolver advectionSolver,
                                         DiffusionSolver diffusionSolver,

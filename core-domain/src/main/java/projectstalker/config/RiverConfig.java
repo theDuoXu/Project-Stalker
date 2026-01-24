@@ -29,7 +29,7 @@ import projectstalker.domain.sensors.SensorViews;
  * @param slopeSensitivityExponent Factor de sensibilidad geométrica. Un valor de 0.5 implica una relación de raíz
  *                                 cuadrada (típica en hidráulica). Valores mayores exageran el efecto
  *                                 (estrechamientos muy agresivos).
- *                                 - Geometría Hidráulica de Leopold & Maddock (1953)
+ *                                 - Geometría Hidráulica de Leopold y Maddock (1953)
  * @param roughnessSensitivity     Sensibilidad de la rugosidad a los cambios de pendiente. Basado libremente en
  *                                 la ecuación de Jarrett (n ~ S^0.38) para arroyos de montaña.
  * @param baseManning              Coeficiente de Manning base.
