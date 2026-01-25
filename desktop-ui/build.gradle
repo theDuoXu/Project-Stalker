@@ -55,6 +55,9 @@ dependencies {
 
     // Logging UI
     implementation 'ch.qos.logback:logback-classic'
+
+    // --- NEO4J KNOWLEDGE GRAPH ---
+    implementation 'org.neo4j.driver:neo4j-java-driver:5.20.0'
 }
 
 // Deshabilitar la generación del jar de Spring Boot (es una app de escritorio, no un servidor)

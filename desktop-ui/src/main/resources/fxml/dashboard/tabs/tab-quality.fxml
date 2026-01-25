@@ -9,12 +9,30 @@
            fx:controller="projectstalker.ui.view.dashboard.tabs.QualityTabController"
            styleClass="tab-container">
 
-    <StackPane fx:id="heatmapContainer" styleClass="simulation-viewport">
-        <Label text="Visualización de Dispersión (Heatmap PINN)" styleClass="text-muted"/>
+    <StackPane styleClass="simulation-viewport">
+        <StackPane fx:id="heatmapContainer">
+            <Label text="Visualización de Dispersión (Heatmap PINN)" styleClass="text-muted"/>
+        </StackPane>
+        <StackPane fx:id="graphContainer" visible="false" managed="false" style="-fx-background-color: #111;">
+            <Label text="Cargando Grafo de Conocimiento..." styleClass="text-muted"/>
+        </StackPane>
     </StackPane>
 
     <VBox spacing="10" styleClass="sidebar-panel">
         <padding><Insets top="15" right="15" bottom="15" left="15"/></padding>
+
+        <!-- View Toggle -->
+        <HBox alignment="CENTER" styleClass="segmented-button-bar" spacing="0">
+             <ToggleButton fx:id="viewHeatmapBtn" text="Dispersion" selected="true" styleClass="first">
+                 <graphic><FontIcon iconLiteral="mdi2w-water"/></graphic>
+                 <toggleGroup><ToggleGroup fx:id="viewToggleGroup"/></toggleGroup>
+             </ToggleButton>
+             <ToggleButton fx:id="viewGraphBtn" text="Knowledge Graph" toggleGroup="$viewToggleGroup" styleClass="last">
+                 <graphic><FontIcon iconLiteral="mdi2g-graph"/></graphic>
+             </ToggleButton>
+        </HBox>
+
+        <Separator/>
 
         <HBox alignment="CENTER_LEFT" spacing="10">
             <Label text="Red de Sensores" styleClass="h3"/>

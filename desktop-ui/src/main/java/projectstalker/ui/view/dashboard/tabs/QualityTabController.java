@@ -39,9 +39,20 @@ public class QualityTabController {
     @FXML
     private StackPane heatmapContainer;
     @FXML
+    private StackPane graphContainer;
+    @FXML
+    private javafx.scene.control.ToggleButton viewHeatmapBtn;
+    @FXML
+    private javafx.scene.control.ToggleButton viewGraphBtn;
+    @FXML
+    private javafx.scene.control.ToggleGroup viewToggleGroup;
+    @FXML
     private FlowPane sensorsFlowPane;
     @FXML
     private Button addSensorBtn;
+
+    // Managers
+    private projectstalker.ui.view.dashboard.tabs.quality.KnowledgeGraphManager graphManager;
 
     // IMPORTANTE: Necesitamos saber en qué río estamos
     @Setter
@@ -51,8 +62,44 @@ public class QualityTabController {
     public void initialize() {
         checkPermissions();
         loadHeatmapPlaceholder();
-        // loadSensorsList(); // Lo llamaremos cuando setTwinId sea invocado desde el
-        // padre
+
+        // Init Graph Manager
+        this.graphManager = new projectstalker.ui.view.dashboard.tabs.quality.KnowledgeGraphManager(graphContainer);
+
+        setupViewToggles();
+    }
+
+    private void setupViewToggles() {
+        if (viewToggleGroup != null) {
+            viewToggleGroup.selectedToggleProperty().addListener((obs, old, newVal) -> {
+                if (newVal != null) {
+                    if (newVal == viewGraphBtn) {
+                        showGraphView();
+                    } else {
+                        showHeatmapView();
+                    }
+                }
+            });
+        }
+    }
+
+    private void showGraphView() {
+        heatmapContainer.setVisible(false);
+        heatmapContainer.setManaged(false);
+        graphContainer.setVisible(true);
+        graphContainer.setManaged(true);
+
+        // Lazy Connect
+        this.graphManager.connect("bolt://localhost:7687", "neo4j", "12345678secret");
+    }
+
+    private void showHeatmapView() {
+        graphContainer.setVisible(false);
+        graphContainer.setManaged(false);
+        heatmapContainer.setVisible(true);
+        heatmapContainer.setManaged(true);
+
+        this.graphManager.stop();
     }
 
     // Método llamado por TwinDashboardController al cargar el tab
