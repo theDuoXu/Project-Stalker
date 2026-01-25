@@ -33,11 +33,7 @@
 
             <Region HBox.hgrow="ALWAYS"/>
 
-            <StackPane styleClass="mini-map-container" prefWidth="250" prefHeight="100">
-                <fx:include source="../components/leaflet-map.fxml" fx:id="miniMap"/>
-                <!-- Capa invisible para detectar clics si queremos expandirlo, aunque el WebView se come los eventos -->
-                <Pane onMouseClicked="#expandMap" style="-fx-cursor: hand; -fx-background-color: transparent;" pickOnBounds="false"/>
-            </StackPane>
+
         </HBox>
     </top>
 

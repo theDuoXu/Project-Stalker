@@ -34,11 +34,6 @@ public class TwinDashboardController {
     @FXML
     private Label hpcStatusLabel;
 
-    // Inyectamos el controlador del include fx:id="miniMap"
-    // Regla de FXML: nombre del id + "Controller"
-    @FXML
-    private projectstalker.ui.view.dashboard.tabs.LeafletMapController miniMapController;
-
     // --- Tab System ---
     @FXML
     private TabPane mainTabPane;
@@ -81,7 +76,6 @@ public class TwinDashboardController {
         }
 
         // 3. Cargar Mapa y Seguridad
-        loadMiniMap(twin);
         applySecurityPolicies();
     }
 
@@ -118,22 +112,6 @@ public class TwinDashboardController {
         });
     }
 
-    /**
-     * STUB: Carga del mapa geoespacial.
-     * De momento solo logueamos la intención.
-     */
-    private void loadMiniMap(TwinSummaryDTO twin) {
-        // Delegamos al controlador del mapa
-        if (miniMapController != null) {
-            log.info("Cargando datos geoespaciales en MiniMapa...");
-            // Usamos Platform.runLater para asegurar que el WebView esté listo si hubo
-            // delay
-            Platform.runLater(() -> miniMapController.loadData());
-        } else {
-            log.warn("LeafletMapController no ha sido inyectado correctamente.");
-        }
-    }
-
     @FXML
     public void reconnectHpc() {
         // TODO: Implementar lógica de reconexión WebSocket con el backend de
@@ -143,34 +121,6 @@ public class TwinDashboardController {
 
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.context.ApplicationContext springContext;
-
-    @FXML
-    public void expandMap() {
-        log.info("Expandiendo mapa a vista completa...");
-        try {
-            javafx.fxml.FXMLLoader loader = new javafx.fxml.FXMLLoader(
-                    getClass().getResource("/fxml/components/leaflet-map.fxml"));
-
-            // Fix: Use Spring Context to create controller so @Autowired works in
-            // LeafletMapController
-            loader.setControllerFactory(springContext::getBean);
-
-            javafx.scene.Parent root = loader.load();
-
-            javafx.stage.Stage stage = new javafx.stage.Stage();
-            stage.setTitle("Vista Geoespacial Completa - " + (currentTwin != null ? currentTwin.name() : "Río"));
-
-            // User requested larger window
-            javafx.scene.Scene scene = new javafx.scene.Scene(root, 1000, 800);
-            stage.setScene(scene);
-            stage.show();
-
-        } catch (java.io.IOException e) {
-            log.error("Error al abrir el mapa expandido", e);
-            new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR,
-                    "No se pudo abrir el mapa: " + e.getMessage()).show();
-        }
-    }
 
     @FXML
     public void onCloseDashboard() {

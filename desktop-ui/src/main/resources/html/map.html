@@ -49,6 +49,7 @@
         var map;
         var riverLayerGroup = L.layerGroup();
         var stationLayerGroup = L.layerGroup();
+        var markersMap = {};
 
         // --- INICIALIZACIÓN ---
         function initMap() {
@@ -59,6 +60,25 @@
                 zoomControl: false,
                 attributionControl: false
             });
+
+            // Console Bridge to Java
+            console = {
+                log: function () {
+                    var args = Array.prototype.slice.call(arguments);
+                    var msg = args.map(String).join(' ');
+                    if (window.javaConnector) window.javaConnector.logFromJs(msg);
+                },
+                error: function () {
+                    var args = Array.prototype.slice.call(arguments);
+                    var msg = args.map(String).join(' ');
+                    if (window.javaConnector) window.javaConnector.errorFromJs(msg);
+                },
+                warn: function () {
+                    var args = Array.prototype.slice.call(arguments);
+                    var msg = args.map(String).join(' ');
+                    if (window.javaConnector) window.javaConnector.logFromJs("WARN: " + msg);
+                }
+            };
 
             // Fix Grey Artifacts: Force resize re-calculation after render
             setTimeout(function () {
@@ -182,7 +202,11 @@
                     fillOpacity: 0.8
                 });
 
-                marker.bindPopup("<b>" + s.nombre + "</b><br>" + s.subcuenca + "<br>" + s.codigo);
+
+                marker.bindPopup("<b>" + s.nombre + "</b><br>" + s.subcuenca + "<br>" + s.codigo + "<br><i>Cargando datos...</i>");
+
+                // Store reference
+                markersMap[s.codigo] = marker;
 
                 // Interaction: Notify Java when clicked
                 marker.on('click', function (e) {
@@ -195,6 +219,66 @@
 
                 marker.addTo(stationLayerGroup);
             });
+        };
+
+        // 3. Actualizar Popup con datos en tiempo real
+        window.updatePopupContent = function (stationId, newContent) {
+            var marker = markersMap[stationId];
+            if (marker) {
+                // Keep the popup open and update content
+                var oldContent = marker.getPopup().getContent();
+                // Extract static part if needed, or just replace. 
+                // Let's assume Java sends full HTML including name or just appends
+                marker.setPopupContent(newContent);
+
+                // If popup is not open, open it? No, usually user just clicked it.
+                if (!marker.isPopupOpen()) {
+                    marker.openPopup();
+                }
+            }
+        };
+
+        // 4. Carga Masiva (Cache)
+        window.bulkUpdatePopups = function (jsonMapString) {
+            console.log("bulkUpdatePopups called. Length: " + (jsonMapString ? jsonMapString.length : "null"));
+            try {
+                var dataMap = JSON.parse(jsonMapString);
+                var count = 0;
+                for (var id in dataMap) {
+                    if (dataMap.hasOwnProperty(id)) {
+                        var marker = markersMap[id];
+                        if (marker) {
+                            marker.setPopupContent(dataMap[id]);
+                            count++;
+                        } else {
+                            console.warn("Marker not found for ID: " + id);
+                        }
+                    }
+                }
+                console.log("Bulk popup update completed. Updated " + count + " stations.");
+            } catch (e) {
+                console.error("Error in bulkUpdatePopups:", e);
+                console.error("Problematic JSON start:", jsonMapString.substring(0, 100));
+            }
+        };
+
+        // 5. Focalizar Estación (Desde Sidebar)
+        window.focusStation = function (stationId) {
+            var marker = markersMap[stationId];
+            if (marker) {
+                // Fly to station with smooth animation
+                map.flyTo(marker.getLatLng(), 10, {
+                    animate: true,
+                    duration: 1.5
+                });
+
+                // Open popup after a slight delay to allow movement
+                setTimeout(function () {
+                    marker.openPopup();
+                }, 1500);
+            } else {
+                console.warn("Cannot focus. Station not found: " + stationId);
+            }
         };
 
         // Arrancar

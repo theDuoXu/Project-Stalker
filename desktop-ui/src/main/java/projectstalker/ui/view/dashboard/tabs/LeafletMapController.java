@@ -1,6 +1,7 @@
 package projectstalker.ui.view.dashboard.tabs;
 
 import javafx.concurrent.Worker;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
@@ -28,6 +29,7 @@ public class LeafletMapController {
     private WebView mapWebView;
 
     private boolean mapReady = false;
+    private java.util.Map<String, String> pendingBulkData;
 
     @FXML
     public void initialize() {
@@ -43,6 +45,10 @@ public class LeafletMapController {
         String htmlPath = getClass().getResource("/html/map.html").toExternalForm();
         engine.load(htmlPath);
 
+        // Ocultar WebView hasta que cargue para evitar pantallazo blanco
+        mapWebView.setOpacity(0);
+        mapWebView.setPageFill(javafx.scene.paint.Color.TRANSPARENT);
+
         // Listener de carga
         engine.getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
             if (newState == Worker.State.SUCCEEDED) {
@@ -50,41 +56,94 @@ public class LeafletMapController {
 
                 // Inject Java Bridge (Interaction)
                 netscape.javascript.JSObject window = (netscape.javascript.JSObject) engine.executeScript("window");
-                window.setMember("javaConnector", new JavaBridge());
+                window.setMember("javaConnector", new JavaBridge(eventPublisher));
 
                 mapReady = true;
                 loadData();
+
+                // Inject Pending Bulk Data if any
+                if (pendingBulkData != null) {
+                    log.info("Injecting pending bulk data ({} stations)", pendingBulkData.size());
+                    injectBulkData(pendingBulkData);
+                    pendingBulkData = null;
+                }
+
+                // Fade In effect
+                javafx.animation.FadeTransition fade = new javafx.animation.FadeTransition(
+                        javafx.util.Duration.millis(500), mapWebView);
+                fade.setFromValue(0);
+                fade.setToValue(1);
+                fade.play();
+
+                // First Render Fix
+                refreshMap();
+
             } else if (newState == Worker.State.FAILED) {
                 log.error("Fallo al cargar el mapa HTML.");
             }
         });
 
+        // Visibility Listener: When toggled ON, force redraw
+        mapWebView.visibleProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal && mapReady) {
+                refreshMap();
+            }
+        });
+
         // Resize Listener: Force map update when window/webview resizing
-        mapWebView.widthProperty().addListener((obs, oldVal, newVal) -> {
+        javafx.beans.value.ChangeListener<Number> resizeListener = (obs, oldVal, newVal) -> {
             if (mapReady) {
-                engine.executeScript("if(window.map) { window.map.invalidateSize(); }");
+                refreshMap();
             }
-        });
-        mapWebView.heightProperty().addListener((obs, oldVal, newVal) -> {
-            if (mapReady) {
-                engine.executeScript("if(window.map) { window.map.invalidateSize(); }");
+        };
+        mapWebView.widthProperty().addListener(resizeListener);
+        mapWebView.heightProperty().addListener(resizeListener);
+    }
+
+    private void refreshMap() {
+        // Debounce/Delay to ensure layout is done
+        new java.util.Timer().schedule(new java.util.TimerTask() {
+            @Override
+            public void run() {
+                javafx.application.Platform.runLater(() -> {
+                    mapWebView.getEngine().executeScript("if(window.map) { window.map.invalidateSize(); }");
+                });
             }
-        });
+        }, 100);
     }
 
     /**
      * Bridge class for JS -> Java communication.
      * Methods must be public.
+     * Use static class to ensure clean JavaFX/Nashorn visibility
      */
-    public class JavaBridge {
+    @Slf4j
+    public static class JavaBridge {
+        private final ApplicationEventPublisher eventPublisher;
+
+        public JavaBridge(ApplicationEventPublisher eventPublisher) {
+            this.eventPublisher = eventPublisher;
+        }
+
         public void onStationSelected(String stationId) {
             log.info("Usuario seleccionó estación en mapa: {}", stationId);
             if (eventPublisher != null) {
+                // We need to pass source as null or a new object since we are static
+                // Or just use a dummy source. Ideally pass the controller, but static class...
+                // Let's pass 'this' (JavaBridge instance) as source.
                 eventPublisher.publishEvent(
-                        new projectstalker.ui.event.StationSelectedEvent(LeafletMapController.this, stationId));
+                        new projectstalker.ui.event.StationSelectedEvent(this, stationId));
             } else {
                 log.warn("EventPublisher is null, cannot publish selection.");
             }
+        }
+
+        public void logFromJs(String message) {
+            log.info("[JS-MAP] {}", message);
+        }
+
+        public void errorFromJs(String message) {
+            log.error("[JS-MAP-ERROR] {}", message);
         }
     }
 
@@ -135,6 +194,58 @@ public class LeafletMapController {
 
     private String escapeJs(String text) {
         return text.replace("'", "\\'").replace("\n", "");
+    }
+
+    public void updatePopup(String stationId, String htmlContent) {
+        Platform.runLater(() -> {
+            try {
+                // Escape quotes
+                String safeHtml = htmlContent.replace("'", "\\'");
+                mapWebView.getEngine()
+                        .executeScript("window.updatePopupContent('" + stationId + "', '" + safeHtml + "');");
+            } catch (Exception e) {
+                log.error("Error updating popup for " + stationId, e);
+            }
+        });
+    }
+
+    public void focusStation(String stationId) {
+        Platform.runLater(() -> {
+            try {
+                mapWebView.getEngine().executeScript("window.focusStation('" + stationId + "');");
+            } catch (Exception e) {
+                log.error("Error focusing station " + stationId, e);
+            }
+        });
+    }
+
+    public void injectBulkData(java.util.Map<String, String> dataMap) {
+        if (dataMap == null || dataMap.isEmpty())
+            return;
+
+        if (!mapReady) {
+            log.info("Map not ready yet. Queuing bulk data for later injection.");
+            this.pendingBulkData = dataMap;
+            return;
+        }
+
+        Platform.runLater(() -> {
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                String json = mapper.writeValueAsString(dataMap);
+
+                // Robust Injection: Pass data as a property instead of string concatenation
+                netscape.javascript.JSObject window = (netscape.javascript.JSObject) mapWebView.getEngine()
+                        .executeScript("window");
+                window.setMember("tempBulkData", json);
+
+                mapWebView.getEngine()
+                        .executeScript("window.bulkUpdatePopups(window.tempBulkData); window.tempBulkData = null;");
+
+            } catch (Exception e) {
+                log.error("Error injecting bulk popup data", e);
+            }
+        });
     }
 
     private String loadResourceFile(String path) throws IOException {
