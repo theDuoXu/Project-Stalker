@@ -113,41 +113,6 @@ public class LeafletMapController {
     }
 
     /**
-     * Bridge class for JS -> Java communication.
-     * Methods must be public.
-     * Use static class to ensure clean JavaFX/Nashorn visibility
-     */
-    @Slf4j
-    public static class JavaBridge {
-        private final ApplicationEventPublisher eventPublisher;
-
-        public JavaBridge(ApplicationEventPublisher eventPublisher) {
-            this.eventPublisher = eventPublisher;
-        }
-
-        public void onStationSelected(String stationId) {
-            log.info("Usuario seleccionó estación en mapa: {}", stationId);
-            if (eventPublisher != null) {
-                // We need to pass source as null or a new object since we are static
-                // Or just use a dummy source. Ideally pass the controller, but static class...
-                // Let's pass 'this' (JavaBridge instance) as source.
-                eventPublisher.publishEvent(
-                        new projectstalker.ui.event.StationSelectedEvent(this, stationId));
-            } else {
-                log.warn("EventPublisher is null, cannot publish selection.");
-            }
-        }
-
-        public void logFromJs(String message) {
-            log.info("[JS-MAP] {}", message);
-        }
-
-        public void errorFromJs(String message) {
-            log.error("[JS-MAP-ERROR] {}", message);
-        }
-    }
-
-    /**
      * Carga los datos CSV y JSON y los inyecta en el JS.
      */
     public void loadData() {

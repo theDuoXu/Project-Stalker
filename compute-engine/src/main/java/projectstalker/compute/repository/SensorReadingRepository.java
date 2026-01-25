@@ -14,4 +14,8 @@ public interface SensorReadingRepository extends JpaRepository<SensorReadingEnti
     List<SensorReadingEntity> findTop50BySensorIdAndParameterOrderByTimestampDesc(String sensorId, String parameter);
 
     List<SensorReadingEntity> findTop10BySensorIdOrderByTimestampDesc(String sensorId);
+
+    // Dynamic Limit using Pageable
+    List<SensorReadingEntity> findBySensorIdAndParameterOrderByTimestampDesc(String sensorId, String parameter,
+            org.springframework.data.domain.Pageable pageable);
 }

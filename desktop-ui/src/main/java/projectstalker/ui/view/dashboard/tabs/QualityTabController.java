@@ -40,16 +40,31 @@ public class QualityTabController {
     private StackPane heatmapContainer;
     @FXML
     private StackPane graphContainer;
+
+    // Toggles (Now in Top Bar)
     @FXML
     private javafx.scene.control.ToggleButton viewHeatmapBtn;
     @FXML
     private javafx.scene.control.ToggleButton viewGraphBtn;
     @FXML
     private javafx.scene.control.ToggleGroup viewToggleGroup;
+
+    // Sidebar Contexts
+    @FXML
+    private javafx.scene.layout.VBox sensorSidebar;
+    @FXML
+    private javafx.scene.layout.VBox graphSidebar;
+
+    // Sidebar Content
     @FXML
     private FlowPane sensorsFlowPane;
     @FXML
     private Button addSensorBtn;
+
+    @FXML
+    private javafx.scene.control.TextArea cypherQueryInput;
+    @FXML
+    private javafx.scene.control.ListView<String> prebuiltQueriesList;
 
     // Managers
     private projectstalker.ui.view.dashboard.tabs.quality.KnowledgeGraphManager graphManager;
@@ -57,6 +72,36 @@ public class QualityTabController {
     // IMPORTANTE: Necesitamos saber en qué río estamos
     @Setter
     private TwinSummaryDTO currentTwinContext;
+
+    private static final Map<String, String> PREBUILT_QUERIES = new java.util.LinkedHashMap<>();
+    static {
+        PREBUILT_QUERIES.put("Ver topología de sensores", "MATCH (a:Sensor)-[r]-(b:Sensor) RETURN a, r, b LIMIT 100");
+        PREBUILT_QUERIES.put("Ver todo el grafo (Limit 30)", "MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 30"); // Updated
+                                                                                                            // Limit
+        PREBUILT_QUERIES.put("Nodos aislados", "MATCH (n) WHERE NOT (n)--() RETURN n LIMIT 50");
+
+        // New Complex Query
+        PREBUILT_QUERIES.put("Analizar Vertidos (Topológico/Espacial)",
+                "MATCH (v:Vertido) " +
+                        "CALL { " +
+                        "    WITH v " +
+                        "    OPTIONAL MATCH path_topo = shortestPath((v)-[:AGUAS_ABAJO|FLUYE_HACIA*..100]->(s_topo:Sensor)) "
+                        +
+                        "    RETURN s_topo, path_topo " +
+                        "    LIMIT 1 " +
+                        "} " +
+                        "CALL { " +
+                        "    WITH v " +
+                        "    MATCH (s_prox:Sensor) " +
+                        "    WITH s_prox, (v.utm_x - s_prox.utm_x)^2 + (v.utm_y - s_prox.utm_y)^2 as dist_sq " +
+                        "    ORDER BY dist_sq ASC " +
+                        "    LIMIT 1 " +
+                        "    RETURN s_prox " +
+                        "} " +
+                        "WITH v, coalesce(s_topo, s_prox) as s_final, path_topo " +
+                        "OPTIONAL MATCH (s_final)-[r_obj]-(obj:ObjetivoPrioritario) " +
+                        "RETURN v, s_final, path_topo, r_obj, obj LIMIT 300");
+    }
 
     @FXML
     public void initialize() {
@@ -67,6 +112,7 @@ public class QualityTabController {
         this.graphManager = new projectstalker.ui.view.dashboard.tabs.quality.KnowledgeGraphManager(graphContainer);
 
         setupViewToggles();
+        setupGraphSidebar();
     }
 
     private void setupViewToggles() {
@@ -83,23 +129,70 @@ public class QualityTabController {
         }
     }
 
+    private void setupGraphSidebar() {
+        if (prebuiltQueriesList != null) {
+            prebuiltQueriesList.getItems().addAll(PREBUILT_QUERIES.keySet());
+
+            prebuiltQueriesList.setOnMouseClicked(e -> {
+                String selected = prebuiltQueriesList.getSelectionModel().getSelectedItem();
+                if (selected != null) {
+                    String query = PREBUILT_QUERIES.get(selected);
+                    cypherQueryInput.setText(query);
+                    onRunCypherQuery();
+                }
+            });
+        }
+    }
+
     private void showGraphView() {
+        // Content
         heatmapContainer.setVisible(false);
         heatmapContainer.setManaged(false);
         graphContainer.setVisible(true);
         graphContainer.setManaged(true);
 
-        // Lazy Connect
+        // Sidebar
+        sensorSidebar.setVisible(false);
+        sensorSidebar.setManaged(false);
+        graphSidebar.setVisible(true);
+        graphSidebar.setManaged(true);
+
+        // Lazy Connect (Default Query if empty)
+        if (cypherQueryInput.getText().trim().isEmpty()) {
+            cypherQueryInput.setText(PREBUILT_QUERIES.get("Ver todo el grafo (Limit 300)"));
+        }
+
+        // Just ensure connection, don't run query automatically unless we want to
+        // But for UX, let's run what's in the box if we just switched?
+        // Or wait for user. Let's wait, but connect.
         this.graphManager.connect("bolt://localhost:7687", "neo4j", "12345678secret");
     }
 
     private void showHeatmapView() {
+        // Content
         graphContainer.setVisible(false);
         graphContainer.setManaged(false);
         heatmapContainer.setVisible(true);
         heatmapContainer.setManaged(true);
 
+        // Sidebar
+        graphSidebar.setVisible(false);
+        graphSidebar.setManaged(false);
+        sensorSidebar.setVisible(true);
+        sensorSidebar.setManaged(true);
+
         this.graphManager.stop();
+    }
+
+    @FXML
+    public void onRunCypherQuery() {
+        String query = cypherQueryInput.getText();
+        if (query == null || query.isBlank())
+            return;
+
+        log.info("Running Cypher: {}", query);
+        // We need to pass the query to manager
+        this.graphManager.fetchGraph(query);
     }
 
     // Método llamado por TwinDashboardController al cargar el tab

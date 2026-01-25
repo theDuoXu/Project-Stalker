@@ -14,7 +14,7 @@
         <HBox spacing="10" alignment="CENTER_LEFT" style="-fx-padding: 0 0 15 0;">
             <Label text="Incidencias Activas" styleClass="h3"/>
             <Region HBox.hgrow="ALWAYS"/>
-            <Button text="Configurar Reglas" styleClass="btn-outline">
+            <Button text="Configurar Reglas" styleClass="btn-outline" onAction="#onConfigureRules">
                 <graphic><FontIcon iconLiteral="mdi2c-cog"/></graphic>
             </Button>
             <Button text="Exportar Log" styleClass="btn-outline">

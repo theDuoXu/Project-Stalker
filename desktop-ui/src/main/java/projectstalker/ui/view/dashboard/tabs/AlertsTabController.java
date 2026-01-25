@@ -3,11 +3,13 @@ package projectstalker.ui.view.dashboard.tabs;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.kordamp.ikonli.javafx.FontIcon;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 import projectstalker.domain.dto.alert.AlertDTO;
 import projectstalker.domain.dto.alert.AlertSeverity;
@@ -23,6 +25,7 @@ import java.time.format.DateTimeFormatter;
 public class AlertsTabController {
 
     private final AlertClientService alertService;
+    private final ApplicationContext springContext;
 
     @FXML
     private TableView<AlertDTO> alertsTable;
@@ -61,17 +64,6 @@ public class AlertsTabController {
         alertsTable.setItems(alertsList);
 
         // 1. Configurar Columnas simples
-        // Nota: Las columnas deben tener fx:id en el FXML para que esto funcione
-        // automáticamente
-        // Si no, las buscamos por índice o las inyectamos.
-        // Como el FXML actual no tiene fx:id en las columnas, las configuramos
-        // programáticamente por índice es arriesgado
-        // Mejor actualizaré el FXML primero. Pero por ahora, asumo que las inyecto si
-        // coinciden los nombres.
-        // Si fallan, usaré lookup.
-
-        // Mapeo
-        // Mapeo con Lambdas (Compatible con Records)
         colSeverity.setCellValueFactory(
                 data -> new javafx.beans.property.SimpleObjectProperty<>(data.getValue().severity()));
         colTime.setCellValueFactory(
@@ -182,8 +174,19 @@ public class AlertsTabController {
 
     @FXML
     public void onConfigureRules() {
-        log.info("[STUB] Abriendo configuración de reglas...");
-        new Alert(Alert.AlertType.INFORMATION, "Diálogo de reglas no implementado aún.").show();
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/components/rule-config-dialog.fxml"));
+            loader.setControllerFactory(springContext::getBean);
+            javafx.scene.Parent root = loader.load();
+
+            javafx.stage.Stage stage = new javafx.stage.Stage();
+            stage.initModality(javafx.stage.Modality.APPLICATION_MODAL);
+            stage.setTitle("Configurar Reglas de Alerta");
+            stage.setScene(new javafx.scene.Scene(root));
+            stage.showAndWait();
+        } catch (java.io.IOException e) {
+            log.error("Error opening rule config dialog", e);
+        }
     }
 
     @FXML

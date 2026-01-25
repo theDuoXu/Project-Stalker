@@ -5,23 +5,18 @@
 <?import javafx.scene.layout.*?>
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
-<SplitPane dividerPositions="0.65" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-           fx:controller="projectstalker.ui.view.dashboard.tabs.QualityTabController"
-           styleClass="tab-container">
+<VBox xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="projectstalker.ui.view.dashboard.tabs.QualityTabController"
+      styleClass="tab-container" spacing="0">
 
-    <StackPane styleClass="simulation-viewport">
-        <StackPane fx:id="heatmapContainer">
-            <Label text="Visualización de Dispersión (Heatmap PINN)" styleClass="text-muted"/>
-        </StackPane>
-        <StackPane fx:id="graphContainer" visible="false" managed="false" style="-fx-background-color: #111;">
-            <Label text="Cargando Grafo de Conocimiento..." styleClass="text-muted"/>
-        </StackPane>
-    </StackPane>
-
-    <VBox spacing="10" styleClass="sidebar-panel">
-        <padding><Insets top="15" right="15" bottom="15" left="15"/></padding>
-
-        <!-- View Toggle -->
+    <!-- Top Navigation Bar -->
+    <HBox alignment="CENTER_RIGHT" style="-fx-padding: 10 15 10 15; -fx-background-color: -color-bg-default; -fx-border-color: transparent transparent -color-border-muted transparent; -fx-border-width: 0 0 1 0;">
+        <Label text="Quality &amp; Transport" styleClass="h4" style="-fx-text-fill: -color-fg-muted;">
+             <padding><Insets right="20"/></padding>
+        </Label>
+        <Region HBox.hgrow="ALWAYS"/>
+        
+        <!-- View Toggle (Moved here) -->
         <HBox alignment="CENTER" styleClass="segmented-button-bar" spacing="0">
              <ToggleButton fx:id="viewHeatmapBtn" text="Dispersion" selected="true" styleClass="first">
                  <graphic><FontIcon iconLiteral="mdi2w-water"/></graphic>
@@ -31,23 +26,73 @@
                  <graphic><FontIcon iconLiteral="mdi2g-graph"/></graphic>
              </ToggleButton>
         </HBox>
+    </HBox>
 
-        <Separator/>
+    <!-- Main Content Area -->
+    <SplitPane dividerPositions="0.70" VBox.vgrow="ALWAYS" styleClass="tab-container"> <!-- Clean SplitPane -->
+        
+        <!-- Left: Visualization Viewport -->
+        <StackPane styleClass="simulation-viewport">
+            <!-- Heatmap View -->
+            <StackPane fx:id="heatmapContainer">
+                <Label text="Visualización de Dispersión (Heatmap PINN)" styleClass="text-muted"/>
+            </StackPane>
+            
+            <!-- Graph View -->
+            <StackPane fx:id="graphContainer" visible="false" managed="false" style="-fx-background-color: #0d1117;">
+                 <!-- Canvas is added programmatically -->
+                <Label text="Rendering Knowledge Graph..." styleClass="text-muted" StackPane.alignment="BOTTOM_LEFT">
+                    <padding><Insets bottom="10" left="10"/></padding>
+                </Label>
+            </StackPane>
+        </StackPane>
 
-        <HBox alignment="CENTER_LEFT" spacing="10">
-            <Label text="Red de Sensores" styleClass="h3"/>
-            <Region HBox.hgrow="ALWAYS"/>
-            <Button fx:id="addSensorBtn" text="Nuevo" onAction="#onAddSensor" styleClass="btn-sm, btn-primary">
-                <graphic><FontIcon iconLiteral="mdi2p-plus"/></graphic>
-            </Button>
-        </HBox>
+        <!-- Right: Context Sidebar -->
+        <StackPane>
+            
+            <!-- Context 1: Sensors (Dispersion Mode) -->
+            <VBox fx:id="sensorSidebar" spacing="10" styleClass="sidebar-panel">
+                <padding><Insets top="15" right="15" bottom="15" left="15"/></padding>
 
-        <TextField promptText="Filtrar sensores..." styleClass="search-field"/>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Red de Sensores" styleClass="h3"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button fx:id="addSensorBtn" text="Nuevo" onAction="#onAddSensor" styleClass="btn-sm, btn-primary">
+                        <graphic><FontIcon iconLiteral="mdi2p-plus"/></graphic>
+                    </Button>
+                </HBox>
 
-        <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" styleClass="transparent-scroll">
-            <FlowPane fx:id="sensorsFlowPane" hgap="10" vgap="10" prefWrapLength="250">
-            </FlowPane>
-        </ScrollPane>
-    </VBox>
+                <TextField promptText="Filtrar sensores..." styleClass="search-field"/>
 
-</SplitPane>
+                <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" styleClass="transparent-scroll">
+                    <FlowPane fx:id="sensorsFlowPane" hgap="10" vgap="10" prefWrapLength="250">
+                    </FlowPane>
+                </ScrollPane>
+            </VBox>
+
+            <!-- Context 2: Graph Queries (Graph Mode) -->
+            <VBox fx:id="graphSidebar" spacing="15" visible="false" managed="false" styleClass="sidebar-panel">
+                <padding><Insets top="15" right="15" bottom="15" left="15"/></padding>
+
+                <Label text="Graph Explorer" styleClass="h3"/>
+                
+                <VBox spacing="5">
+                    <Label text="Cypher Query" styleClass="text-small"/>
+                    <TextArea fx:id="cypherQueryInput" promptText="MATCH (n) RETURN n LIMIT 50" wrapText="true" prefRowCount="4" styleClass="code-area"/>
+                    <Button text="Run Query" onAction="#onRunCypherQuery" maxWidth="Infinity" styleClass="btn-accent">
+                        <graphic><FontIcon iconLiteral="mdi2p-play"/></graphic>
+                    </Button>
+                </VBox>
+
+                <Separator/>
+
+                <Label text="Prebuilt Queries" styleClass="text-small, text-muted"/>
+                
+                <ListView fx:id="prebuiltQueriesList" VBox.vgrow="ALWAYS" styleClass="transparent-list-view"/>
+            </VBox>
+
+        </StackPane>
+
+    </SplitPane>
+
+</VBox>

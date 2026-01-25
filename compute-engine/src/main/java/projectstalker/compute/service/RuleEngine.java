@@ -14,12 +14,12 @@ import projectstalker.compute.repository.SensorReadingRepository;
 public class RuleEngine {
 
     private final AlertRepository alertRepository;
-    private final projectstalker.compute.repository.SensorReadingRepository readingRepository;
+    private final SensorReadingRepository readingRepository;
+    private final projectstalker.compute.repository.RuleConfigRepository ruleConfigRepository;
 
-    // Parameters that require log-normalization (distributions like concentration,
-    // flow)
-    private static final java.util.Set<String> LOG_NORMAL_PARAMS = java.util.Set.of("E.COLI", "AMMONIUM", "FLOW",
-            "CONDUCTIVITY");
+    // Default Fallbacks
+    private static final double DEFAULT_SIGMA = 4.0;
+    private static final int DEFAULT_WINDOW = 50;
 
     /**
      * Evalúa una lectura entrante y genera alertas si es necesario.
@@ -27,14 +27,15 @@ public class RuleEngine {
     public void evaluate(SensorEntity sensor, String parameter, double value) {
         String paramUpper = parameter.toUpperCase();
 
-        // 1. Static Thresholds (Legacy/Simple)
+        // 1. Static Thresholds (Legacy - Keep or move to DB later)
         checkStaticThresholds(sensor, paramUpper, value);
 
-        // 2. Rolling Z-Score (Statistical Anomaly Detection)
+        // 2. Rolling Z-Score (Dynamic Config)
         checkRollingZScore(sensor, paramUpper, value);
     }
 
     private void checkStaticThresholds(SensorEntity sensor, String parameter, double value) {
+        // Keep hardcoded for critical safety limits for now
         if ("PH".equals(parameter)) {
             if (value < 6.5 || value > 9.0) {
                 createAlert(sensor, AlertEntity.AlertSeverity.WARNING,
@@ -50,24 +51,24 @@ public class RuleEngine {
     }
 
     private void checkRollingZScore(SensorEntity sensor, String parameter, double currentValue) {
-        // Fetch last 50 readings for statistical context
+        // Fetch Configuration
+        var configOpt = ruleConfigRepository.findByMetric(parameter);
+
+        boolean useLog = configOpt.map(c -> c.isUseLog())
+                .orElse("E.COLI".equals(parameter) || "AMMONIUM".equals(parameter)); // Default logic
+        double threshold = configOpt.map(c -> c.getThresholdSigma()).orElse(DEFAULT_SIGMA);
+        int windowSize = configOpt.map(c -> c.getWindowSize()).orElse(DEFAULT_WINDOW);
+
+        // Fetch History based on Window Size
         java.util.List<projectstalker.compute.entity.SensorReadingEntity> history = readingRepository
-                .findTop50BySensorIdAndParameterOrderByTimestampDesc(sensor.getId(), parameter);
+                .findBySensorIdAndParameterOrderByTimestampDesc(sensor.getId(), parameter,
+                        org.springframework.data.domain.PageRequest.of(0, windowSize));
 
         if (history.size() < 10)
             return; // Need minimum data points
 
-        boolean useLog = LOG_NORMAL_PARAMS.contains(parameter);
-
-        // Extract values (skip current one if it was just saved? Usually scraper saves
-        // then evaluates.
-        // If so, the current value influences the mean slightly, which is fine, or we
-        // exclude it.)
-        // Assuming evaluate is called AFTER save, history[0] might be current. Let's
-        // exclude it to compare against "past".
-
         double[] values = history.stream()
-                .filter(r -> r.getValue() > 0 || !useLog) // Log requires > 0
+                .filter(r -> r.getValue() > 0 || !useLog)
                 .mapToDouble(r -> useLog ? Math.log(r.getValue()) : r.getValue())
                 .toArray();
 
@@ -92,9 +93,9 @@ public class RuleEngine {
         double currentTransformed = useLog ? (currentValue > 0 ? Math.log(currentValue) : mean) : currentValue;
         double zScore = (currentTransformed - mean) / stdDev;
 
-        if (Math.abs(zScore) > 4.0) {
-            String msg = String.format("Anomalía Estadística (%s): Valor %.2f (Z-Score: %.1f%s)",
-                    parameter, currentValue, zScore, useLog ? ", Log-Norm" : "");
+        if (Math.abs(zScore) > threshold) {
+            String msg = String.format("Anomalía Estadística (%s): Valor %.2f (Z-Score: %.1f%s > %.1f)",
+                    parameter, currentValue, zScore, useLog ? ", Log-Norm" : "", threshold);
             createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL, msg);
         }
     }
@@ -105,7 +106,7 @@ public class RuleEngine {
                 .severity(severity)
                 .message(message)
                 .status(AlertEntity.AlertStatus.NEW)
-                .timestamp(java.time.LocalDateTime.now()) // Ensure timestamp is set
+                .timestamp(java.time.LocalDateTime.now())
                 .build();
         alertRepository.save(alert);
         log.info("Alert generated for sensor {}: {}", sensor.getName(), message);
