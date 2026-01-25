@@ -3,6 +3,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import javafx.scene.chart.*?> 
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
 <BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
@@ -58,12 +59,15 @@
                 <VBox spacing="10">
                     <Label text="Fuente de Datos" styleClass="h4"/>
                     <HBox spacing="0" styleClass="segmented-button-bar">
-                        <ToggleButton fx:id="virtualToggle" text="Virtual (Generador)" selected="true" maxWidth="Infinity" HBox.hgrow="ALWAYS">
+                        <ToggleButton fx:id="manualToggle" text="Manual" selected="true" maxWidth="Infinity" HBox.hgrow="ALWAYS">
                             <toggleGroup><ToggleGroup fx:id="strategyGroup"/></toggleGroup>
-                            <graphic><FontIcon iconLiteral="mdi2f-function-variant"/></graphic>
+                            <graphic><FontIcon iconLiteral="mdi2a-account-edit"/></graphic>
                         </ToggleButton>
-                        <ToggleButton fx:id="realToggle" text="Sensor Físico (IoT)" toggleGroup="$strategyGroup" maxWidth="Infinity" HBox.hgrow="ALWAYS">
+                        <ToggleButton fx:id="realToggle" text="Real (IoT)" toggleGroup="$strategyGroup" maxWidth="Infinity" HBox.hgrow="ALWAYS">
                             <graphic><FontIcon iconLiteral="mdi2t-transmission-tower"/></graphic>
+                        </ToggleButton>
+                        <ToggleButton fx:id="virtualToggle" text="Virtual" toggleGroup="$strategyGroup" maxWidth="Infinity" HBox.hgrow="ALWAYS">
+                            <graphic><FontIcon iconLiteral="mdi2f-function-variant"/></graphic>
                         </ToggleButton>
                     </HBox>
                 </VBox>
@@ -81,8 +85,11 @@
                         <StackPane fx:id="dynamicConfigContainer" minHeight="150" alignment="TOP_LEFT"/>
 
                         <VBox spacing="5" style="-fx-background-color: -color-bg-canvas; -fx-border-color: -color-border-subtle; -fx-border-radius: 4;">
-                            <Pane prefHeight="80"/>
-                            <Label text="Vista previa de señal" style="-fx-font-size: 9px; -fx-padding: 0 5 5 5;" alignment="CENTER" maxWidth="Infinity"/>
+                            <LineChart fx:id="previewChart" prefHeight="150" createSymbols="false" legendVisible="false">
+                                <xAxis><NumberAxis label="Tiempo (s)" autoRanging="true"/></xAxis>
+                                <yAxis><NumberAxis label="Valor" forceZeroInRange="false" autoRanging="true"/></yAxis>
+                            </LineChart>
+                            <Label text="Simulación de señal (1 min)" style="-fx-font-size: 9px; -fx-padding: 0 5 5 5;" alignment="CENTER" maxWidth="Infinity"/>
                         </VBox>
 
                     </VBox>

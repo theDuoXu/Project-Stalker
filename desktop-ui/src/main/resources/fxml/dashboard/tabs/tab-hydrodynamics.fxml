@@ -26,7 +26,7 @@
                 <RadioButton text="Manual" selected="true" userData="MANUAL">
                     <toggleGroup><ToggleGroup fx:id="sourceModeGroup"/></toggleGroup>
                 </RadioButton>
-                <RadioButton text="Sensores Real-Time" userData="REAL" toggleGroup="$sourceModeGroup"/>
+                <RadioButton text="Sensores Real-Time y Virtuales" userData="REAL" toggleGroup="$sourceModeGroup"/>
             </HBox>
 
             <Separator/>
@@ -53,8 +53,18 @@
 
                 <VBox fx:id="sensorControls" spacing="15" visible="false" managed="false">
                     <VBox spacing="5">
-                        <Label text="Caudalímetro Maestro" styleClass="text-small"/>
-                        <ComboBox fx:id="flowSensorSelector" promptText="Seleccionar sensor de entrada..." maxWidth="Infinity"/>
+                        <Label text="Caudalímetro Maestro (Reales)" styleClass="text-small"/>
+                        <ComboBox fx:id="flowSensorSelector" promptText="Seleccionar sensor de flujo..." maxWidth="Infinity"/>
+                    </VBox>
+
+                    <VBox spacing="5">
+                         <Label text="Sensores Virtuales (Nivel)" styleClass="text-small"/>
+                         <ComboBox fx:id="virtualSensorSelector" promptText="Seleccionar sensor virtual..." maxWidth="Infinity"/>
+                    </VBox>
+
+                    <VBox spacing="5">
+                         <Label text="Parámetro / Métrica" styleClass="text-small"/>
+                         <ComboBox fx:id="metricSelector" promptText="Seleccionar métrica..." maxWidth="Infinity"/>
                     </VBox>
 
                     <Label text="El sistema se sincronizará automáticamente con las lecturas del sensor seleccionado vía HPC."

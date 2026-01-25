@@ -18,7 +18,8 @@ import java.util.List;
 
 /**
  * Endpoint PRINCIPAL: Lanza la simulación en la GPU.
- * POST <a href="https://api.protonenergyindustries/projectstalker/v1/simulation/run">api</a>
+ * POST <a href=
+ * "https://api.protonenergyindustries/projectstalker/v1/simulation/run">api</a>
  */
 @RestController
 @RequestMapping(ApiRoutes.SENSORS)
@@ -30,21 +31,26 @@ public class SensorController {
     @GetMapping("/{stationId}/history")
     public ResponseEntity<SensorResponseDTO> getSensorHistory(
             @PathVariable String stationId,
-            @RequestParam(name = "parameter") String parameter
-    ) {
+            @RequestParam(name = "parameter") String parameter) {
         // Delegamos toda la responsabilidad al servicio
         SensorResponseDTO response = sensorService.getHistory(stationId, parameter);
 
         return ResponseEntity.ok(response);
     }
 
-    // GET /api/sensors/C302/realtime                -> Devuelve todo
-    // GET /api/sensors/C302/realtime?parameter=PH   -> Devuelve solo PH
+    // GET /api/sensors?twinId=ABC
+    @GetMapping
+    public ResponseEntity<List<SensorResponseDTO>> getSensorsByTwin(
+            @RequestParam(name = "twinId") String twinId) {
+        return ResponseEntity.ok(sensorService.getAllByTwin(twinId));
+    }
+
+    // GET /api/sensors/C302/realtime -> Devuelve todo
+    // GET /api/sensors/C302/realtime?parameter=PH -> Devuelve solo PH
     @GetMapping("/{stationId}/realtime")
     public ResponseEntity<List<SensorReadingDTO>> getStationRealtime(
             @PathVariable String stationId,
-            @RequestParam(name = "parameter", defaultValue = "ALL") String parameter
-    ) {
+            @RequestParam(name = "parameter", defaultValue = "ALL") String parameter) {
         List<SensorReadingDTO> data = sensorService.getRealtime(stationId, parameter);
         return ResponseEntity.ok(data);
     }
@@ -53,8 +59,7 @@ public class SensorController {
     @GetMapping("/{stationId}/status")
     public ResponseEntity<SensorHealthResponseDTO> getStationStatus(
             @PathVariable String stationId,
-            @RequestParam(name = "parameter", defaultValue = "ALL") String parameter
-    ) {
+            @RequestParam(name = "parameter", defaultValue = "ALL") String parameter) {
         SensorHealthResponseDTO statusData = sensorService.getHealth(stationId, parameter);
         return ResponseEntity.ok(statusData);
     }
@@ -66,12 +71,9 @@ public class SensorController {
             @RequestParam(name = "parameter", defaultValue = "ALL") String parameter,
 
             // Usamos LocalDateTime para precisión
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
 
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to
-    ) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         // Si entra aquí, Spring Security YA ha verificado las fechas y los roles.
         // Los roles operativos tienen asignados un rango máximo de 30 días
         // Roles no operativos solo se le permiten bajar 1 día
@@ -82,9 +84,18 @@ public class SensorController {
         // De momento devolvemos JSON
         return ResponseEntity.ok(exportData);
     }
+
     @PostMapping
     public ResponseEntity<SensorResponseDTO> registerSensor(@RequestBody SensorCreationDTO request) {
         SensorResponseDTO created = sensorService.registerSensor(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @PutMapping("/{stationId}")
+    public ResponseEntity<SensorResponseDTO> updateSensor(
+            @PathVariable String stationId,
+            @RequestBody SensorCreationDTO request) {
+        SensorResponseDTO updated = sensorService.updateSensor(stationId, request);
+        return ResponseEntity.ok(updated);
     }
 }

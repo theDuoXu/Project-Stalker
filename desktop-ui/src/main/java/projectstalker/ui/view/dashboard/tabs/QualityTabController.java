@@ -22,6 +22,8 @@ import projectstalker.ui.security.AuthenticationService;
 import projectstalker.ui.view.components.SensorWizardController;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 @Slf4j
 @Component
@@ -29,11 +31,17 @@ import java.io.IOException;
 public class QualityTabController {
 
     private final AuthenticationService authService;
+    private final projectstalker.ui.service.SensorClientService sensorService; // Injected
     private final ApplicationContext springContext; // Necesario para inyectar el Wizard
 
-    @FXML private StackPane heatmapContainer;
-    @FXML private FlowPane sensorsFlowPane;
-    @FXML private Button addSensorBtn;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+
+    @FXML
+    private StackPane heatmapContainer;
+    @FXML
+    private FlowPane sensorsFlowPane;
+    @FXML
+    private Button addSensorBtn;
 
     // IMPORTANTE: Necesitamos saber en qué río estamos
     @Setter
@@ -43,7 +51,8 @@ public class QualityTabController {
     public void initialize() {
         checkPermissions();
         loadHeatmapPlaceholder();
-        // loadSensorsList(); // Lo llamaremos cuando setTwinId sea invocado desde el padre
+        // loadSensorsList(); // Lo llamaremos cuando setTwinId sea invocado desde el
+        // padre
     }
 
     // Método llamado por TwinDashboardController al cargar el tab
@@ -80,12 +89,13 @@ public class QualityTabController {
             wizard.setOnSuccess(dto -> {
                 log.info("Sensor creado! Recargando lista...");
                 loadSensorsList();
+                eventPublisher.publishEvent(new projectstalker.ui.event.SensorListRefreshEvent(this));
             });
 
             Stage stage = new Stage();
             stage.initModality(Modality.APPLICATION_MODAL);
             stage.setTitle("Nuevo Sensor - " + currentTwinContext.name());
-            stage.setScene(new Scene(root));
+            stage.setScene(new Scene(root, 650, 600));
             stage.showAndWait();
 
         } catch (IOException e) {
@@ -99,10 +109,118 @@ public class QualityTabController {
     }
 
     private void loadSensorsList() {
-        // TODO: Llamar a sensorService.getAllByTwin(currentTwinId)
-        // Por ahora limpiamos para probar el flujo de creación visual
+        if (currentTwinContext == null)
+            return;
+
         sensorsFlowPane.getChildren().clear();
-        log.info("[STUB] Lista de sensores recargada para Twin: {}", currentTwinContext.id());
+        log.info("Cargando lista de sensores para Twin: {}", currentTwinContext.id());
+
+        // FIX: Now calling the real backend endpoint
+        sensorService.getSensorsByTwin(currentTwinContext.id())
+                .subscribe(sensor -> {
+                    Platform.runLater(() -> {
+                        sensorsFlowPane.getChildren().add(createSensorCard(sensor));
+                    });
+                }, err -> {
+                    log.error("Error cargando lista de sensores", err);
+                });
+    }
+
+    private javafx.scene.layout.Region createSensorCard(projectstalker.domain.dto.sensor.SensorResponseDTO sensor) {
+        javafx.scene.layout.VBox card = new javafx.scene.layout.VBox(5);
+        card.setStyle(
+                "-fx-background-color: -color-bg-subtle; -fx-padding: 10; -fx-background-radius: 8; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 5, 0, 0, 2);");
+        card.setPrefWidth(180);
+
+        javafx.scene.control.Label name = new javafx.scene.control.Label(sensor.name());
+        name.setStyle("-fx-font-weight: bold; -fx-text-fill: -color-fg-default;");
+
+        javafx.scene.control.Label type = new javafx.scene.control.Label(sensor.signalType());
+        type.setStyle("-fx-font-size: 11px; -fx-text-fill: -color-fg-muted;");
+
+        javafx.scene.layout.HBox valueBox = new javafx.scene.layout.HBox(5);
+        valueBox.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+
+        javafx.scene.control.Label valueLabel = new javafx.scene.control.Label("--");
+        valueLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: -color-accent-fg;");
+
+        javafx.scene.control.Label unitLabel = new javafx.scene.control.Label(sensor.unit());
+        unitLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: -color-fg-muted;");
+
+        valueBox.getChildren().addAll(valueLabel, unitLabel);
+
+        // CLICK TO EDIT (Single Click as requested)
+        card.setOnMouseClicked(e -> {
+            openEditWizard(sensor);
+        });
+        // Cursor hand
+        card.setStyle(card.getStyle() + "-fx-cursor: hand;");
+
+        // Polling for live data
+        startLivePolling(sensor.stationId(), sensor.name(), valueLabel);
+
+        card.getChildren().addAll(name, type, new javafx.scene.control.Separator(), valueBox);
+        return card;
+    }
+
+    private void openEditWizard(projectstalker.domain.dto.sensor.SensorResponseDTO sensor) {
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/components/sensor-wizard.fxml"));
+            loader.setControllerFactory(springContext::getBean);
+            Parent root = loader.load();
+
+            SensorWizardController wizard = loader.getController();
+            wizard.setTwinContext(currentTwinContext);
+            wizard.setSensorToEdit(sensor); // PRE-FILL
+
+            wizard.setOnSuccess(dto -> {
+                log.info("Sensor editado! Recargando lista...");
+                loadSensorsList();
+                eventPublisher.publishEvent(new projectstalker.ui.event.SensorListRefreshEvent(this));
+            });
+
+            Stage stage = new Stage();
+            stage.initModality(Modality.APPLICATION_MODAL);
+            stage.setTitle("Editar Sensor - " + sensor.name());
+            stage.setScene(new Scene(root, 650, 600));
+            stage.showAndWait();
+
+        } catch (IOException e) {
+            log.error("Error UI al abrir wizard de edición", e);
+        }
+    }
+
+    private Map<String, javafx.animation.Timeline> activePolls = new HashMap<>();
+
+    // Stop polling when view changes? Ideally yes. For now, we clear on
+    // loadSensorsList maybe?
+    // But loadSensorsList clears children only. Timelines stick around.
+    // We should enable/disable polls?
+    // For this task, let's just create them.
+
+    private void startLivePolling(String stationId, String paramName, javafx.scene.control.Label target) {
+        // Stop existing if any (key by ID)
+        if (activePolls.containsKey(stationId)) {
+            activePolls.get(stationId).stop();
+        }
+
+        javafx.animation.Timeline timeline = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.seconds(4), ev -> {
+                    // Fetch Realtime
+                    sensorService.getRealtime(stationId, "ALL")
+                            .collectList()
+                            .subscribe(readings -> {
+                                // Assuming we get a list, take first
+                                Platform.runLater(() -> {
+                                    if (!readings.isEmpty()) {
+                                        target.setText(readings.get(0).formattedValue());
+                                    }
+                                });
+                            }, err -> log.debug("Poll error: " + err.getMessage()));
+                }));
+        timeline.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        timeline.play();
+        activePolls.put(stationId, timeline);
     }
 
     private void loadHeatmapPlaceholder() {

@@ -10,7 +10,9 @@ import java.util.List;
 
 public interface SensorService {
     /**
-     * Obtiene el histórico de mediciones de un parámetro específico en una estación.
+     * Obtiene el histórico de mediciones de un parámetro específico en una
+     * estación.
+     * 
      * @param stationId El ID de la estación (ej: C302)
      * @param parameter El parámetro a medir (ej: AMONIO)
      * @return El DTO con la respuesta estructurada
@@ -22,5 +24,10 @@ public interface SensorService {
     List<SensorReadingDTO> getRealtime(String stationId, String parameter);
 
     public SensorResponseDTO getExportData(String stationId, String parameter, LocalDateTime from, LocalDateTime to);
+
     SensorResponseDTO registerSensor(SensorCreationDTO request);
+
+    SensorResponseDTO updateSensor(String stationId, SensorCreationDTO request);
+
+    List<SensorResponseDTO> getAllByTwin(String twinId);
 }

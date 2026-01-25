@@ -11,10 +11,12 @@ import java.util.List;
 @With
 @JsonView(SensorViews.Public.class)
 public record SensorResponseDTO(
-        String stationId,
-        String name,
-        String signalType,
-        String unit,
-        List<SensorReadingDTO> values
-) {
+                String stationId,
+                String name,
+                String signalType,
+                String unit,
+                List<SensorReadingDTO> values,
+                // New fields for UI Editing
+                java.util.Map<String, Object> configuration,
+                String typeCode) {
 }

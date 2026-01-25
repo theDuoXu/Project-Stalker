@@ -19,6 +19,7 @@ import java.util.Optional;
 public class SensorRepositoryImpl implements SensorRepository {
 
     private final JpaSensorRepository jpaSensorRepository;
+    private final projectstalker.compute.repository.SensorReadingRepository readingRepository;
 
     // =========================================================================
     // IMPLEMENTACIÓN DE ESCRITURA (NUEVO)
@@ -45,23 +46,44 @@ public class SensorRepositoryImpl implements SensorRepository {
     }
 
     // =========================================================================
-    // STUBS DE LECTURA (Mantienen compatibilidad hasta que exista ReadingEntity)
+    // LECTURA REAL
     // =========================================================================
 
     @Override
     public List<SensorReadingDTO> findReadings(String stationId, String parameter) {
-        // TODO: Implementar consulta a tabla de lecturas (TimeSeries)
-        return List.of();
+        return readingRepository.findTop50BySensorIdAndParameterOrderByTimestampDesc(stationId, parameter)
+                .stream()
+                .map(this::mapToDto)
+                .toList();
     }
 
     @Override
     public List<SensorReadingDTO> findLatestReadings(String stationId) {
-        return List.of();
+        return readingRepository.findTop10BySensorIdOrderByTimestampDesc(stationId)
+                .stream()
+                .map(this::mapToDto)
+                .toList();
     }
 
     @Override
     public List<SensorReadingDTO> findLatestReadingsByType(String stationId, SensorType type) {
-        return List.of();
+        // Fallback to searching by parameter (Unit or Type Code)
+        // Usually parameter in DB is lowercase or user defined?
+        // Scraper saves: "value", "ph", "temperature"...
+        // SensorType.PH.getParameter() -> "PH" ? Check SensorType.
+        // Assuming scraping parameters "value" covers most single-value sensors.
+        return readingRepository.findTop50BySensorIdAndParameterOrderByTimestampDesc(stationId, "value")
+                .stream().map(this::mapToDto).toList();
+    }
+
+    private SensorReadingDTO mapToDto(projectstalker.compute.entity.SensorReadingEntity entity) {
+        return SensorReadingDTO.builder()
+                .stationId(entity.getSensorId())
+                .tag(entity.getParameter())
+                .timestamp(entity.getTimestamp().toString())
+                .value(entity.getValue())
+                .formattedValue(String.format("%.2f", entity.getValue()))
+                .build();
     }
 
     @Override

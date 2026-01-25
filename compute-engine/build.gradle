@@ -56,7 +56,7 @@ dependencies {
     implementation 'org.jdbi:jdbi3-postgres:3.45.2'
 
     // --- LOGGING IMPLEMENTATION (Backend) ---
-    implementation 'org.springframework.boot:spring-boot-starter-logging'
+    // implementation 'org.springframework.boot:spring-boot-starter-logging' // Implicit in starter-web
 
     // --- JMH (Benchmarks) ---
     jmhImplementation 'org.openjdk.jmh:jmh-core:1.37'

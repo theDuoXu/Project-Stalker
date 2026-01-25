@@ -4,7 +4,6 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
-import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.HBox;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +45,16 @@ public class AlertsTabController {
     public void initialize() {
         setupTable();
         loadAlerts();
+
+        // Auto-refresh every 30 seconds
+        reactor.core.publisher.Flux.interval(java.time.Duration.ofSeconds(30))
+                .flatMap(tick -> alertService.getActiveAlerts().collectList())
+                .subscribe(
+                        newList -> javafx.application.Platform.runLater(() -> {
+                            alertsList.setAll(newList);
+                            log.debug("Alertas actualizadas (Auto-Refresh)");
+                        }),
+                        err -> log.error("Error en auto-refresh de alertas", err));
     }
 
     private void setupTable() {
@@ -62,11 +71,17 @@ public class AlertsTabController {
         // Si fallan, usaré lookup.
 
         // Mapeo
-        colSeverity.setCellValueFactory(new PropertyValueFactory<>("severity"));
-        colTime.setCellValueFactory(new PropertyValueFactory<>("timestamp"));
-        colMessage.setCellValueFactory(new PropertyValueFactory<>("message"));
-        colSensor.setCellValueFactory(new PropertyValueFactory<>("stationName"));
-        colStatus.setCellValueFactory(new PropertyValueFactory<>("status"));
+        // Mapeo con Lambdas (Compatible con Records)
+        colSeverity.setCellValueFactory(
+                data -> new javafx.beans.property.SimpleObjectProperty<>(data.getValue().severity()));
+        colTime.setCellValueFactory(
+                data -> new javafx.beans.property.SimpleObjectProperty<>(data.getValue().timestamp()));
+        colMessage
+                .setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty(data.getValue().message()));
+        colSensor.setCellValueFactory(
+                data -> new javafx.beans.property.SimpleStringProperty(data.getValue().stationName()));
+        colStatus.setCellValueFactory(
+                data -> new javafx.beans.property.SimpleObjectProperty<>(data.getValue().status()));
 
         // 2. Renderizado Personalizado (Cell Factories)
 

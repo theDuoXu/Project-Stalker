@@ -15,6 +15,7 @@ import projectstalker.domain.dto.twin.TwinSummaryDTO;
 import projectstalker.domain.sensors.SensorType;
 import projectstalker.ui.service.SensorClientService;
 import projectstalker.ui.view.components.strategies.SensorUiStrategy;
+import projectstalker.ui.view.components.strategies.SensorStrategyCategory;
 
 import java.util.List;
 import java.util.Map;
@@ -30,7 +31,8 @@ public class SensorWizardController {
     private final SensorClientService sensorService;
 
     // --- INYECCIÓN DE ESTRATEGIAS ---
-    // Spring busca todas las clases @Component que implementan la interfaz y las mete en la lista
+    // Spring busca todas las clases @Component que implementan la interfaz y las
+    // mete en la lista
     private final List<SensorUiStrategy> availableStrategies;
 
     // --- State ---
@@ -53,6 +55,8 @@ public class SensorWizardController {
     @FXML
     private ToggleGroup strategyGroup;
     @FXML
+    private ToggleButton manualToggle; // Injected
+    @FXML
     private ToggleButton virtualToggle;
     @FXML
     private ToggleButton realToggle;
@@ -67,10 +71,68 @@ public class SensorWizardController {
     private Button saveButton;
 
     @FXML
+    private javafx.scene.chart.LineChart<Number, Number> previewChart;
+    @FXML
+    private javafx.scene.chart.NumberAxis xAxis;
+    @FXML
+    private javafx.scene.chart.NumberAxis yAxis;
+
+    @FXML
     public void initialize() {
         setupCommonCombos();
         setupStrategyLogic();
         setupLocationLogic();
+        startPreviewLoop();
+    }
+
+    private void startPreviewLoop() {
+        // Loop de refresco de preview (cada 500ms) para detectar cambios en los
+        // controles dinámicos
+        javafx.animation.Timeline timeline = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.millis(500), ev -> updatePreview()));
+        timeline.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        timeline.play();
+    }
+
+    private void updatePreview() {
+        if (strategySelector.getValue() == null)
+            return;
+        SensorUiStrategy strategy = strategySelector.getValue();
+
+        // Solo previsualizamos Estrategias Virtuales conocidas para no romper nada
+        if (strategy.getCategory() != SensorStrategyCategory.VIRTUAL) {
+            if (previewChart != null) // Avoid NPE if FXML failed inject
+                previewChart.getData().clear();
+            return;
+        }
+
+        if (previewChart == null)
+            return;
+
+        try {
+            Map<String, Object> config = strategy.extractConfiguration();
+
+            // Lógica Específica para SineWave (Hardcoded support for demo)
+            if (config.containsKey("amplitude") && config.containsKey("frequency")) {
+                double amp = Double.parseDouble(config.getOrDefault("amplitude", "0").toString());
+                double freq = Double.parseDouble(config.getOrDefault("frequency", "0").toString());
+                double offset = Double.parseDouble(config.getOrDefault("offset", "0").toString());
+
+                javafx.scene.chart.XYChart.Series<Number, Number> series = new javafx.scene.chart.XYChart.Series<>();
+                series.setName("Simulación");
+
+                // Generar 60 segundos
+                for (double t = 0; t <= 60; t += 0.5) {
+                    double val = offset + amp * Math.sin(freq * t);
+                    series.getData().add(new javafx.scene.chart.XYChart.Data<>(t, val));
+                }
+
+                previewChart.getData().clear();
+                previewChart.getData().add(series);
+            }
+        } catch (Exception e) {
+            // Ignore preview errors during typing
+        }
     }
 
     public void setTwinContext(TwinSummaryDTO twin) {
@@ -80,7 +142,8 @@ public class SensorWizardController {
         double dxMeters = twin.totalLengthKm() / twin.cellCount();
 
         if (lengthKm <= 0 || dxMeters <= 0)
-            throw new IllegalArgumentException("La longitud o la resolución espacial no pueden ser menor o igual a cero");
+            throw new IllegalArgumentException(
+                    "La longitud o la resolución espacial no pueden ser menor o igual a cero");
 
         this.spatialResolutionKm = dxMeters / 1000.0;
         locationSlider.setMax(lengthKm);
@@ -93,7 +156,8 @@ public class SensorWizardController {
 
     private void setupLocationLogic() {
         locationSlider.valueProperty().addListener((obs, old, val) -> {
-            if (spatialResolutionKm <= 0) return;
+            if (spatialResolutionKm <= 0)
+                return;
             int cellIndex = (int) (val.doubleValue() / spatialResolutionKm);
             locationLabel.setText(String.format("Km %.2f", val.doubleValue()));
             cellLabel.setText("Celda: " + cellIndex);
@@ -130,15 +194,31 @@ public class SensorWizardController {
         filterStrategies();
     }
 
+    // ...
+
     private void filterStrategies() {
-        boolean isVirtual = virtualToggle.isSelected();
+        if (strategyGroup.getSelectedToggle() == null)
+            return;
+
+        SensorStrategyCategory targetCategory;
+        if (manualToggle.isSelected())
+            targetCategory = SensorStrategyCategory.MANUAL;
+        else if (realToggle.isSelected())
+            targetCategory = SensorStrategyCategory.REAL;
+        else
+            targetCategory = SensorStrategyCategory.VIRTUAL;
+
         List<SensorUiStrategy> filtered = availableStrategies.stream()
-                .filter(s -> s.isVirtual() == isVirtual)
+                .filter(s -> s.getCategory() == targetCategory)
                 .collect(Collectors.toList());
 
         strategySelector.setItems(FXCollections.observableArrayList(filtered));
-        if (!filtered.isEmpty()) strategySelector.getSelectionModel().selectFirst();
+        if (!filtered.isEmpty())
+            strategySelector.getSelectionModel().selectFirst();
     }
+
+    // --- Edit Mode ---
+    private String editingSensorId = null;
 
     @FXML
     public void onSave() {
@@ -169,17 +249,79 @@ public class SensorWizardController {
             SensorCreationDTO dto = buildDto(currentStrategy);
 
             saveButton.setDisable(true);
-            sensorService.createSensor(dto)
-                    .subscribe(r -> Platform.runLater(() -> {
-                        if (onSuccessCallback != null) onSuccessCallback.accept(dto);
-                        closeWindow();
-                    }), e -> Platform.runLater(() -> {
-                        saveButton.setDisable(false);
-                        showAlert("Error Backend: " + e.getMessage());
-                    }));
+
+            if (editingSensorId == null) {
+                // CREATE
+                sensorService.createSensor(dto)
+                        .subscribe(r -> Platform.runLater(() -> {
+                            if (onSuccessCallback != null)
+                                onSuccessCallback.accept(dto);
+                            closeWindow();
+                        }), e -> Platform.runLater(() -> {
+                            saveButton.setDisable(false);
+                            showAlert("Error Backend: " + e.getMessage());
+                        }));
+            } else {
+                // UPDATE
+                sensorService.updateSensor(editingSensorId, dto)
+                        .subscribe(r -> Platform.runLater(() -> {
+                            if (onSuccessCallback != null)
+                                onSuccessCallback.accept(dto);
+                            closeWindow();
+                        }), e -> Platform.runLater(() -> {
+                            saveButton.setDisable(false);
+                            showAlert("Error Backend: " + e.getMessage());
+                        }));
+            }
 
         } catch (Exception e) {
             log.error("Error", e);
+        }
+    }
+
+    /**
+     * Pre-fills the wizard with existing sensor data for editing.
+     */
+    public void setSensorToEdit(projectstalker.domain.dto.sensor.SensorResponseDTO existing) {
+        this.editingSensorId = existing.stationId();
+        this.nameField.setText(existing.name());
+        this.saveButton.setText("Actualizar");
+
+        // 1. Set Type
+        // Attempt to fuzzy match type from code/unit if not strictly available,
+        // but now we have typeCode in DTO!
+        String tCode = existing.typeCode();
+        if (tCode != null) {
+            for (SensorType t : SensorType.getValidTypes()) {
+                if (t.getCode().equalsIgnoreCase(tCode)) {
+                    sensorTypeCombo.getSelectionModel().select(t);
+                    break;
+                }
+            }
+        }
+
+        // 2. Select Strategy
+        // signalType in DTO is now strategyType (e.g. VIRTUAL_PHYSICS_FLOW)
+        String strategyCode = existing.signalType();
+        if (strategyCode != null) {
+            for (SensorUiStrategy s : availableStrategies) { // Changed from 'strategies' to 'availableStrategies'
+                if (s.getStrategyCode().equalsIgnoreCase(strategyCode)) {
+                    // First, ensure the correct category is selected to make the strategy visible
+                    // This assumes strategyGroup and filterStrategies are working correctly
+                    if (s.getCategory() == SensorStrategyCategory.MANUAL) {
+                        manualToggle.setSelected(true);
+                    } else if (s.getCategory() == SensorStrategyCategory.REAL) {
+                        realToggle.setSelected(true);
+                    } else {
+                        virtualToggle.setSelected(true);
+                    }
+                    filterStrategies(); // Re-filter to ensure the strategy is in the combo box
+                    strategySelector.getSelectionModel().select(s);
+                    // 3. Populate Config
+                    s.populate(existing.configuration());
+                    break;
+                }
+            }
         }
     }
 
@@ -187,17 +329,22 @@ public class SensorWizardController {
         // Extraemos configuración de la estrategia
         Map<String, Object> config = strategy.extractConfiguration();
 
-        // Añadimos metadatos del contexto
+        // Añadimos metadatos del contexto (Legacy/Redundant but harmless to keep in map
+        // for now)
         config.put("twinId", twinContext.id());
         config.put("strategy", strategy.getStrategyCode());
+
+        // Mapping Category to StrategyType string expected by Backend
+        // "VIRTUAL" or "REAL" or "MANUAL" (New)
+        String strategyTypeStr = strategy.getCategory().name();
 
         return new SensorCreationDTO(
                 nameField.getText(),
                 sensorTypeCombo.getValue().getCode(),
                 locationSlider.getValue(),
-                strategy.isVirtual() ? "VIRTUAL" : "REAL",
-                config
-        );
+                strategyTypeStr,
+                twinContext.id(), // New explicit field
+                config);
     }
 
     private void setupCommonCombos() {

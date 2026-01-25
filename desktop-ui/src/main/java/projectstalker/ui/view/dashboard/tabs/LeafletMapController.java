@@ -7,6 +7,8 @@ import javafx.scene.web.WebView;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -17,6 +19,9 @@ import java.util.stream.Collectors;
 @Slf4j
 @Component
 public class LeafletMapController {
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     @FXML
     private WebView mapWebView;
@@ -41,12 +46,45 @@ public class LeafletMapController {
         engine.getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
             if (newState == Worker.State.SUCCEEDED) {
                 log.info("Mapa cargado correctamente en WebView.");
+
+                // Inject Java Bridge (Interaction)
+                netscape.javascript.JSObject window = (netscape.javascript.JSObject) engine.executeScript("window");
+                window.setMember("javaConnector", new JavaBridge());
+
                 mapReady = true;
                 loadData();
             } else if (newState == Worker.State.FAILED) {
                 log.error("Fallo al cargar el mapa HTML.");
             }
         });
+
+        // Resize Listener: Force map update when window/webview resizing
+        mapWebView.widthProperty().addListener((obs, oldVal, newVal) -> {
+            if (mapReady) {
+                engine.executeScript("if(window.map) { window.map.invalidateSize(); }");
+            }
+        });
+        mapWebView.heightProperty().addListener((obs, oldVal, newVal) -> {
+            if (mapReady) {
+                engine.executeScript("if(window.map) { window.map.invalidateSize(); }");
+            }
+        });
+    }
+
+    /**
+     * Bridge class for JS -> Java communication.
+     * Methods must be public.
+     */
+    public class JavaBridge {
+        public void onStationSelected(String stationId) {
+            log.info("Usuario seleccionó estación en mapa: {}", stationId);
+            if (eventPublisher != null) {
+                eventPublisher.publishEvent(
+                        new projectstalker.ui.event.StationSelectedEvent(LeafletMapController.this, stationId));
+            } else {
+                log.warn("EventPublisher is null, cannot publish selection.");
+            }
+        }
     }
 
     /**
@@ -59,8 +97,6 @@ public class LeafletMapController {
         // 1. Cargar Río Tajo (CSV)
         try {
             String wkt = loadResourceFile("maps/linestring_río_tajo.csv");
-            // El CSV tiene una cabecera "geometry", la quitamos si existe o cogemos la
-            // segunda linea
             String[] lines = wkt.split("\n");
             for (String line : lines) {
                 if (line.trim().startsWith("\"MULTILINESTRING") || line.trim().startsWith("MULTILINESTRING")) {
@@ -88,12 +124,10 @@ public class LeafletMapController {
 
     private void injectStations(String json) {
         log.debug("Inyectando Estaciones...");
-        // Escapamos comillas simples para JS
-        String safeJson = json.replace("'", "\\'");
-        // Nota: executeScript puede fallar si el string es muy largo en algunas
-        // versiones de JavaFX.
-        // Si falla, habría que asignarlo a una variable JS en trozos. Pero para 11KB
-        // debería ir bien.
+        String safeJson = json.replace("'", "\\'")
+                .replace("\n", "")
+                .replace("\r", "");
+
         String script = "window.addStations('" + safeJson + "');";
         mapWebView.getEngine().executeScript(script);
     }

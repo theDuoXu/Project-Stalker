@@ -76,10 +76,9 @@ public class TwinDashboardController {
             qualityViewController.setTwinContext(twin);
         }
 
-        // Si el de Hidro necesitara el ID en el futuro:
-        // if (hydroViewController != null) {
-        // hydroViewController.setTwinContext(twin.id());
-        // }
+        if (hydroViewController != null) {
+            hydroViewController.setTwinContext(twin);
+        }
 
         // 3. Cargar Mapa y Seguridad
         loadMiniMap(twin);
@@ -142,10 +141,35 @@ public class TwinDashboardController {
         log.info("[STUB] Iniciando secuencia de reconexión manual con HPC Engine...");
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.context.ApplicationContext springContext;
+
     @FXML
     public void expandMap() {
-        // TODO: Abrir Modal con el mapa detallado e interactivo
-        log.info("[STUB] Expandiendo mapa a vista completa...");
+        log.info("Expandiendo mapa a vista completa...");
+        try {
+            javafx.fxml.FXMLLoader loader = new javafx.fxml.FXMLLoader(
+                    getClass().getResource("/fxml/components/leaflet-map.fxml"));
+
+            // Fix: Use Spring Context to create controller so @Autowired works in
+            // LeafletMapController
+            loader.setControllerFactory(springContext::getBean);
+
+            javafx.scene.Parent root = loader.load();
+
+            javafx.stage.Stage stage = new javafx.stage.Stage();
+            stage.setTitle("Vista Geoespacial Completa - " + (currentTwin != null ? currentTwin.name() : "Río"));
+
+            // User requested larger window
+            javafx.scene.Scene scene = new javafx.scene.Scene(root, 1000, 800);
+            stage.setScene(scene);
+            stage.show();
+
+        } catch (java.io.IOException e) {
+            log.error("Error al abrir el mapa expandido", e);
+            new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR,
+                    "No se pudo abrir el mapa: " + e.getMessage()).show();
+        }
     }
 
     @FXML
@@ -162,10 +186,19 @@ public class TwinDashboardController {
             hpcStatusLabel.setText("HPC: CONECTADO");
             hpcStatusLabel.getStyleClass().removeAll("status-offline");
             hpcStatusLabel.getStyleClass().add("status-online");
-        } else {
-            hpcStatusLabel.setText("HPC: Desconectado");
-            hpcStatusLabel.getStyleClass().removeAll("status-online");
             hpcStatusLabel.getStyleClass().add("status-offline");
         }
+    }
+
+    @org.springframework.context.event.EventListener
+    public void onStationSelected(projectstalker.ui.event.StationSelectedEvent event) {
+        Platform.runLater(() -> {
+            if (mainTabPane != null && hydroTab != null) {
+                // Si la pestaña actual no es Hydro, cambiar
+                if (mainTabPane.getSelectionModel().getSelectedItem() != hydroTab) {
+                    mainTabPane.getSelectionModel().select(hydroTab);
+                }
+            }
+        });
     }
 }

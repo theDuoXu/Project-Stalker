@@ -1,21 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stalker River Map</title>
-    
+
     <!-- LEAFLET CDN -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
-          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
-            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; width: 100%; background: #222; }
-        #map { height: 100%; width: 100%; }
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            background: #222;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
         .station-label {
-            background: rgba(0,0,0,0.7);
+            background: rgba(0, 0, 0, 0.7);
             border: 1px solid #00ffcc;
             color: #00ffcc;
             border-radius: 4px;
@@ -26,152 +39,169 @@
         }
     </style>
 </head>
+
 <body>
 
-<div id="map"></div>
+    <div id="map"></div>
 
-<script>
-    // --- VARIABLES GLOBALES ---
-    var map;
-    var riverLayerGroup = L.layerGroup();
-    var stationLayerGroup = L.layerGroup();
+    <script>
+        // --- VARIABLES GLOBALES ---
+        var map;
+        var riverLayerGroup = L.layerGroup();
+        var stationLayerGroup = L.layerGroup();
 
-    // --- INICIALIZACIÓN ---
-    function initMap() {
-        // Centro aproximado (Tajo medio)
-        map = L.map('map', {
-            center: [40.0, -4.0], 
-            zoom: 9,
-            zoomControl: false,
-            attributionControl: false
-        });
-
-        // Capa Oscura (Dark Matter - CartoDB) para estilo "Stalker"
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            maxZoom: 20
-        }).addTo(map);
-
-        riverLayerGroup.addTo(map);
-        stationLayerGroup.addTo(map);
-    }
-
-    // --- UTILIDADES GEO (UTM 30N -> LatLon) ---
-    // Implementación simplificada a mano para evitar dependencias pesadas
-    // Basado en formulas estándar de UTM a WGS84
-    function utmToLatLon(easting, northing, zone) {
-        var k0 = 0.9996;
-        var a = 6378137.0; // elipsoide WGS84
-        var eccSquared = 0.00669438;
-        var eccPrimeSquared = (eccSquared) / (1 - eccSquared);
-        var e1 = (1 - Math.sqrt(1 - eccSquared)) / (1 + Math.sqrt(1 - eccSquared));
-        
-        var x = easting - 500000.0;
-        var y = northing;
-        
-        var M = y / k0;
-        var mu = M / (a * (1 - eccSquared / 4 - 3 * eccSquared * eccSquared / 64 - 5 * eccSquared * eccSquared * eccSquared / 256));
-        
-        var phi1Rad = mu + (3 * e1 / 2 - 27 * e1 * e1 * e1 / 32) * Math.sin(2 * mu)
-            + (21 * e1 * e1 / 16 - 55 * e1 * e1 * e1 * e1 / 32) * Math.sin(4 * mu)
-            + (151 * e1 * e1 * e1 / 96) * Math.sin(6 * mu);
-        
-        var N1 = a / Math.sqrt(1 - eccSquared * Math.sin(phi1Rad) * Math.sin(phi1Rad));
-        var T1 = Math.tan(phi1Rad) * Math.tan(phi1Rad);
-        var C1 = eccPrimeSquared * Math.cos(phi1Rad) * Math.cos(phi1Rad);
-        var R1 = a * (1 - eccSquared) / Math.pow(1 - eccSquared * Math.sin(phi1Rad) * Math.sin(phi1Rad), 1.5);
-        var D = x / (N1 * k0);
-        
-        var lat = phi1Rad - (N1 * Math.tan(phi1Rad) / R1) * (D * D / 2 - (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * eccPrimeSquared) * D * D * D * D / 24
-            + (61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * eccPrimeSquared - 3 * C1 * C1) * D * D * D * D * D * D / 720);
-        
-        var lon = (D - (1 + 2 * T1 + C1) * D * D * D / 6 + (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * eccPrimeSquared + 24 * T1 * T1)
-            * D * D * D * D * D / 120) / Math.cos(phi1Rad);
-        
-        var latDeg = lat * (180 / Math.PI);
-        var lonDeg = lon * (180 / Math.PI) + ((zone * 6) - 183); // Offset de zona
-        
-        return [latDeg, lonDeg];
-    }
-
-    // --- API PÚBLICA (Llamada desde Java) ---
-
-    // 1. Añadir Río (WKT MultiLineString)
-    // wkt format: "MULTILINESTRING ((X Y, X Y), (X Y...))"
-    window.addRiverLineString = function(wkt, colorHex) {
-        if (!wkt || !wkt.startsWith("MULTILINESTRING")) return;
-
-        // Limpieza bruta del WKT
-        var content = wkt.replace("MULTILINESTRING", "").trim();
-        // Quitar parentesis exteriores ((...)) -> ...
-        // Ojo, MULTILINESTRING tiene doble parentesis: ((...)), ((...))
-        
-        // Regex para capturar grupos de coordenadas entre parentesis
-        var groups = content.match(/\(\((.*?)\)\)/g); 
-        
-        if (!groups) return;
-
-        groups.forEach(function(groupStr) {
-            // Limpiar parentesis
-            var cleanCoords = groupStr.replace(/\(/g, "").replace(/\)/g, "");
-            var pairs = cleanCoords.split(",");
-            var latLngs = [];
-
-            pairs.forEach(function(pair) {
-                var coords = pair.trim().split(/\s+/); // Separado por espacio
-                if (coords.length >= 2) {
-                    var utmX = parseFloat(coords[0]);
-                    var utmY = parseFloat(coords[1]);
-                    // Asumimos Huso 30 
-                    var ll = utmToLatLon(utmX, utmY, 30);
-                    latLngs.push(ll);
-                }
+        // --- INICIALIZACIÓN ---
+        function initMap() {
+            // Centro aproximado (Tajo medio)
+            map = L.map('map', {
+                center: [40.4168, -3.7038], // Madrid
+                zoom: 6, // Zoom out to see wider context initially
+                zoomControl: false,
+                attributionControl: false
             });
 
-            // Dibujar Polilinea
-            L.polyline(latLngs, {
-                color: colorHex || "#00aaff",
-                weight: 3,
-                opacity: 0.8,
-                smoothFactor: 1
-            }).addTo(riverLayerGroup);
-        });
-        
-        // Ajustar vista a los ríos
-        var bounds = L.latLngBounds();
-        riverLayerGroup.eachLayer(function(layer){
-            if(layer.getBounds) bounds.extend(layer.getBounds());
-        });
-        if(bounds.isValid()) map.fitBounds(bounds);
-    };
+            // Fix Grey Artifacts: Force resize re-calculation after render
+            setTimeout(function () {
+                map.invalidateSize();
+            }, 200);
 
-    // 2. Añadir Estaciones (JSON List)
-    window.addStations = function(jsonString) {
-        var stations = JSON.parse(jsonString);
-        
-        stations.forEach(function(s) {
-            var utmX = parseFloat(s.utm_x);
-            var utmY = parseFloat(s.utm_y);
-            var zone = s.huso || 30;
-            
-            var ll = utmToLatLon(utmX, utmY, zone);
-            
-            var marker = L.circleMarker(ll, {
-                radius: 6,
-                fillColor: "#00ffcc",
-                color: "#fff",
-                weight: 1,
-                opacity: 1,
-                fillOpacity: 0.8
+            // Capa Oscura (Dark Matter - CartoDB) para estilo "Stalker"
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 20
+            }).addTo(map);
+
+            riverLayerGroup.addTo(map);
+            stationLayerGroup.addTo(map);
+        }
+
+        // --- UTILIDADES GEO (UTM 30N -> LatLon) ---
+        // Implementación simplificada a mano para evitar dependencias pesadas
+        // Basado en formulas estándar de UTM a WGS84
+        function utmToLatLon(easting, northing, zone) {
+            var k0 = 0.9996;
+            var a = 6378137.0; // elipsoide WGS84
+            var eccSquared = 0.00669438;
+            var eccPrimeSquared = (eccSquared) / (1 - eccSquared);
+            var e1 = (1 - Math.sqrt(1 - eccSquared)) / (1 + Math.sqrt(1 - eccSquared));
+
+            var x = easting - 500000.0;
+            var y = northing;
+
+            var M = y / k0;
+            var mu = M / (a * (1 - eccSquared / 4 - 3 * eccSquared * eccSquared / 64 - 5 * eccSquared * eccSquared * eccSquared / 256));
+
+            var phi1Rad = mu + (3 * e1 / 2 - 27 * e1 * e1 * e1 / 32) * Math.sin(2 * mu)
+                + (21 * e1 * e1 / 16 - 55 * e1 * e1 * e1 * e1 / 32) * Math.sin(4 * mu)
+                + (151 * e1 * e1 * e1 / 96) * Math.sin(6 * mu);
+
+            var N1 = a / Math.sqrt(1 - eccSquared * Math.sin(phi1Rad) * Math.sin(phi1Rad));
+            var T1 = Math.tan(phi1Rad) * Math.tan(phi1Rad);
+            var C1 = eccPrimeSquared * Math.cos(phi1Rad) * Math.cos(phi1Rad);
+            var R1 = a * (1 - eccSquared) / Math.pow(1 - eccSquared * Math.sin(phi1Rad) * Math.sin(phi1Rad), 1.5);
+            var D = x / (N1 * k0);
+
+            var lat = phi1Rad - (N1 * Math.tan(phi1Rad) / R1) * (D * D / 2 - (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * eccPrimeSquared) * D * D * D * D / 24
+                + (61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * eccPrimeSquared - 3 * C1 * C1) * D * D * D * D * D * D / 720);
+
+            var lon = (D - (1 + 2 * T1 + C1) * D * D * D / 6 + (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * eccPrimeSquared + 24 * T1 * T1)
+                * D * D * D * D * D / 120) / Math.cos(phi1Rad);
+
+            var latDeg = lat * (180 / Math.PI);
+            var lonDeg = lon * (180 / Math.PI) + ((zone * 6) - 183); // Offset de zona
+
+            return [latDeg, lonDeg];
+        }
+
+        // --- API PÚBLICA (Llamada desde Java) ---
+
+        // 1. Añadir Río (WKT MultiLineString)
+        // wkt format: "MULTILINESTRING ((X Y, X Y), (X Y...))"
+        window.addRiverLineString = function (wkt, colorHex) {
+            if (!wkt || !wkt.startsWith("MULTILINESTRING")) return;
+
+            // Limpieza bruta del WKT
+            var content = wkt.replace("MULTILINESTRING", "").trim();
+            // Quitar parentesis exteriores ((...)) -> ...
+            // Ojo, MULTILINESTRING tiene doble parentesis: ((...)), ((...))
+
+            // Regex para capturar grupos de coordenadas entre parentesis
+            var groups = content.match(/\(\((.*?)\)\)/g);
+
+            if (!groups) return;
+
+            groups.forEach(function (groupStr) {
+                // Limpiar parentesis
+                var cleanCoords = groupStr.replace(/\(/g, "").replace(/\)/g, "");
+                var pairs = cleanCoords.split(",");
+                var latLngs = [];
+
+                pairs.forEach(function (pair) {
+                    var coords = pair.trim().split(/\s+/); // Separado por espacio
+                    if (coords.length >= 2) {
+                        var utmX = parseFloat(coords[0]);
+                        var utmY = parseFloat(coords[1]);
+                        // Asumimos Huso 30 
+                        var ll = utmToLatLon(utmX, utmY, 30);
+                        latLngs.push(ll);
+                    }
+                });
+
+                // Dibujar Polilinea
+                L.polyline(latLngs, {
+                    color: colorHex || "#00aaff",
+                    weight: 3,
+                    opacity: 0.8,
+                    smoothFactor: 1
+                }).addTo(riverLayerGroup);
             });
 
-            marker.bindPopup("<b>" + s.nombre + "</b><br>" + s.subcuenca + "<br>" + s.codigo);
-            marker.addTo(stationLayerGroup);
-        });
-    };
+            // Ajustar vista a los ríos
+            var bounds = L.latLngBounds();
+            riverLayerGroup.eachLayer(function (layer) {
+                if (layer.getBounds) bounds.extend(layer.getBounds());
+            });
+            if (bounds.isValid()) map.fitBounds(bounds);
+        };
 
-    // Arrancar
-    initMap();
+        // 2. Añadir Estaciones (JSON List)
+        window.addStations = function (jsonString) {
+            var stations = JSON.parse(jsonString);
 
-</script>
+            stations.forEach(function (s) {
+                var utmX = parseFloat(s.utm_x);
+                var utmY = parseFloat(s.utm_y);
+                var zone = s.huso || 30;
+
+                var ll = utmToLatLon(utmX, utmY, zone);
+
+                var marker = L.circleMarker(ll, {
+                    radius: 6,
+                    fillColor: "#00ffcc",
+                    color: "#fff",
+                    weight: 1,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                });
+
+                marker.bindPopup("<b>" + s.nombre + "</b><br>" + s.subcuenca + "<br>" + s.codigo);
+
+                // Interaction: Notify Java when clicked
+                marker.on('click', function (e) {
+                    if (window.javaConnector) {
+                        window.javaConnector.onStationSelected(s.codigo);
+                    } else {
+                        console.log("Java Connector not available. Selected: " + s.codigo);
+                    }
+                });
+
+                marker.addTo(stationLayerGroup);
+            });
+        };
+
+        // Arrancar
+        initMap();
+
+    </script>
 </body>
+
 </html>

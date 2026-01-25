@@ -18,81 +18,82 @@ import projectstalker.config.ApiRoutes;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final KeycloakJwtConverter keycloakJwtConverter;
+        private final KeycloakJwtConverter keycloakJwtConverter;
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        @Bean
+        public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+                http
+                                .csrf(AbstractHttpConfigurer::disable)
+                                .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                .authorizeHttpRequests(auth -> auth
-                        // 1. PÚBLICO
-                        .requestMatchers(
-                                ApiRoutes.API_DOCS + "/**",
-                                ApiRoutes.SWAGGER_UI + "/**",
-                                ApiRoutes.PUBLIC + "/**"
-                        ).permitAll()
+                                .authorizeHttpRequests(auth -> auth
+                                                // 1. PÚBLICO
+                                                .requestMatchers(
+                                                                ApiRoutes.API_DOCS + "/**",
+                                                                ApiRoutes.SWAGGER_UI + "/**",
+                                                                ApiRoutes.PUBLIC + "/**",
+                                                                "/api/iot/**" // Permite Mock IoT Devices
+                                                ).permitAll()
 
-                        // 2. SENSORES (Concatenamos sub-rutas específicas)
-                        .requestMatchers(HttpMethod.GET,
-                                ApiRoutes.SENSORS + "/*/realtime",
-                                ApiRoutes.SENSORS + "/*/status"
-                        ).permitAll()
-                        .requestMatchers(HttpMethod.GET,
-                                ApiRoutes.SENSORS + "/*/history",
-                                ApiRoutes.SENSORS + "/export/**"
-                        ).hasAnyRole(
-                                UserRole.GUEST.name(),
-                                UserRole.TECHNICIAN.name(),
-                                UserRole.ANALYST.name(),
-                                UserRole.OFFICER.name(),
-                                UserRole.ADMIN.name()
-                        )
-                        // Creación de sensores nuevos
-                        .requestMatchers(HttpMethod.POST,
-                                ApiRoutes.SENSORS + "/**"
-                        ).hasAnyRole(UserRole.ANALYST.name(), UserRole.ADMIN.name())
+                                                // 2. SENSORES (Concatenamos sub-rutas específicas)
+                                                .requestMatchers(HttpMethod.GET,
+                                                                ApiRoutes.SENSORS + "/*/realtime",
+                                                                ApiRoutes.SENSORS + "/*/status")
+                                                .permitAll()
+                                                .requestMatchers(HttpMethod.GET,
+                                                                ApiRoutes.SENSORS + "/*/history",
+                                                                ApiRoutes.SENSORS + "/export/**")
+                                                .hasAnyRole(
+                                                                UserRole.GUEST.name(),
+                                                                UserRole.TECHNICIAN.name(),
+                                                                UserRole.ANALYST.name(),
+                                                                UserRole.OFFICER.name(),
+                                                                UserRole.ADMIN.name())
+                                                // Creación de sensores nuevos
+                                                .requestMatchers(HttpMethod.POST,
+                                                                ApiRoutes.SENSORS + "/**")
+                                                .hasAnyRole(UserRole.ANALYST.name(), UserRole.ADMIN.name())
 
-                        // 3. ADMIN GLOBAL
-                        .requestMatchers(ApiRoutes.ADMIN + "/**").hasRole(UserRole.ADMIN.name())
+                                                // 3. ADMIN GLOBAL
+                                                .requestMatchers(ApiRoutes.ADMIN + "/**").hasRole(UserRole.ADMIN.name())
 
-                        // 4. SIMULACIONES & DIGITAL TWINS
-                        .requestMatchers(HttpMethod.POST,
-                                ApiRoutes.TWINS + "/**",
-                                ApiRoutes.SIMULATIONS + "/**"
-                        ).hasAnyRole(UserRole.ANALYST.name(), UserRole.ADMIN.name())
-                        .requestMatchers(HttpMethod.PUT,
-                                ApiRoutes.TWINS + "/**"
-                        ).hasAnyRole(UserRole.ANALYST.name(), UserRole.ADMIN.name())
-                        .requestMatchers(HttpMethod.DELETE,
-                                ApiRoutes.TWINS + "/**"
-                        ).hasRole(UserRole.ADMIN.name())
-                        .requestMatchers(HttpMethod.GET,
-                                ApiRoutes.TWINS + "/**",
-                                ApiRoutes.SIMULATIONS + "/**"
-                        ).hasAnyRole(UserRole.TECHNICIAN.name(), UserRole.ANALYST.name(), UserRole.ADMIN.name())
+                                                // 4. SIMULACIONES & DIGITAL TWINS
+                                                .requestMatchers(HttpMethod.POST,
+                                                                ApiRoutes.TWINS + "/**",
+                                                                ApiRoutes.SIMULATIONS + "/**")
+                                                .hasAnyRole(UserRole.ANALYST.name(), UserRole.ADMIN.name())
+                                                .requestMatchers(HttpMethod.PUT,
+                                                                ApiRoutes.TWINS + "/**")
+                                                .hasAnyRole(UserRole.ANALYST.name(), UserRole.ADMIN.name())
+                                                .requestMatchers(HttpMethod.DELETE,
+                                                                ApiRoutes.TWINS + "/**")
+                                                .hasRole(UserRole.ADMIN.name())
+                                                .requestMatchers(HttpMethod.GET,
+                                                                ApiRoutes.TWINS + "/**",
+                                                                ApiRoutes.SIMULATIONS + "/**")
+                                                .hasAnyRole(UserRole.TECHNICIAN.name(), UserRole.ANALYST.name(),
+                                                                UserRole.ADMIN.name())
 
-                        // 5. OPERACIONES (Alertas e Informes)
-                        .requestMatchers(HttpMethod.POST,
-                                ApiRoutes.ALERTS + "/manual"
-                        ).hasAnyRole(UserRole.TECHNICIAN.name(), UserRole.ANALYST.name(), UserRole.ADMIN.name())
-                        .requestMatchers(HttpMethod.PUT,
-                                ApiRoutes.ALERTS + "/**"
-                        ).hasAnyRole(UserRole.OFFICER.name(), UserRole.ADMIN.name())
-                        .requestMatchers(
-                                ApiRoutes.REPORTS + "/**"
-                        ).hasAnyRole(UserRole.OFFICER.name(), UserRole.ANALYST.name(), UserRole.ADMIN.name())
+                                                // 5. OPERACIONES (Alertas e Informes)
+                                                .requestMatchers(HttpMethod.POST,
+                                                                ApiRoutes.ALERTS + "/manual")
+                                                .hasAnyRole(UserRole.TECHNICIAN.name(), UserRole.ANALYST.name(),
+                                                                UserRole.ADMIN.name())
+                                                .requestMatchers(HttpMethod.PUT,
+                                                                ApiRoutes.ALERTS + "/**")
+                                                .hasAnyRole(UserRole.OFFICER.name(), UserRole.ADMIN.name())
+                                                .requestMatchers(
+                                                                ApiRoutes.REPORTS + "/**")
+                                                .hasAnyRole(UserRole.OFFICER.name(), UserRole.ANALYST.name(),
+                                                                UserRole.ADMIN.name())
 
-                        // 6. DEFAULT
-                        .anyRequest().authenticated()
-                )
+                                                // 6. DEFAULT
+                                                .anyRequest().authenticated())
 
-                // Configuración OAuth2
-                .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakJwtConverter))
-                );
+                                // Configuración OAuth2
+                                .oauth2ResourceServer(oauth2 -> oauth2
+                                                .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakJwtConverter)));
 
-        return http.build();
-    }
+                return http.build();
+        }
 }

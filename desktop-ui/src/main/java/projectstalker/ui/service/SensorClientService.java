@@ -34,8 +34,6 @@ public class SensorClientService {
                 log.info("Enviando petición de creación de Sensor: {} (Tipo: {})", request.name(),
                                 request.strategyType());
 
-                // Asumimos que el POST va a la raíz de /api/sensors
-                // Si tu backend usa otra ruta (ej: /api/sensors/create), ajústalo aquí.
                 return apiClient.post()
                                 .uri(ApiRoutes.SENSORS)
                                 .bodyValue(request)
@@ -44,6 +42,29 @@ public class SensorClientService {
                                 .doOnSuccess(dto -> log.info("Sensor creado exitosamente. ID/Station: {}",
                                                 dto.stationId()))
                                 .doOnError(e -> log.error("Error creando Sensor: {}", e.getMessage()));
+        }
+
+        public Mono<SensorResponseDTO> updateSensor(String stationId, SensorCreationDTO request) {
+                log.info("Enviando petición de actualización de Sensor: {}", stationId);
+                return apiClient.put()
+                                .uri(ApiRoutes.SENSORS + "/{id}", stationId)
+                                .bodyValue(request)
+                                .retrieve()
+                                .bodyToMono(SensorResponseDTO.class)
+                                .doOnSuccess(dto -> log.info("Sensor actualizado exitosamente."))
+                                .doOnError(e -> log.error("Error actualizando Sensor: {}", e.getMessage()));
+        }
+
+        public Flux<SensorResponseDTO> getSensorsByTwin(String twinId) {
+                return apiClient.get()
+                                .uri(uriBuilder -> uriBuilder
+                                                .path(ApiRoutes.SENSORS)
+                                                .queryParam("twinId", twinId)
+                                                .build())
+                                .retrieve()
+                                .bodyToFlux(SensorResponseDTO.class)
+                                .doOnError(e -> log.error("Error fetching sensors for twin {}: {}", twinId,
+                                                e.getMessage()));
         }
 
         // =========================================================================
@@ -138,21 +159,49 @@ public class SensorClientService {
                                 if (root.isArray()) {
                                         for (com.fasterxml.jackson.databind.JsonNode node : root) {
                                                 // Mapeamos lo que tenemos al DTO estándar
-                                                // SensorResponseDTO(id, name, description, strategyType, stationId,
-                                                // lastReading, status)
                                                 String code = node.path("codigo").asText();
                                                 String name = node.path("nombre").asText();
-                                                String river = node.path("subcuenca").asText();
+                                                // String river = node.path("subcuenca").asText();
 
-                                                // Construimos un DTO "fake" pero útil para el selector
-                                                // Construimos un DTO "fake" pero útil para el selector
+                                                // --- MOCK FLOW PROFILE GENERATION ---
+                                                // Use station code hashCode as seed for stability
+                                                int seed = code.hashCode();
+                                                // Random base flow between 5 and 50 m3/s
+                                                double baseFlow = 5.0 + (Math.abs(seed) % 45);
+                                                // Random amplitude
+                                                double amplitude = baseFlow * 0.2;
+
+                                                projectstalker.physics.model.RandomFlowProfileGenerator generator = new projectstalker.physics.model.RandomFlowProfileGenerator(
+                                                                seed, baseFlow, amplitude, 0.01f);
+
+                                                // Generar últimas 24h (96 puntos de 15 min)
+                                                java.util.List<SensorReadingDTO> readings = new java.util.ArrayList<>();
+                                                LocalDateTime now = LocalDateTime.now();
+                                                LocalDateTime startTime = now.minusHours(24);
+
+                                                // Generate profile for 24h (86400 seconds) with 900s step
+                                                float[] profile = generator.generateProfile(86400, 900);
+
+                                                for (int i = 0; i < profile.length; i++) {
+                                                        LocalDateTime t = startTime.plusMinutes(i * 15L);
+                                                        double val = profile[i];
+                                                        readings.add(new SensorReadingDTO(
+                                                                        "FLOW",
+                                                                        t.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                                                                        val,
+                                                                        String.format("%.2f", val),
+                                                                        code));
+                                                }
+
+                                                // Construimos un DTO "fake" con datos poblados
                                                 SensorResponseDTO dto = new SensorResponseDTO(
                                                                 code, // stationId
                                                                 name, // name
                                                                 "REAL", // signalType (usamos como estrategia/tipo)
                                                                 "m³/s", // unit
-                                                                java.util.List.of() // values (vacío)
-                                                );
+                                                                readings, // values
+                                                                java.util.Collections.emptyMap(),
+                                                                "FLOW");
                                                 sink.next(dto);
                                         }
                                 }

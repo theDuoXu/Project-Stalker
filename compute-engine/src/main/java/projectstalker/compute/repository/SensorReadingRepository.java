@@ -10,4 +10,8 @@ import java.util.List;
 @Repository
 public interface SensorReadingRepository extends JpaRepository<SensorReadingEntity, String> {
     List<SensorReadingEntity> findBySensorIdAndTimestampAfter(String sensorId, LocalDateTime timestamp);
+
+    List<SensorReadingEntity> findTop50BySensorIdAndParameterOrderByTimestampDesc(String sensorId, String parameter);
+
+    List<SensorReadingEntity> findTop10BySensorIdOrderByTimestampDesc(String sensorId);
 }

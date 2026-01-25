@@ -21,7 +21,8 @@ public class VirtualSineUiStrategy implements SensorUiStrategy {
 
     public VirtualSineUiStrategy() {
         GridPane grid = new GridPane();
-        grid.setHgap(10); grid.setVgap(10);
+        grid.setHgap(10);
+        grid.setVgap(10);
 
         // Construcción de la UI programática
         grid.addRow(0, new Label("Offset (Valor Medio):"), offsetField);
@@ -34,16 +35,24 @@ public class VirtualSineUiStrategy implements SensorUiStrategy {
     }
 
     @Override
-    public String getDisplayName() { return "Virtual: Ondulatoria (Seno)"; }
+    public String getDisplayName() {
+        return "Virtual: Ondulatoria (Seno)";
+    }
 
     @Override
-    public String getStrategyCode() { return "VIRTUAL_SINE"; }
+    public String getStrategyCode() {
+        return "VIRTUAL_SINE";
+    }
 
     @Override
-    public boolean isVirtual() { return true; }
+    public SensorStrategyCategory getCategory() {
+        return SensorStrategyCategory.VIRTUAL;
+    }
 
     @Override
-    public Node render() { return container; }
+    public Node render() {
+        return container;
+    }
 
     @Override
     public boolean validate() {
@@ -61,10 +70,29 @@ public class VirtualSineUiStrategy implements SensorUiStrategy {
 
     @Override
     public void reset() {
-        offsetField.setText("7.0"); amplitudeField.setText("1.5"); freqField.setText("0.1");
+        offsetField.setText("7.0");
+        amplitudeField.setText("1.5");
+        freqField.setText("0.1");
+    }
+
+    @Override
+    public void populate(Map<String, Object> config) {
+        if (config == null)
+            return;
+        if (config.containsKey("amplitude"))
+            amplitudeField.setText(String.valueOf(((Number) config.get("amplitude")).doubleValue()));
+        if (config.containsKey("frequency"))
+            freqField.setText(String.valueOf(((Number) config.get("frequency")).doubleValue()));
+        if (config.containsKey("offset"))
+            offsetField.setText(String.valueOf(((Number) config.get("offset")).doubleValue()));
     }
 
     private boolean isNum(TextField tf) {
-        try { Double.parseDouble(tf.getText()); return true; } catch (Exception e) { return false; }
+        try {
+            Double.parseDouble(tf.getText());
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

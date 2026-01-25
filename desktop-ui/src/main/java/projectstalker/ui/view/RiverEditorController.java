@@ -64,69 +64,110 @@ public class RiverEditorController {
     private final RiverEditorViewModel viewModel;
 
     // --- UI: Controles Principales ---
-    @FXML public TextField nameField;
-    @FXML public TextArea descField;
-    @FXML public ComboBox<String> presetCombo;
+    @FXML
+    public TextField nameField;
+    @FXML
+    public TextArea descField;
+    @FXML
+    public ComboBox<String> presetCombo;
 
     // --- UI: Geometría ---
-    @FXML public Spinner<Double> totalLengthSpinner;
-    @FXML public Spinner<Double> baseWidthSpinner;
-    @FXML public Spinner<Double> varWidthSpinner;
-    @FXML public Spinner<Double> slopeSpinner;
-    @FXML public Spinner<Double> varSlopeSpinner;
+    @FXML
+    public Spinner<Double> totalLengthSpinner;
+    @FXML
+    public Spinner<Double> baseWidthSpinner;
+    @FXML
+    public Spinner<Double> varWidthSpinner;
+    @FXML
+    public Spinner<Double> slopeSpinner;
+    @FXML
+    public Spinner<Double> varSlopeSpinner;
 
     // --- UI: Panel de simulación ---
-    @FXML public Label simulationTimeLabel;
-    @FXML public Label simulationSpeedLabel;
+    @FXML
+    public Label simulationTimeLabel;
+    @FXML
+    public Label simulationSpeedLabel;
 
     // --- Hidráulica ---
-    @FXML public Spinner<Double> manningSpinner;
-    @FXML public Spinner<Double> varManningSpinner;
-    @FXML public Label manningDescLabel;
+    @FXML
+    public Spinner<Double> manningSpinner;
+    @FXML
+    public Spinner<Double> varManningSpinner;
+    @FXML
+    public Label manningDescLabel;
 
     // --- Procedural (Ruido) ---
-    @FXML public Spinner<Integer> seedSpinner;
-    @FXML public Slider noiseSlider;       // Controla 'noiseFrequency' principal
-    @FXML public Label noiseFreqValueLabel; // Muestra el valor float exacto
+    @FXML
+    public Spinner<Integer> seedSpinner;
+    @FXML
+    public Slider noiseSlider; // Controla 'noiseFrequency' principal
+    @FXML
+    public Label noiseFreqValueLabel; // Muestra el valor float exacto
 
     // Inputs avanzados de ruido
-    @FXML public Spinner<Double> detailFreqSpinner;
-    @FXML public Spinner<Double> zoneFreqSpinner;
+    @FXML
+    public Spinner<Double> detailFreqSpinner;
+    @FXML
+    public Spinner<Double> zoneFreqSpinner;
 
     // --- Físico-Química ---
-    @FXML public Spinner<Double> dailyBaseTempSpinner;
-    @FXML public Spinner<Double> anualBaseTempSpinner;
-    @FXML public Spinner<Double> basePhSpinner;
-    @FXML public Spinner<Double> dispersionSpinner;
-    @FXML public Spinner<Double> varDailyBaseTempSpinner;
-    @FXML public Spinner<Double> varAnualBaseTempSpinner;
-    @FXML public Spinner<Double> varBasePhSpinner;
+    @FXML
+    public Spinner<Double> dailyBaseTempSpinner;
+    @FXML
+    public Spinner<Double> anualBaseTempSpinner;
+    @FXML
+    public Spinner<Double> basePhSpinner;
+    @FXML
+    public Spinner<Double> dispersionSpinner;
+    @FXML
+    public Spinner<Double> varDailyBaseTempSpinner;
+    @FXML
+    public Spinner<Double> varAnualBaseTempSpinner;
+    @FXML
+    public Spinner<Double> varBasePhSpinner;
 
     // -- Panel avanzado ---
-    @FXML public Spinner<Double> concavitySpinner;
-    @FXML public Spinner<Double> sideSlopeSpinner;
-    @FXML public Spinner<Double> slopeSensSpinner;
-    @FXML public Spinner<Double> decayRateSpinner;
-    @FXML public Spinner<Double> turbSensSpinner;
-    @FXML public Spinner<Double> headwaterCoolingSpinner;
-    @FXML public Spinner<Double> widthHeatingSpinner;
+    @FXML
+    public Spinner<Double> concavitySpinner;
+    @FXML
+    public Spinner<Double> sideSlopeSpinner;
+    @FXML
+    public Spinner<Double> slopeSensSpinner;
+    @FXML
+    public Spinner<Double> decayRateSpinner;
+    @FXML
+    public Spinner<Double> turbSensSpinner;
+    @FXML
+    public Spinner<Double> headwaterCoolingSpinner;
+    @FXML
+    public Spinner<Double> widthHeatingSpinner;
 
     // --- Panel Derecho (Tabs) ---
-    @FXML public TabPane previewTabs;
-    @FXML public Canvas morphologyCanvas;
-    @FXML public Canvas hydrologyCanvas;
-    @FXML public Canvas noiseCanvas;
-    @FXML public Tab morphologyTab;
-    @FXML public Tab noiseTab;
-    @FXML public Tab hydrologyTab;
-    @FXML public Button saveButton;
-    @FXML public ToggleButton morphologySwitch;
+    @FXML
+    public TabPane previewTabs;
+    @FXML
+    public Canvas morphologyCanvas;
+    @FXML
+    public Canvas hydrologyCanvas;
+    @FXML
+    public Canvas noiseCanvas;
+    @FXML
+    public Tab morphologyTab;
+    @FXML
+    public Tab noiseTab;
+    @FXML
+    public Tab hydrologyTab;
+    @FXML
+    public Button saveButton;
+    @FXML
+    public ToggleButton morphologySwitch;
 
     public RiverEditorController(DigitalTwinClientService twinService,
-                                 ApplicationEventPublisher eventPublisher,
-                                 SimulationEngine simEngine,
-                                 RiverEditorCanvasInteractorDelegate canvasInteractor,
-                                 RiverEditorViewModel viewModel) { // Inyección del VM
+            ApplicationEventPublisher eventPublisher,
+            SimulationEngine simEngine,
+            RiverEditorCanvasInteractorDelegate canvasInteractor,
+            RiverEditorViewModel viewModel) { // Inyección del VM
         this.twinService = twinService;
         this.eventPublisher = eventPublisher;
         this.simEngine = simEngine;
@@ -141,14 +182,12 @@ public class RiverEditorController {
                 this.simEngine,
                 this.eventPublisher,
                 this.simulationTimeLabel,
-                this.simulationSpeedLabel
-        );
+                this.simulationSpeedLabel);
         this.updateDelegate = new RiverUpdateDelegate(
                 morphologyTab, noiseTab, hydrologyTab,
                 this::drawRiverPreview,
                 this::drawNoiseHeartBeat,
-                this::drawHydrologyTab
-        );
+                this::drawHydrologyTab);
 
         setupMorphologySwitch();
         setupPresets();
@@ -226,8 +265,10 @@ public class RiverEditorController {
         SpinnerValueFactory<Double> factory = spinner.getValueFactory();
 
         // 1. Sincronización Inicial (Para no quedarse en default)
-        if (factory.getValue() != null) property.set(factory.getValue());
-        else factory.setValue(property.get());
+        if (factory.getValue() != null)
+            property.set(factory.getValue());
+        else
+            factory.setValue(property.get());
 
         // 2. Listener: ViewModel -> Spinner (Cuando cargamos config)
         property.addListener((obs, oldVal, newVal) -> {
@@ -248,8 +289,10 @@ public class RiverEditorController {
         SpinnerValueFactory<Integer> factory = spinner.getValueFactory();
 
         // 1. Sincronización Inicial
-        if (factory.getValue() != null) property.set(factory.getValue());
-        else factory.setValue(property.get());
+        if (factory.getValue() != null)
+            property.set(factory.getValue());
+        else
+            factory.setValue(property.get());
 
         // 2. Listener: ViewModel -> Spinner
         property.addListener((obs, oldVal, newVal) -> {
@@ -286,16 +329,14 @@ public class RiverEditorController {
                 viewModel.basePh,
                 viewModel.phVarPercent,
                 viewModel.decayRate,
-                viewModel.turbSens
-        );
+                viewModel.turbSens);
 
         // 2. Controles que afectan RUIDO + GEOMETRÍA + HYDROLOGY (Shared)
         updateDelegate.trackSharedChanges(
                 viewModel.seed,
                 viewModel.noiseSliderValue,
                 viewModel.detailFreq,
-                viewModel.zoneFreq
-        );
+                viewModel.zoneFreq);
 
         // 3. Controles que afectan HIDROLOGÍA (Física/Química)
         updateDelegate.trackHydrologyChanges(
@@ -309,8 +350,7 @@ public class RiverEditorController {
                 viewModel.decayRate,
                 viewModel.headwaterCooling,
                 viewModel.widthHeating,
-                viewModel.noiseSliderValue
-        );
+                viewModel.noiseSliderValue);
     }
 
     private void setupTabSelectionClearing() {
@@ -360,30 +400,28 @@ public class RiverEditorController {
         simEngine.start();
     }
 
-
     // =========================================================================
     // 1. CONFIGURACIÓN DE CONTROLES (SETUP - Solo Rangos)
     // =========================================================================
 
     private void setupCanvas() {
         this.updateDelegate.trackCanvasSizeChanges(noiseCanvas, this::drawNoiseHeartBeat);
-        this.updateDelegate.trackCanvasSizeChanges(morphologyCanvas, this::drawNoiseHeartBeat);
-        this.updateDelegate.trackCanvasSizeChanges(hydrologyCanvas, this::drawNoiseHeartBeat);
+        this.updateDelegate.trackCanvasSizeChanges(morphologyCanvas, this::drawRiverPreview);
+        this.updateDelegate.trackCanvasSizeChanges(hydrologyCanvas, this::drawHydrologyTab);
 
         canvasInteractor.bind(
                 this::redrawMorphology,
                 renderer::reloadThemeColors,
-                morphologyCanvas, hydrologyCanvas
-        );
+                morphologyCanvas, hydrologyCanvas);
     }
+
     private void redrawMorphology() {
         if (currentGeometry != null) {
             renderer.render(
                     currentGeometry,
                     currentRenderMode,
                     canvasInteractor.getMouseX(),
-                    canvasInteractor.getMouseY()
-            );
+                    canvasInteractor.getMouseY());
         }
     }
 
@@ -402,7 +440,7 @@ public class RiverEditorController {
     }
 
     private void setupNoiseSpinners() {
-        RiverUiFactory.configureSpinner(seedSpinner,0, 9999999, 1000, 1 );
+        RiverUiFactory.configureSpinner(seedSpinner, 0, 9999999, 1000, 1);
         RiverUiFactory.configureScientificSpinner(detailFreqSpinner, 0.001, 1.0, 0.05, 0.001, "%.4f");
         RiverUiFactory.configureScientificSpinner(zoneFreqSpinner, 0.0001, 0.1, 0.001, 0.0001, "%.5f");
         noiseSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
@@ -432,7 +470,8 @@ public class RiverEditorController {
     }
 
     private void setupPresets() {
-        presetCombo.setItems(FXCollections.observableArrayList("Río Estándar (Tramo Medio)", "Torrente de Alta Montaña", "Llanura / Delta Ancho"));
+        presetCombo.setItems(FXCollections.observableArrayList("Río Estándar (Tramo Medio)", "Torrente de Alta Montaña",
+                "Llanura / Delta Ancho"));
         presetCombo.getSelectionModel().select(0);
         presetCombo.setOnAction(e -> applyPreset(presetCombo.getSelectionModel().getSelectedIndex()));
     }
@@ -451,9 +490,9 @@ public class RiverEditorController {
         twinService.getTwinDetails(twin.id())
                 .subscribe(
                         detail -> Platform.runLater(() -> handleTwinLoaded(detail)),
-                        error -> Platform.runLater(() -> handleLoadError(error))
-                );
+                        error -> Platform.runLater(() -> handleLoadError(error)));
     }
+
     private void handleTwinLoaded(TwinDetailDTO detail) {
         try {
             // A. Cargar configuración en los controles
@@ -468,7 +507,8 @@ public class RiverEditorController {
 
         } catch (Exception e) {
             log.error("Error procesando la geometría del río", e);
-            showAlert(Alert.AlertType.ERROR, "Error de Visualización", "Los datos son válidos, pero falló la generación gráfica.");
+            showAlert(Alert.AlertType.ERROR, "Error de Visualización",
+                    "Los datos son válidos, pero falló la generación gráfica.");
         }
     }
 
@@ -480,17 +520,25 @@ public class RiverEditorController {
 
     private void updateManningLabel(Double n) {
         String text;
-        if (n < 0.015) text = "Hormigón / Metal liso";
-        else if (n < 0.025) text = "Tierra limpia / Arena";
-        else if (n < 0.035) text = "Grava / Lecho natural estándar";
-        else if (n < 0.050) text = "Rocas / Montaña / Algo de vegetación";
-        else if (n < 0.075) text = "Vegetación densa / Troncos";
-        else text = "Obstrucción extrema / Manglares";
+        if (n < 0.015)
+            text = "Hormigón / Metal liso";
+        else if (n < 0.025)
+            text = "Tierra limpia / Arena";
+        else if (n < 0.035)
+            text = "Grava / Lecho natural estándar";
+        else if (n < 0.050)
+            text = "Rocas / Montaña / Algo de vegetación";
+        else if (n < 0.075)
+            text = "Vegetación densa / Troncos";
+        else
+            text = "Obstrucción extrema / Manglares";
 
         manningDescLabel.setText(text);
 
-        if (n > 0.1) manningDescLabel.setStyle("-fx-text-fill: -color-danger-fg; -fx-font-size: 10px;");
-        else manningDescLabel.setStyle("-fx-text-fill: -color-fg-muted; -fx-font-size: 10px;");
+        if (n > 0.1)
+            manningDescLabel.setStyle("-fx-text-fill: -color-danger-fg; -fx-font-size: 10px;");
+        else
+            manningDescLabel.setStyle("-fx-text-fill: -color-fg-muted; -fx-font-size: 10px;");
     }
 
     private void drawRiverPreview() {
@@ -574,12 +622,12 @@ public class RiverEditorController {
 
         RiverConfig config = buildConfigFromUI();
         var request = new TwinCreateRequest(nameField.getText(), descField.getText(), config, Collections.emptyList());
-        if (this.editingTwinId == null)
-        {
+        if (this.editingTwinId == null) {
             twinService.createTwin(request).subscribe(summary -> Platform.runLater(() -> {
                 saveButton.setDisable(false);
                 saveButton.setText("Crear Gemelo");
-                showAlert(Alert.AlertType.INFORMATION, "Éxito", "Gemelo Digital '" + summary.name() + "' creado correctamente.");
+                showAlert(Alert.AlertType.INFORMATION, "Éxito",
+                        "Gemelo Digital '" + summary.name() + "' creado correctamente.");
 
                 eventPublisher.publishEvent(new TwinListRefreshEvent());
                 eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
@@ -595,11 +643,12 @@ public class RiverEditorController {
                 saveButton.setText("Crear Gemelo");
                 showAlert(Alert.AlertType.ERROR, "Error", "Fallo al guardar: " + error.getMessage());
             }));
-        }else {
-            twinService.updateTwin(editingTwinId ,request).subscribe(summary -> Platform.runLater(() -> {
+        } else {
+            twinService.updateTwin(editingTwinId, request).subscribe(summary -> Platform.runLater(() -> {
                 saveButton.setDisable(false);
                 saveButton.setText("Crear Gemelo");
-                showAlert(Alert.AlertType.INFORMATION, "Éxito", "Gemelo Digital '" + summary.name() + "' creado correctamente.");
+                showAlert(Alert.AlertType.INFORMATION, "Éxito",
+                        "Gemelo Digital '" + summary.name() + "' creado correctamente.");
 
                 eventPublisher.publishEvent(new TwinListRefreshEvent());
                 eventPublisher.publishEvent(new SidebarVisibilityEvent(true));
@@ -645,18 +694,22 @@ public class RiverEditorController {
     public void onSimRestart() {
         simDelegate.restart();
     }
+
     @FXML
     public void onSimRewind() {
         simDelegate.rewind();
     }
+
     @FXML
     public void onSimPause() {
         simDelegate.pause();
     }
+
     @FXML
     public void onSimPlay() {
         simDelegate.play();
     }
+
     @FXML
     public void onSimAccelerate() {
         simDelegate.accelerate();

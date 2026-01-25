@@ -11,5 +11,6 @@ import java.util.List;
  */
 public interface JpaSensorRepository extends JpaRepository<SensorEntity, String> {
 
-    List<SensorEntity> findAllByTwinId(String twinId);
+    @org.springframework.data.jpa.repository.Query("SELECT s FROM SensorEntity s WHERE s.twin.id = :twinId")
+    List<SensorEntity> findAllByTwinId(@org.springframework.data.repository.query.Param("twinId") String twinId);
 }

@@ -6,9 +6,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import projectstalker.compute.entity.SensorEntity;
 import projectstalker.compute.entity.SensorReadingEntity;
-import projectstalker.compute.repository.SensorRepository;
 import projectstalker.compute.repository.SensorReadingRepository;
-import projectstalker.compute.repository.sql.JpaSensorRepository; // Determine if we use Jpa directly or SensorRepository interface
+import projectstalker.compute.repository.sql.JpaSensorRepository;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -19,23 +19,29 @@ import java.util.Random;
 @RequiredArgsConstructor
 public class SensorScraper {
 
-    // We use the JPA repository directly to find all sensors,
-    // or use SensorRepository if it supports findAll().
-    // SensorRepository interface doesn't have findAll().
-    // So we inject JpaSensorRepository or we add findAll to SensorRepository
-    // interface.
-    // For simplicity, I'll use JpaSensorRepository here or SensorRepositoryImpl if
-    // exposed.
     private final JpaSensorRepository jpaSensorRepository;
     private final SensorReadingRepository readingRepository;
-    private final RuleEngine ruleEngine; // To trigger alerts
+    private final RuleEngine ruleEngine;
+    private final WebClient.Builder webClientBuilder;
+
+    // We lazily build or just build in constructor if builder is available
+    private WebClient webClient;
 
     private final Random random = new Random();
 
-    @Scheduled(cron = "0 0 * * * *") // Every hour
-    // @Scheduled(fixedRate = 60000) // For debug: every minute
+    // Constructor handles initialization
+
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        this.webClient = webClientBuilder.build();
+    }
+
+    // Run every 10 seconds for Demo purposes (Realtime feedback)
+    @Scheduled(fixedDelay = 10000)
     public void scrapeSensors() {
-        log.info("Starting scheduled sensor scraping...");
+        // log.debug("Starting scheduled sensor scraping...");
+        // Commented out to avoid spamming logs too much, but useful if nothing works
+
         List<SensorEntity> sensors = jpaSensorRepository.findAll();
 
         for (SensorEntity sensor : sensors) {
@@ -47,20 +53,91 @@ public class SensorScraper {
                 }
             }
         }
-        log.info("Sensor scraping completed.");
     }
 
     private void scrapeAndSave(SensorEntity sensor) {
-        // Mock logic: generate random values closer to realistic ranges based on sensor
-        // type ??
-        // In real world, we would check sensor.getConfiguration() and call the URL.
+        if ("REAL_IoT_WEBHOOK".equals(sensor.getStrategyType())) {
+            scrapeRealWebhook(sensor);
+        } else {
+            // For virtual sensors, we don't necessarily need to "scrape" and save endlessly
+            // if we are generating on fly, BUT existing logic saves them to DB.
+            // Let's keep it for now.
+            scrapeMock(sensor);
+        }
+    }
 
-        // Simulating READING
-        double ph = 7.0 + (random.nextDouble() - 0.5) * 1.0; // 6.5 - 7.5
-        double temp = 15.0 + (random.nextDouble() - 0.5) * 5.0; // 12.5 - 17.5
+    private void scrapeRealWebhook(SensorEntity sensor) {
+        try {
+            java.util.Map<String, Object> config = sensor.getConfiguration();
+            if (config != null && config.containsKey("url")) {
+                String url = (String) config.get("url");
+                log.info("Scraping Real Sensor [{}]: URL: {}", sensor.getName(), url);
 
-        saveReading(sensor, "ph", ph);
-        saveReading(sensor, "temperature", temp);
+                webClient.get().uri(url)
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .subscribe(responseBody -> {
+                            log.info("Received payload from {}: {}", url, responseBody);
+                            try {
+                                // Simple numeric parsing
+                                double val = Double.parseDouble(responseBody.trim());
+                                saveReading(sensor, "value", val);
+                                log.info("Saved reading for {}: {}", sensor.getName(), val);
+                            } catch (NumberFormatException e) {
+                                log.warn("Could not parse numeric reading from {}: {}", url, responseBody);
+                            }
+                        }, err -> log.error("Error scraping URL {}: {}", url, err.getMessage()));
+            } else {
+                log.warn("Sensor {} is REAL_IoT_WEBHOOK but has no URL configured.", sensor.getName());
+            }
+        } catch (Exception e) {
+            log.error("Failed to process Real Webhook for {}", sensor.getName(), e);
+        }
+    }
+
+    private void scrapeMock(SensorEntity sensor) {
+        if ("VIRTUAL_SINE".equals(sensor.getStrategyType())) {
+            scrapeSineWave(sensor);
+        } else {
+            // Default random noise if no strategy matches
+            double ph = 7.0 + (random.nextDouble() - 0.5) * 1.0;
+            double temp = 15.0 + (random.nextDouble() - 0.5) * 5.0;
+            saveReading(sensor, "ph", ph);
+            saveReading(sensor, "temperature", temp);
+        }
+    }
+
+    private void scrapeSineWave(SensorEntity sensor) {
+        try {
+            java.util.Map<String, Object> config = sensor.getConfiguration();
+            double offset = getDouble(config, "offset", 10.0);
+            double amplitude = getDouble(config, "amplitude", 5.0);
+            double frequency = getDouble(config, "frequency", 0.1);
+
+            // Calculate sine value based on current time
+            double timeSeconds = System.currentTimeMillis() / 1000.0;
+            double value = offset + amplitude * Math.sin(2 * Math.PI * frequency * timeSeconds);
+
+            // Add some noise
+            value += (random.nextDouble() - 0.5) * (amplitude * 0.1);
+
+            saveReading(sensor, "value", value);
+        } catch (Exception e) {
+            log.error("Error generating sine wave for {}", sensor.getName(), e);
+        }
+    }
+
+    private double getDouble(java.util.Map<String, Object> map, String key, double def) {
+        if (map == null || !map.containsKey(key))
+            return def;
+        Object val = map.get(key);
+        if (val instanceof Number)
+            return ((Number) val).doubleValue();
+        try {
+            return Double.parseDouble(val.toString());
+        } catch (Exception e) {
+            return def;
+        }
     }
 
     private void saveReading(SensorEntity sensor, String parameter, double value) {
@@ -72,8 +149,6 @@ public class SensorScraper {
                 .build();
 
         readingRepository.save(reading);
-
-        // Trigger Rules
         ruleEngine.evaluate(sensor, parameter, value);
     }
 }

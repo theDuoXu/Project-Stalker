@@ -121,13 +121,18 @@ public class MockSensorRepository implements SensorRepository {
 
     @Override
     public SensorEntity save(SensorEntity sensor) {
+        if (sensor.getId() == null) {
+            sensor.setId(java.util.UUID.randomUUID().toString());
+        }
         store.put(sensor.getId(), sensor);
         return sensor;
     }
 
     @Override
     public List<SensorEntity> findAllByTwinId(String twinId) {
-        return List.of();
+        return store.values().stream()
+                .filter(s -> s.getTwin() != null && s.getTwin().getId().equals(twinId))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     @Override

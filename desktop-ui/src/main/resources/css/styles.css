@@ -1,3 +1,29 @@
+/* --- NORD THEME DEFINITIONS --- */
+.root {
+    -color-bg-default: #2E3440;
+    -color-bg-subtle: #3B4252;
+    
+    -color-fg-default: #ECEFF4;
+    -color-fg-muted: #D8DEE9;
+    
+    -color-border-subtle: #4C566A;
+    -color-border-muted: #434C5E;
+
+    -color-accent-fg: #81A1C1;
+
+    /* Status Colors (Muted for backgrounds, Fg for text) */
+    -color-success-muted: rgba(163, 190, 140, 0.2);
+    -color-success-fg: #A3BE8C;
+    -color-success-emphasis: #A3BE8C;
+
+    -color-danger-muted: rgba(191, 97, 106, 0.2);
+    -color-danger-fg: #BF616A;
+    -color-danger-emphasis: #BF616A;
+
+    -color-warning-muted: rgba(235, 203, 139, 0.2);
+    -color-warning-fg: #EBCB8B;
+}
+
 /* Estilo base del badge/label */
 .label {
     -fx-font-size: 12px;
