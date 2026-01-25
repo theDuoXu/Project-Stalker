@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Component
+@org.springframework.context.annotation.Scope("prototype")
 public class LeafletMapController {
 
     @Autowired

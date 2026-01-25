@@ -12,11 +12,7 @@
 
     <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
 
-    <StackPane VBox.vgrow="ALWAYS" styleClass="simulation-viewport">
-        <Label text="Visualización Hidrodinámica en Tiempo Real (Canvas)" styleClass="text-muted"/>
-    </StackPane>
-
-    <HBox spacing="15" prefHeight="280" styleClass="card">
+    <HBox spacing="15" VBox.vgrow="ALWAYS" styleClass="card">
         <padding><Insets top="15" right="15" bottom="15" left="15"/></padding>
 
         <VBox spacing="15" minWidth="280" maxWidth="300">
@@ -26,12 +22,12 @@
                 <RadioButton text="Manual" selected="true" userData="MANUAL">
                     <toggleGroup><ToggleGroup fx:id="sourceModeGroup"/></toggleGroup>
                 </RadioButton>
-                <RadioButton text="Sensores Real-Time y Virtuales" userData="REAL" toggleGroup="$sourceModeGroup"/>
+                <RadioButton text="Sensores" userData="REAL" toggleGroup="$sourceModeGroup"/>
             </HBox>
 
             <Separator/>
 
-            <StackPane VBox.vgrow="ALWAYS" alignment="TOP_LEFT" minHeight="180" prefHeight="180">
+            <StackPane VBox.vgrow="ALWAYS" alignment="TOP_LEFT">
 
                 <VBox fx:id="manualControls" spacing="15">
                     <VBox spacing="5">
@@ -67,18 +63,26 @@
                          <ComboBox fx:id="metricSelector" promptText="Seleccionar métrica..." maxWidth="Infinity"/>
                     </VBox>
 
-                    <Label text="El sistema se sincronizará automáticamente con las lecturas del sensor seleccionado vía HPC."
-                           wrapText="true" style="-fx-text-fill: -color-fg-muted; -fx-font-size: 11px;"/>
                 </VBox>
 
             </StackPane>
+
+            <Region VBox.vgrow="ALWAYS" />
+
+            <ToggleButton fx:id="viewToggle" text="Ver Mapa Geoespacial" maxWidth="Infinity" styleClass="btn-outlined">
+                <graphic><FontIcon iconLiteral="mdi2m-map"/></graphic>
+            </ToggleButton>
         </VBox>
 
         <Separator orientation="VERTICAL"/>
 
-        <LineChart fx:id="levelChart" title="Nivel de Agua (h) - Tiempo Real" HBox.hgrow="ALWAYS" createSymbols="false">
-            <xAxis><CategoryAxis label="Tiempo"/></xAxis>
-            <yAxis><NumberAxis label="Metros"/></yAxis>
-        </LineChart>
+        <StackPane HBox.hgrow="ALWAYS">
+             <LineChart fx:id="levelChart" title="Nivel de Agua (h) - Tiempo Real" createSymbols="false">
+                <xAxis><CategoryAxis label="Tiempo"/></xAxis>
+                <yAxis><NumberAxis label="Metros"/></yAxis>
+            </LineChart>
+            
+            <fx:include source="../../components/leaflet-map.fxml" fx:id="embeddedMap" visible="false" managed="false"/>
+        </StackPane>
     </HBox>
 </VBox>

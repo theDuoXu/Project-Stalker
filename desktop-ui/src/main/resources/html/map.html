@@ -55,7 +55,7 @@
             // Centro aproximado (Tajo medio)
             map = L.map('map', {
                 center: [40.4168, -3.7038], // Madrid
-                zoom: 6, // Zoom out to see wider context initially
+                zoom: 7, // Zoom optimized for Spain/Tajo
                 zoomControl: false,
                 attributionControl: false
             });
@@ -124,29 +124,32 @@
             // Quitar parentesis exteriores ((...)) -> ...
             // Ojo, MULTILINESTRING tiene doble parentesis: ((...)), ((...))
 
-            // Regex para capturar grupos de coordenadas entre parentesis
-            var groups = content.match(/\(\((.*?)\)\)/g);
+            // Regex matches inner coordinate groups: (...coord pairs...)
+            // Handles: MULTILINESTRING ((...), (...))
+            var matches = content.match(/\(([^()]+)\)/g);
 
-            if (!groups) return;
+            if (!matches) return;
 
-            groups.forEach(function (groupStr) {
-                // Limpiar parentesis
+            matches.forEach(function (groupStr) {
+                // Remove parens
                 var cleanCoords = groupStr.replace(/\(/g, "").replace(/\)/g, "");
                 var pairs = cleanCoords.split(",");
                 var latLngs = [];
 
                 pairs.forEach(function (pair) {
-                    var coords = pair.trim().split(/\s+/); // Separado por espacio
+                    var coords = pair.trim().split(/\s+/);
                     if (coords.length >= 2) {
                         var utmX = parseFloat(coords[0]);
                         var utmY = parseFloat(coords[1]);
-                        // Asumimos Huso 30 
                         var ll = utmToLatLon(utmX, utmY, 30);
                         latLngs.push(ll);
                     }
                 });
 
-                // Dibujar Polilinea
+                // Prevent drawing single points
+                if (latLngs.length < 2) return;
+
+                // Draw Indvidual Polyline for this segment
                 L.polyline(latLngs, {
                     color: colorHex || "#00aaff",
                     weight: 3,
@@ -155,12 +158,8 @@
                 }).addTo(riverLayerGroup);
             });
 
-            // Ajustar vista a los ríos
-            var bounds = L.latLngBounds();
-            riverLayerGroup.eachLayer(function (layer) {
-                if (layer.getBounds) bounds.extend(layer.getBounds());
-            });
-            if (bounds.isValid()) map.fitBounds(bounds);
+            // Removed auto-fitBounds to prevent zooming out to world
+            // The map will stay centered on Spain (Zoom 7)
         };
 
         // 2. Añadir Estaciones (JSON List)

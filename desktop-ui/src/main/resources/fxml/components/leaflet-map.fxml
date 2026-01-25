@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.web.WebView?>
 
-<StackPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+<AnchorPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
            fx:controller="projectstalker.ui.view.dashboard.tabs.LeafletMapController">
-    <WebView fx:id="mapWebView" minWidth="200" minHeight="150" prefHeight="-1.0" prefWidth="-1.0"/>
-</StackPane>
+    <WebView fx:id="mapWebView" AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0" 
+             AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" />
+</AnchorPane>
