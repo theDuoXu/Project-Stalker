@@ -93,7 +93,7 @@ public class SensorClientService {
                 return apiClient.get()
                                 .uri(uriBuilder -> uriBuilder
                                                 .path(ApiRoutes.SENSORS + "/{stationId}/realtime")
-                                                .queryParam("parameter", parameter)
+                                                .queryParam("parameter", parameter == null ? "ALL" : parameter)
                                                 .build(stationId))
                                 .retrieve()
                                 .bodyToFlux(SensorReadingDTO.class)
@@ -121,16 +121,23 @@ public class SensorClientService {
         // 3. EXPORTACIÓN
         // =========================================================================
 
-        public Mono<SensorResponseDTO> exportData(String stationId, String parameter, LocalDateTime from,
+        public Mono<SensorResponseDTO> getExportData(String stationId, String parameter, LocalDateTime from,
                         LocalDateTime to) {
                 log.info("Solicitando exportación de datos [{}] desde {} hasta {}", stationId, from, to);
+
+                if (parameter == null || parameter.isBlank()) {
+                        return Mono.error(new IllegalArgumentException("Parameter is required for export"));
+                }
 
                 return apiClient.get()
                                 .uri(uriBuilder -> uriBuilder
                                                 .path(ApiRoutes.SENSORS + "/export/{stationId}")
                                                 .queryParam("parameter", parameter)
-                                                .queryParam("from", from.format(DateTimeFormatter.ISO_DATE_TIME))
-                                                .queryParam("to", to.format(DateTimeFormatter.ISO_DATE_TIME))
+                                                .queryParam("from", from
+                                                                .truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
+                                                                .format(DateTimeFormatter.ISO_DATE_TIME))
+                                                .queryParam("to", to.truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
+                                                                .format(DateTimeFormatter.ISO_DATE_TIME))
                                                 .build(stationId))
                                 .retrieve()
                                 .bodyToMono(SensorResponseDTO.class)

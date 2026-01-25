@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@lombok.extern.slf4j.Slf4j
 public class HydroChartManager {
 
     private final LineChart<String, Number> chart;
@@ -54,12 +55,15 @@ public class HydroChartManager {
         });
     }
 
-    public void updateData(List<SensorReadingDTO> readings, String metric) {
+    public void updateData(List<SensorReadingDTO> readings, String metric, boolean forcePlot) {
         Platform.runLater(() -> {
             List<SensorReadingDTO> filtered = readings.stream()
-                    .filter(r -> metric.equals(r.tag()) || ("value".equals(metric) && "value".equals(r.tag())))
+                    .filter(r -> forcePlot || metric.equals(r.tag())
+                            || ("value".equals(metric) && "value".equals(r.tag())))
                     .sorted(Comparator.comparing(SensorReadingDTO::timestamp))
                     .collect(Collectors.toList());
+
+            log.info("HydroChartManager: Received {} readings. Filtered: {}", readings.size(), filtered.size());
 
             setMetricName(metric);
             series.getData().clear();

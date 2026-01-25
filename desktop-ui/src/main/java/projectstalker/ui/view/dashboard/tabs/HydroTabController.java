@@ -3,7 +3,7 @@ package projectstalker.ui.view.dashboard.tabs;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.chart.LineChart;
-import javafx.scene.chart.XYChart;
+
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Slider;
 import javafx.scene.control.ToggleGroup;
@@ -17,6 +17,8 @@ import projectstalker.domain.simulation.SimulationResponseDTO;
 import projectstalker.ui.service.RealTimeClientService;
 import projectstalker.ui.service.SensorClientService;
 import projectstalker.ui.view.dashboard.tabs.hydro.HydroChartManager;
+import projectstalker.ui.view.dashboard.tabs.hydro.HydroHistoryManager;
+import projectstalker.ui.view.dashboard.tabs.hydro.HydroMapManager;
 import projectstalker.ui.view.dashboard.tabs.hydro.HydroPollManager;
 
 import java.time.LocalTime;
@@ -70,143 +72,91 @@ public class HydroTabController {
     private HydroChartManager chartManager;
     private HydroPollManager pollManager;
 
+    // Navigation UI
+    @FXML
+    private javafx.scene.control.Button prevWindowBtn;
+    @FXML
+    private javafx.scene.control.Button nextWindowBtn;
+    // Managers
+    // chartManager & pollManager are defined above (lines 70-71)
+    private HydroMapManager mapManager;
+    private HydroHistoryManager historyManager;
+
     @FXML
     public void initialize() {
         // Init Managers
         this.chartManager = new HydroChartManager(levelChart);
         this.pollManager = new HydroPollManager(sensorService);
+        this.mapManager = new HydroMapManager(sensorService, embeddedMapController);
+        this.historyManager = new HydroHistoryManager(sensorService);
 
         setupSourceSwitch();
-        // setupChart() removed, delegated to manager
         setupListeners();
         setupVirtualSensorSelector();
         setupMetricSelector();
-        setupViewToggle();
+
+        // Delegate to Managers
+        this.mapManager.setupViewToggle(viewToggle, levelChart.getParent(), levelChart.getParent(), embeddedMap);
 
         // Auto-conectar al iniciar
         connectToRealTime();
 
         // Cache: Preload all station data for instant map popups
-        preloadData();
+        this.mapManager.preloadData();
     }
 
-    private void preloadData() {
-        log.info("Iniciando precarga masiva de datos de estaciones (Conexión a Backend)...");
+    private void refreshCurrentData() {
+        // Reduced logic: Just load current selected station data
+        String currentStation = getSelectedStationId();
+        if (currentStation == null)
+            return;
 
-        // 1. Obtener lista de estaciones conocidas (Metadata)
-        sensorService.getAllAvailableSensors()
-                .map(SensorResponseDTO::stationId)
-                .distinct()
-                .flatMap(stationId ->
-                // 2. Para cada estación, pedir datos REALES al backend
-                sensorService.getRealtime(stationId, "ALL")
-                        .collectList()
-                        .map(readings -> new java.util.AbstractMap.SimpleEntry<>(stationId, readings))
-                        // Si falla una, no detener todo
-                        .onErrorResume(e -> {
-                            log.warn("Fallo precarga para {}: {}", stationId, e.getMessage());
-                            return reactor.core.publisher.Mono.just(
-                                    new java.util.AbstractMap.SimpleEntry<>(stationId, new java.util.ArrayList<>()));
-                        }), 5) // Concurrencia controlada
-                .collectList()
-                .subscribe(results -> {
-                    log.info("Precarga: Recibidos datos de {} estaciones del backend.", results.size());
-                    java.util.Map<String, String> popupCache = new java.util.HashMap<>();
-
-                    for (java.util.Map.Entry<String, java.util.List<projectstalker.domain.dto.sensor.SensorReadingDTO>> entry : results) {
-                        String stationId = entry.getKey();
-                        java.util.List<projectstalker.domain.dto.sensor.SensorReadingDTO> readings = entry.getValue();
-
-                        if (readings == null || readings.isEmpty()) {
-                            continue;
-                        }
-
-                        // 3. Agregar todas las lecturas (último valor de cada tag)
-                        java.util.Map<String, projectstalker.domain.dto.sensor.SensorReadingDTO> latestByTag = new java.util.HashMap<>();
-                        for (projectstalker.domain.dto.sensor.SensorReadingDTO r : readings) {
-                            latestByTag.merge(r.tag(), r, (oldVal, newVal) -> oldVal.timestamp()
-                                    .compareTo(newVal.timestamp()) > 0 ? oldVal : newVal);
-                        }
-
-                        // 4. Generar HTML unificado
-                        StringBuilder html = new StringBuilder();
-                        html.append("<div style='min-width:150px'>");
-                        html.append("<h4>").append(stationId).append("</h4>");
-                        html.append("<table style='width:100%; font-size:12px; border-collapse: collapse;'>");
-
-                        java.util.List<projectstalker.domain.dto.sensor.SensorReadingDTO> sorted = new java.util.ArrayList<>(
-                                latestByTag.values());
-                        sorted.sort(
-                                java.util.Comparator.comparing(projectstalker.domain.dto.sensor.SensorReadingDTO::tag));
-
-                        for (projectstalker.domain.dto.sensor.SensorReadingDTO r : sorted) {
-                            html.append("<tr>");
-                            html.append("<td style='color:#aad;'>").append(r.tag()).append(":</td>");
-                            html.append("<td style='text-align:right; font-weight:bold;'>")
-                                    .append(String.format("%.2f", r.value())).append("</td>");
-                            html.append("</tr>");
-                        }
-                        html.append("</table>");
-                        // Footer time from first reading
-                        if (!sorted.isEmpty()) {
-                            String ts = sorted.get(0).timestamp().replace("T", " ");
-                            if (ts.length() > 16)
-                                ts = ts.substring(5, 16); // mm-dd HH:mm
-                            html.append("<div style='font-size:10px; color:#888; margin-top:5px; text-align:right;'>")
-                                    .append(ts)
-                                    .append("</div>");
-                        }
-                        html.append("</div>");
-
-                        popupCache.put(stationId, html.toString());
-                    }
-
-                    log.info("Precarga finalizada. Generado cache para {} estaciones. Inyectando...",
-                            popupCache.size());
-                    Platform.runLater(() -> {
-                        if (embeddedMapController != null) {
-                            embeddedMapController.injectBulkData(popupCache);
-                        }
-                    });
-                }, err -> log.error("Error crítico en precarga masiva", err));
+        loadSensorData(currentStation);
     }
 
-    private void setupViewToggle() {
-        if (viewToggle != null) {
-            viewToggle.selectedProperty().addListener((obs, oldVal, newVal) -> {
-                boolean showMap = newVal;
-
-                // Toggle Visibility
-                if (levelChart != null) {
-                    levelChart.setVisible(!showMap);
-                    levelChart.setManaged(!showMap);
-                }
-
-                if (embeddedMap != null) {
-                    embeddedMap.setVisible(showMap);
-                    embeddedMap.setManaged(showMap);
-                    // Note: We do NOT call loadData() here anymore to preserve the cache.
-                }
-
-                viewToggle.setText(showMap ? "Ver Gráfica de Datos" : "Ver Mapa Geoespacial");
-                org.kordamp.ikonli.javafx.FontIcon icon = (org.kordamp.ikonli.javafx.FontIcon) viewToggle.getGraphic();
-                if (icon != null)
-                    icon.setIconLiteral(showMap ? "mdi2c-chart-line" : "mdi2m-map");
-            });
-        }
+    private String getSelectedStationId() {
+        // Try flow selector first, then virtual
+        if (flowSensorSelector.getValue() != null)
+            return flowSensorSelector.getValue().stationId();
+        if (virtualSensorSelector != null && virtualSensorSelector.getValue() != null)
+            return virtualSensorSelector.getValue().stationId();
+        return null;
     }
+
+    private String getSelectedStationName() {
+        if (flowSensorSelector.getValue() != null)
+            return flowSensorSelector.getValue().name();
+        if (virtualSensorSelector != null && virtualSensorSelector.getValue() != null)
+            return virtualSensorSelector.getValue().name();
+        return "Desconocida";
+    }
+
+    private void updateChartTitle() {
+        String stationName = getSelectedStationName();
+        String metric = metricSelector.getValue();
+        if (metric == null || metric.isBlank())
+            metric = "General";
+
+        levelChart.setTitle(String.format("%s - %s", stationName, metric));
+    }
+
+    private boolean isUpdatingMetrics = false;
 
     private void setupMetricSelector() {
         if (metricSelector != null) {
             metricSelector.setOnAction(e -> {
+                if (isUpdatingMetrics)
+                    return; // Prevent loop
                 log.info("Métrica cambiada a: {}", metricSelector.getValue());
-                updateChartFromLastReadings();
+                refreshCurrentData(); // Reload with new metric logic or history re-fetch
             });
         }
     }
 
     private void updateChartFromLastReadings() {
         Platform.runLater(() -> {
+            updateChartTitle(); // Update Title
+
             if (lastPollReadings.isEmpty())
                 return;
 
@@ -215,23 +165,23 @@ public class HydroTabController {
             // Auto-select first tag if nothing selected
             if (selectedMetric == null || selectedMetric.isBlank()) {
                 String firstTag = lastPollReadings.get(0).tag();
-                metricSelector.getSelectionModel().select(firstTag);
+                // Avoid triggering listener if we just set default
+                // But here we might WANT to trigger it to load data for that metric?
+                // Actually loadSensorData fetches ALL, so chart update is enough.
+                // Just update selection without firing?
+                isUpdatingMetrics = true;
+                try {
+                    metricSelector.getSelectionModel().select(firstTag);
+                } finally {
+                    isUpdatingMetrics = false;
+                }
                 return;
             }
 
-            // Delegate to Manager
-            chartManager.updateData(lastPollReadings, selectedMetric);
+            // Delegate to Manager (Realtime: respect tags)
+            chartManager.updateData(lastPollReadings, selectedMetric, false);
         });
     }
-
-    // private String formatTimeLabel(String isoTimestamp) { // Removed
-    // try {
-    // LocalDateTime dt = LocalDateTime.parse(isoTimestamp);
-    // return dt.format(DateTimeFormatter.ofPattern("dd/MM HH:mm"));
-    // } catch (Exception e) {
-    // return isoTimestamp;
-    // }
-    // }
 
     private void updateMetricsList(java.util.List<projectstalker.domain.dto.sensor.SensorReadingDTO> readings,
             String preferredMetric) {
@@ -244,20 +194,31 @@ public class HydroTabController {
                     .collect(Collectors.toSet());
 
             if (!tags.equals(new java.util.HashSet<>(metricSelector.getItems()))) {
-                metricSelector.getItems().setAll(tags);
+                log.info("Updating metrics list. New tags: {}", tags);
+                isUpdatingMetrics = true;
+                try {
+                    metricSelector.getItems().setAll(tags);
 
-                // Try to restore preference
-                if (preferredMetric != null && tags.contains(preferredMetric)) {
-                    metricSelector.getSelectionModel().select(preferredMetric);
-                } else if (!tags.isEmpty()) {
-                    metricSelector.getSelectionModel().select(tags.iterator().next());
+                    // Try to restore preference
+                    if (preferredMetric != null && tags.contains(preferredMetric)) {
+                        metricSelector.getSelectionModel().select(preferredMetric);
+                    } else if (!tags.isEmpty()) {
+                        metricSelector.getSelectionModel().select(tags.iterator().next());
+                    }
+                } finally {
+                    isUpdatingMetrics = false;
                 }
             } else {
                 // Even if items didn't change, ensure selection is valid if we had a preference
                 String current = metricSelector.getValue();
                 if ((current == null || current.isBlank()) && preferredMetric != null
                         && tags.contains(preferredMetric)) {
-                    metricSelector.getSelectionModel().select(preferredMetric);
+                    isUpdatingMetrics = true;
+                    try {
+                        metricSelector.getSelectionModel().select(preferredMetric);
+                    } finally {
+                        isUpdatingMetrics = false;
+                    }
                 }
             }
         });
@@ -283,11 +244,11 @@ public class HydroTabController {
             if (newVal != null) {
                 flowSensorSelector.getSelectionModel().clearSelection(); // Mutual rejection
 
-                // Fetch Data from Backend (Simulation)
-                sensorService.getHistory(newVal.stationId(), "NIVEL")
-                        .subscribe(
-                                fullData -> Platform.runLater(() -> plotSensorData(fullData)),
-                                err -> log.error("Error fetching virtual history", err));
+                // Fetch Data from Backend (Simulation) via History Manager or direct if it's
+                // considered "History" browse action?
+                // Actually Virtual sensors usually have history too.
+                // For simplicity, treat as selection change -> plotSensorData
+                plotSensorData(newVal);
             }
         });
 
@@ -419,12 +380,9 @@ public class HydroTabController {
         // Listener for Sidebar Selection -> Map Focus
         flowSensorSelector.getSelectionModel().selectedItemProperty().addListener((obs, old, newVal) -> {
             if (newVal != null) {
-                if (embeddedMap != null && embeddedMap.isVisible()) {
-                    embeddedMapController.focusStation(newVal.stationId());
-                }
-                // Do not auto-plot here, setupVirtualSensorSelector handles it or mutual
-                // exclusion logic
-                // Actually setupVirtualSensorSelector logic handles plotting
+                log.info("Station selected: {}", newVal.stationId());
+                mapManager.focusStation(newVal.stationId());
+                loadSensorData(newVal.stationId()); // Trigger data load
             }
         });
     }
@@ -433,7 +391,6 @@ public class HydroTabController {
 
     // private void stopPolling() { // Removed
     // if (activePoll != null) {
-    // activePoll.stop();
     // activePoll = null;
     // }
     // }
@@ -446,9 +403,15 @@ public class HydroTabController {
         final String preferredMetric = (metricSelector != null) ? metricSelector.getValue() : null;
 
         Platform.runLater(() -> {
-            if (metricSelector != null)
-                metricSelector.getItems().clear();
-            lastPollReadings.clear();
+            if (metricSelector != null) {
+                isUpdatingMetrics = true;
+                try {
+                    metricSelector.getItems().clear();
+                } finally {
+                    isUpdatingMetrics = false;
+                }
+            }
+            lastPollReadings = new java.util.ArrayList<>();
             chartManager.clear();
         });
 
@@ -459,12 +422,20 @@ public class HydroTabController {
         sensorService.getRealtime(stationId, "ALL")
                 .collectList()
                 .subscribe(readings -> {
+                    log.info("DEBUG: getRealtime returned {} readings for {}",
+                            readings == null ? "null" : readings.size(), stationId);
                     if (readings != null && !readings.isEmpty()) {
-                        this.lastPollReadings = readings;
-                        updateMetricsList(readings, preferredMetric);
+                        // Filter out invalid readings
+                        java.util.List<projectstalker.domain.dto.sensor.SensorReadingDTO> validReadings = readings
+                                .stream()
+                                .filter(r -> r != null && r.timestamp() != null && !r.timestamp().isBlank())
+                                .collect(Collectors.toList());
+
+                        this.lastPollReadings = validReadings;
+                        updateMetricsList(validReadings, preferredMetric);
                         updateChartFromLastReadings();
 
-                        long distinctTimes = readings.stream()
+                        long distinctTimes = validReadings.stream()
                                 .map(projectstalker.domain.dto.sensor.SensorReadingDTO::timestamp)
                                 .distinct().count();
 
@@ -475,53 +446,28 @@ public class HydroTabController {
                             pollManager.startPolling(stationId, this::onPollDataReceived);
                         }
                     } else {
-                        log.warn("No initial readings. Starting poll anyway...", stationId);
+                        log.warn("No initial readings for {}. Metrics list will be empty.", stationId);
                         pollManager.startPolling(stationId, this::onPollDataReceived);
                     }
-                }, err -> log.error("Hydro initial load error: " + err.getMessage()));
+                }, err -> log.error("Hydro initial load error: " + err.getMessage(), err));
     }
 
     private void onPollDataReceived(java.util.List<projectstalker.domain.dto.sensor.SensorReadingDTO> readings) {
-        this.lastPollReadings = readings;
-        updateMetricsList(readings, metricSelector.getValue()); // Keep current if possible
+        // Filter invalid readings
+        java.util.List<projectstalker.domain.dto.sensor.SensorReadingDTO> validReadings = (readings == null)
+                ? java.util.Collections.emptyList()
+                : readings.stream()
+                        .filter(r -> r != null && r.timestamp() != null && !r.timestamp().isBlank())
+                        .collect(Collectors.toList());
+
+        log.debug("onPollDataReceived: {} valid readings", validReadings.size());
+        this.lastPollReadings = validReadings;
+        updateMetricsList(validReadings, metricSelector.getValue()); // Keep current if possible
         updateChartFromLastReadings();
 
-        // Update Map Popup if Map is visible
-        if (embeddedMap != null && embeddedMap.isVisible() && embeddedMapController != null && !readings.isEmpty()) {
-            StringBuilder html = new StringBuilder();
-            html.append("<div style='min-width:150px'>");
-            // Header (Station Name/ID from first reading)
-            html.append("<h4>").append(readings.get(0).stationId()).append("</h4>");
-            html.append("<table style='width:100%; font-size:12px; border-collapse: collapse;'>");
-
-            // Group by Tag to show latest value per metric
-            java.util.Map<String, projectstalker.domain.dto.sensor.SensorReadingDTO> latestByTag = readings.stream()
-                    .collect(Collectors.toMap(
-                            projectstalker.domain.dto.sensor.SensorReadingDTO::tag,
-                            r -> r,
-                            (existing, replacement) -> existing.timestamp().compareTo(replacement.timestamp()) > 0
-                                    ? existing
-                                    : replacement));
-
-            // Sort by tag for consistent display
-            java.util.List<projectstalker.domain.dto.sensor.SensorReadingDTO> sortedList = new java.util.ArrayList<>(
-                    latestByTag.values());
-            sortedList.sort(java.util.Comparator.comparing(projectstalker.domain.dto.sensor.SensorReadingDTO::tag));
-
-            for (projectstalker.domain.dto.sensor.SensorReadingDTO r : sortedList) {
-                html.append("<tr>");
-                html.append("<td style='color:#aad;'>").append(r.tag()).append(":</td>");
-                html.append("<td style='text-align:right; font-weight:bold;'>")
-                        .append(String.format("%.2f", r.value())).append("</td>");
-                html.append("</tr>");
-            }
-            html.append("</table>");
-            html.append("<div style='font-size:10px; color:#888; margin-top:5px; text-align:right;'>")
-                    .append(readings.get(0).timestamp().replace("T", " ")) // Simple formatting
-                    .append("</div>");
-            html.append("</div>");
-
-            embeddedMapController.updatePopup(readings.get(0).stationId(), html.toString());
+        // Update Map Popup if Map is visible (Delegated to Manager)
+        if (readings != null && !readings.isEmpty()) {
+            mapManager.updatePopup(readings.get(0).stationId(), readings);
         }
     }
 
@@ -553,6 +499,8 @@ public class HydroTabController {
     // }
 
     private void plotSensorData(SensorResponseDTO sensor) {
+        // Reset window to NOW when selecting new sensor
+
         // Make sure series is managed
         chartManager.setMetricName(sensor.unit()); // Fallback name
 
@@ -562,10 +510,12 @@ public class HydroTabController {
         // 1. Initial history from DTO
         if (sensor.values() != null) {
             chartManager.updateData(
-                    sensor.values().stream().map(v -> new projectstalker.domain.dto.sensor.SensorReadingDTO(
-                            "value", v.timestamp(), v.value(), String.valueOf(v.value()), sensor.stationId()))
+                    sensor.values().stream()
+                            .filter(v -> v != null && v.timestamp() != null && !v.timestamp().isBlank())
+                            .map(v -> new projectstalker.domain.dto.sensor.SensorReadingDTO(
+                                    "value", v.timestamp(), v.value(), String.valueOf(v.value()), sensor.stationId()))
                             .collect(Collectors.toList()),
-                    "value");
+                    "value", true);
         }
 
         // 2. Load Real
@@ -600,8 +550,10 @@ public class HydroTabController {
 
             if (flowMatch.isPresent()) {
                 if (flowMatch.get().equals(flowSensorSelector.getValue())) {
-                    // Already selected, force reload
-                    plotSensorData(flowMatch.get());
+                    // Already selected, force reload manually because listener won't fire
+                    log.info("Station {} already selected in dropdown. Forcing reload.", stationId);
+                    mapManager.focusStation(stationId);
+                    loadSensorData(stationId);
                 } else {
                     flowSensorSelector.getSelectionModel().select(flowMatch.get());
                 }

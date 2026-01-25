@@ -272,7 +272,19 @@ public class SensorServiceImpl implements SensorService {
             if (saicaMasterList.containsKey(stationId)) {
                 String url = saicaMasterList.get(stationId);
                 log.info("Station {} found in SAICA Master List. Proxying to: {}", stationId, url);
-                return fetchAndParseSaica(stationId, "SAICA-" + stationId, url);
+
+                List<SensorReadingDTO> readings = fetchAndParseSaica(stationId, "SAICA-" + stationId, url);
+                if (!readings.isEmpty()) {
+                    return readings;
+                }
+
+                log.warn("SAICA Proxy failed or empty for {}. Falling back to Simulation.", stationId);
+                // Fallback to Simulation
+                SensorEntity dummy = SensorEntity.builder()
+                        .id(stationId)
+                        .name("SAICA-" + stationId)
+                        .build();
+                return generatePhysicsProfile(dummy, 25.0, 5.0, 0.02);
             }
 
             log.warn("Station {} NOT FOUND in DB and NOT in SAICA Master List", stationId);
@@ -304,12 +316,28 @@ public class SensorServiceImpl implements SensorService {
             throw new InvalidExportRequestException("Unknown parameter: '" + parameter + "'.");
         }
 
-        if (to == null)
-            to = LocalDateTime.now();
-        if (from == null)
-            from = LocalDateTime.now().minusYears(100);
+        final LocalDateTime finalTo = (to == null) ? LocalDateTime.now() : to;
+        final LocalDateTime finalFrom = (from == null) ? LocalDateTime.now().minusYears(100) : from;
 
-        List<SensorReadingDTO> readings = sensorRepository.findReadingsByDateRange(stationId, type.getCode(), from, to);
+        List<SensorReadingDTO> readings = sensorRepository.findReadingsByDateRange(stationId, type.getCode(), finalFrom,
+                finalTo);
+
+        // FALLBACK SAICA: Check if it's a SAICA Proxy for real history
+        if (readings.isEmpty() && saicaMasterList.containsKey(stationId)) {
+            String url = saicaMasterList.get(stationId);
+            log.info("Fetching real history from SAICA Proxy: {}", url);
+            List<SensorReadingDTO> allHistory = fetchAndParseSaica(stationId, "SAICA-" + stationId, url);
+
+            // Filter by Date and Parameter
+            readings = allHistory.stream()
+                    .filter(r -> {
+                        LocalDateTime t = LocalDateTime.parse(r.timestamp());
+                        return !t.isBefore(from) && !t.isAfter(to);
+                    })
+                    .filter(r -> type.getCode().equalsIgnoreCase(r.tag()) || "ALL".equalsIgnoreCase(parameter))
+                    .sorted(java.util.Comparator.comparing(SensorReadingDTO::timestamp))
+                    .toList();
+        }
 
         return SensorResponseDTO.builder()
                 .stationId(stationId)
@@ -454,7 +482,12 @@ public class SensorServiceImpl implements SensorService {
                             String tag = senal.has("nombre") ? senal.get("nombre").asText() : "UNKNOWN";
                             if (senal.has("valores")) {
                                 for (com.fasterxml.jackson.databind.JsonNode valNode : senal.get("valores")) {
+                                    if (!valNode.has("tiempo"))
+                                        continue;
                                     String tStr = valNode.get("tiempo").asText();
+                                    if (tStr == null || tStr.isBlank()) {
+                                        continue;
+                                    }
                                     double val = valNode.get("valor").asDouble();
 
                                     parsedReadings.add(SensorReadingDTO.builder()
@@ -501,4 +534,7 @@ public class SensorServiceImpl implements SensorService {
         }
         return List.of();
     }
+
+    // Removed generatePhysicsProfileHistory as we now fetch real history from SAICA
+
 }

@@ -77,10 +77,17 @@
         <Separator orientation="VERTICAL"/>
 
         <StackPane HBox.hgrow="ALWAYS">
-             <LineChart fx:id="levelChart" title="Nivel de Agua (h) - Tiempo Real" createSymbols="false">
-                <xAxis><CategoryAxis label="Tiempo"/></xAxis>
-                <yAxis><NumberAxis label="Metros"/></yAxis>
-            </LineChart>
+             <BorderPane>
+                 <top>
+
+                 </top>
+                 <center>
+                     <LineChart fx:id="levelChart" createSymbols="false">
+                        <xAxis><CategoryAxis label="Tiempo"/></xAxis>
+                        <yAxis><NumberAxis label="Metros"/></yAxis>
+                    </LineChart>
+                 </center>
+             </BorderPane>
             
             <fx:include source="../../components/leaflet-map.fxml" fx:id="embeddedMap" visible="false" managed="false"/>
         </StackPane>
