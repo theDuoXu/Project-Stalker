@@ -20,8 +20,12 @@ public class ApiClientConfig {
 
     @Bean
     public WebClient apiClient(WebClient.Builder builder, AuthenticationService authService) {
+        reactor.netty.http.client.HttpClient httpClient = reactor.netty.http.client.HttpClient.create()
+                .responseTimeout(java.time.Duration.ofSeconds(60));
+
         return builder
                 .baseUrl(apiBaseUrl)
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(httpClient))
                 .filter(addBearerToken(authService))
                 .build();
     }

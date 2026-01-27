@@ -24,24 +24,36 @@ public class RuleEngine {
     /**
      * Evalúa una lectura entrante y genera alertas si es necesario.
      */
-    public void evaluate(SensorEntity sensor, String parameter, double value) {
+    /**
+     * Evalúa una lectura entrante y genera alertas si es necesario.
+     */
+    public java.util.Optional<AlertEntity> evaluate(SensorEntity sensor, String parameter, double value) {
+        return evaluate(sensor, parameter, value, java.time.LocalDateTime.now());
+    }
+
+    public java.util.Optional<AlertEntity> evaluate(SensorEntity sensor, String parameter, double value,
+            java.time.LocalDateTime timestamp) {
         String paramUpper = parameter.toUpperCase();
 
         // 1. Hard Limits (Physics)
-        checkHardLimits(sensor, paramUpper, value);
+        var alert = checkHardLimits(sensor, paramUpper, value, timestamp);
+        if (alert.isPresent())
+            return alert;
 
         // 2. Rolling Z-Score (Dynamic Config)
-        checkRollingZScore(sensor, paramUpper, value);
+        return checkRollingZScore(sensor, paramUpper, value, timestamp);
     }
 
-    private void createAlert(SensorEntity sensor, AlertEntity.AlertSeverity severity, String message, String metric) {
+    private java.util.Optional<AlertEntity> createAlert(SensorEntity sensor, AlertEntity.AlertSeverity severity,
+            String message, String metric,
+            java.time.LocalDateTime eventTime) {
         // Idempotency Check: 1 alert per metric per sensor per day
         java.time.LocalDateTime startOfDay = java.time.LocalDate.now().atStartOfDay();
         boolean exists = alertRepository.existsBySensorIdAndMetricAndTimestampAfter(sensor.getId(), metric, startOfDay);
 
-        if (exists && severity != AlertEntity.AlertSeverity.INFO) { // Allow INFO repeatedly? Maybe not.
+        if (exists && severity != AlertEntity.AlertSeverity.INFO) {
             log.debug("Duplicate alert suppressed for {} {}: {}", sensor.getName(), metric, message);
-            return;
+            return java.util.Optional.empty();
         }
 
         AlertEntity alert = AlertEntity.builder()
@@ -50,50 +62,41 @@ public class RuleEngine {
                 .severity(severity)
                 .message(message)
                 .status(AlertEntity.AlertStatus.NEW)
-                .timestamp(java.time.LocalDateTime.now())
+                .timestamp(eventTime != null ? eventTime : java.time.LocalDateTime.now())
                 .build();
-        alertRepository.save(alert);
-        log.info("Alert generated for sensor {}: {}", sensor.getName(), message);
+        return java.util.Optional.of(alertRepository.save(alert));
     }
 
-    private void checkHardLimits(SensorEntity sensor, String parameter, double value) {
+    private java.util.Optional<AlertEntity> checkHardLimits(SensorEntity sensor, String parameter, double value,
+            java.time.LocalDateTime timestamp) {
         var configOpt = ruleConfigRepository.findByMetric(parameter);
 
         // Check Min Limit
         if (configOpt.isPresent() && configOpt.get().getMinLimit() != null) {
             if (value < configOpt.get().getMinLimit()) {
-                createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL,
+                return createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL,
                         String.format("Valor por debajo del límite físico (%s): %.2f < %.2f",
                                 parameter, value, configOpt.get().getMinLimit()),
-                        parameter);
+                        parameter, timestamp);
             }
-        } else if ("PH".equals(parameter) && value < 6.5) { // Fallback Legacy
-            createAlert(sensor, AlertEntity.AlertSeverity.WARNING,
-                    String.format("pH fuera de rango aceptable (Legacy): %.2f < 6.5", value), parameter);
         }
 
         // Check Max Limit
         if (configOpt.isPresent() && configOpt.get().getMaxLimit() != null) {
             if (value > configOpt.get().getMaxLimit()) {
-                createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL,
+                return createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL,
                         String.format("Valor por encima del límite físico (%s): %.2f > %.2f",
                                 parameter, value, configOpt.get().getMaxLimit()),
-                        parameter);
-            }
-        } else {
-            // Fallback Legacy
-            if ("PH".equals(parameter) && value > 9.0) {
-                createAlert(sensor, AlertEntity.AlertSeverity.WARNING,
-                        String.format("pH fuera de rango aceptable (Legacy): %.2f > 9.0", value), parameter);
-            }
-            if ("TEMPERATURE".equals(parameter) && value > 35.0) {
-                createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL,
-                        String.format("Temperatura crítica detectada (Legacy): %.2f > 35.0", value), parameter);
+                        parameter, timestamp);
             }
         }
+
+        return java.util.Optional.empty();
     }
 
-    private void checkRollingZScore(SensorEntity sensor, String parameter, double currentValue) {
+    private java.util.Optional<AlertEntity> checkRollingZScore(SensorEntity sensor, String parameter,
+            double currentValue,
+            java.time.LocalDateTime timestamp) {
         // Fetch Configuration
         var configOpt = ruleConfigRepository.findByMetric(parameter);
 
@@ -105,11 +108,11 @@ public class RuleEngine {
 
         // Fetch History based on Window Size
         java.util.List<projectstalker.compute.entity.SensorReadingEntity> history = readingRepository
-                .findBySensorIdAndParameterOrderByTimestampDesc(sensor.getId(), parameter,
+                .findBySensorIdAndParameterIgnoreCaseOrderByTimestampDesc(sensor.getId(), parameter,
                         org.springframework.data.domain.PageRequest.of(0, windowSize));
 
         if (history.size() < 10)
-            return; // Need minimum data points
+            return java.util.Optional.empty(); // Need minimum data points
 
         double[] values = history.stream()
                 .filter(r -> r.getValue() > 0 || !useLog)
@@ -117,7 +120,7 @@ public class RuleEngine {
                 .toArray();
 
         if (values.length < 10)
-            return;
+            return java.util.Optional.empty();
 
         // Calculate Stats
         double mean = 0.0;
@@ -131,7 +134,7 @@ public class RuleEngine {
         double stdDev = Math.sqrt(sumSq / values.length);
 
         if (stdDev == 0)
-            return;
+            return java.util.Optional.empty();
 
         // Normalize current
         double currentTransformed = useLog ? (currentValue > 0 ? Math.log(currentValue) : mean) : currentValue;
@@ -140,8 +143,10 @@ public class RuleEngine {
         if (Math.abs(zScore) > threshold) {
             String msg = String.format("Anomalía Estadística (%s): Valor %.2f (Z-Score: %.1f%s > %.1f)",
                     parameter, currentValue, zScore, useLog ? ", Log-Norm" : "", threshold);
-            createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL, msg, parameter);
+            return createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL, msg, parameter, timestamp);
         }
+
+        return java.util.Optional.empty();
     }
 
 }

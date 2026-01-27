@@ -32,7 +32,11 @@ public class SecurityConfig {
                                                                 ApiRoutes.API_DOCS + "/**",
                                                                 ApiRoutes.SWAGGER_UI + "/**",
                                                                 ApiRoutes.PUBLIC + "/**",
-                                                                "/api/iot/**" // Permite Mock IoT Devices
+                                                                "/api/iot/**", // Permite Mock IoT Devices
+                                                                "/api/rules/**", // Permite JavaFX client access to
+                                                                                 // rules
+                                                                "/api/alerts/**" // Permite JavaFX client access to
+                                                                                 // alerts
                                                 ).permitAll()
 
                                                 // 2. SENSORES (Concatenamos sub-rutas específicas)

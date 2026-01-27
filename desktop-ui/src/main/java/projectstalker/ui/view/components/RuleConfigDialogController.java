@@ -30,13 +30,10 @@ public class RuleConfigDialogController {
     private TableColumn<RuleViewModel, Double> colThreshold;
     @FXML
     private TableColumn<RuleViewModel, Integer> colWindow;
-    /*
-     * @FXML
-     * private TableColumn<RuleViewModel, Double> colMin;
-     * 
-     * @FXML
-     * private TableColumn<RuleViewModel, Double> colMax;
-     */
+    @FXML
+    private TableColumn<RuleViewModel, Double> colMin;
+    @FXML
+    private TableColumn<RuleViewModel, Double> colMax;
 
     private final ObservableList<RuleViewModel> rulesList = FXCollections.observableArrayList();
 
@@ -63,11 +60,22 @@ public class RuleConfigDialogController {
             private final Spinner<Double> spinner = new Spinner<>(2.0, 10.0, 4.0, 0.5);
             {
                 spinner.setEditable(true);
+                // Commit on value change (Spinner arrows)
                 spinner.valueProperty().addListener((obs, old, val) -> {
-                    if (getIndex() >= 0 && getIndex() < getTableView().getItems().size()) {
-                        getTableView().getItems().get(getIndex()).setThresholdSigma(val);
+                    commit(val);
+                });
+                // Commit on focus lost (Text editing)
+                spinner.getEditor().focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
+                    if (!isNowFocused) {
+                        commit(spinner.getValue());
                     }
                 });
+            }
+
+            private void commit(Double val) {
+                if (getIndex() >= 0 && getIndex() < getTableView().getItems().size()) {
+                    getTableView().getItems().get(getIndex()).setThresholdSigma(val);
+                }
             }
 
             @Override
@@ -88,11 +96,22 @@ public class RuleConfigDialogController {
             private final Spinner<Integer> spinner = new Spinner<>(3, 200, 3, 1);
             {
                 spinner.setEditable(true);
+                // Commit on value change
                 spinner.valueProperty().addListener((obs, old, val) -> {
-                    if (getIndex() >= 0 && getIndex() < getTableView().getItems().size()) {
-                        getTableView().getItems().get(getIndex()).setWindowSize(val);
+                    commit(val);
+                });
+                // Commit on focus lost
+                spinner.getEditor().focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
+                    if (!isNowFocused) {
+                        commit(spinner.getValue());
                     }
                 });
+            }
+
+            private void commit(Integer val) {
+                if (getIndex() >= 0 && getIndex() < getTableView().getItems().size()) {
+                    getTableView().getItems().get(getIndex()).setWindowSize(val);
+                }
             }
 
             @Override
@@ -107,6 +126,59 @@ public class RuleConfigDialogController {
             }
         });
 
+        configureMinMaxColumns();
+    }
+
+    private void configureDoubleColumn(TableColumn<RuleViewModel, Double> column,
+            java.util.function.Function<RuleViewModel, javafx.beans.property.ObjectProperty<Double>> propertyExtractor) {
+
+        column.setCellValueFactory(cellData -> propertyExtractor.apply(cellData.getValue()));
+        column.setCellFactory(col -> new TableCell<>() {
+            private final TextField textField = new TextField();
+
+            {
+                textField.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
+                    if (!isNowFocused) {
+                        commitAndSave(textField.getText());
+                    }
+                });
+                textField.setOnAction(e -> commitAndSave(textField.getText()));
+            }
+
+            private void commitAndSave(String text) {
+                try {
+                    Double val = Double.parseDouble(text);
+                    if (getIndex() >= 0 && getIndex() < getTableView().getItems().size()) {
+                        propertyExtractor.apply(getTableView().getItems().get(getIndex())).set(val);
+                    }
+                } catch (NumberFormatException e) {
+                    // ignore invalid input, maybe reset to old val
+                    if (getItem() != null) {
+                        textField.setText(getItem().toString());
+                    }
+                }
+            }
+
+            @Override
+            protected void updateItem(Double item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    if (item != null) {
+                        textField.setText(item.toString());
+                    } else {
+                        textField.setText("");
+                    }
+                    setGraphic(textField);
+                }
+            }
+        });
+    }
+
+    private void configureMinMaxColumns() {
+        configureDoubleColumn(colMin, RuleViewModel::minLimitProperty);
+        configureDoubleColumn(colMax, RuleViewModel::maxLimitProperty);
     }
 
     private void loadRules() {
@@ -121,24 +193,73 @@ public class RuleConfigDialogController {
                                 "FICOCIANINAS", "NIVEL", "FOSFATOS", "NITRATOS");
 
                         java.util.Map<String, RuleConfigDTO> existingMap = list.stream()
-                                .filter(d -> d.metric() != null)
-                                .collect(java.util.stream.Collectors.toMap(RuleConfigDTO::metric, d -> d, (a, b) -> a)); // Fix
-                                                                                                                         // Duplicate
-                                                                                                                         // Key
-                                                                                                                         // if
-                                                                                                                         // DB
-                                                                                                                         // has
-                                                                                                                         // dupes
+                                .filter(d -> d.getMetric() != null)
+                                .collect(java.util.stream.Collectors.toMap(RuleConfigDTO::getMetric, d -> d,
+                                        (a, b) -> a));
 
                         for (String metric : allMetrics) {
                             if (existingMap.containsKey(metric)) {
                                 rulesList.add(new RuleViewModel(existingMap.get(metric)));
                             } else {
-                                // Create default view model for missing metric
+                                // Defaults per user request
+                                double min = 0.0;
+                                double max = 100.0; // Default fallback
                                 boolean isLog = "AMONIO".equals(metric) || "CONDUCTIVIDAD".equals(metric)
-                                        || "TURBIDEZ".equals(metric); // Simplified guess
+                                        || "TURBIDEZ".equals(metric);
+
+                                switch (metric) {
+                                    case "AMONIO" -> {
+                                        min = 0.0;
+                                        max = 20.0;
+                                    }
+                                    case "CARBONO ORGANICO" -> {
+                                        min = 0.0;
+                                        max = 50.0;
+                                    }
+                                    case "CLOROFILA" -> {
+                                        min = 0.0;
+                                        max = 500.0;
+                                    }
+                                    case "CONDUCTIVIDAD" -> {
+                                        min = 20.0;
+                                        max = 5000.0;
+                                    }
+                                    case "FICOCIANINAS" -> {
+                                        min = 0.0;
+                                        max = 1000.0;
+                                    }
+                                    case "FOSFATOS" -> {
+                                        min = 0.0;
+                                        max = 10.0;
+                                    }
+                                    case "NITRATOS" -> {
+                                        min = 0.0;
+                                        max = 250.0;
+                                    }
+                                    case "NIVEL" -> {
+                                        min = 0.0;
+                                        max = 20.0;
+                                    }
+                                    case "OXIGENO DISUELTO" -> {
+                                        min = 0.0;
+                                        max = 20.0;
+                                    }
+                                    case "PH" -> {
+                                        min = 4.0;
+                                        max = 10.5;
+                                    }
+                                    case "TEMPERATURA" -> {
+                                        min = 0.0;
+                                        max = 38.0;
+                                    }
+                                    case "TURBIDEZ" -> {
+                                        min = 0.0;
+                                        max = 2000.0;
+                                    }
+                                }
+
                                 RuleViewModel vm = new RuleViewModel(
-                                        new RuleConfigDTO(null, metric, isLog, 4.0, 5, null, null)); // Default 5 hours
+                                        new RuleConfigDTO(null, metric, isLog, 4.0, 5, min, max));
                                 rulesList.add(vm);
                             }
                         }
@@ -151,16 +272,43 @@ public class RuleConfigDialogController {
                 });
     }
 
+    private Runnable onSaveCallback;
+
+    public void setOnSaveCallback(Runnable callback) {
+        this.onSaveCallback = callback;
+    }
+
     @FXML
     public void onSave() {
-        // Save all
-        rulesList.forEach(vm -> {
-            RuleConfigDTO dto = vm.toDTO();
-            ruleService.saveRule(dto)
-                    .subscribe(saved -> log.info("Saved rule for {}", saved.metric()));
-        });
+        // Collect DTOs first to avoid modification during iteration
+        java.util.List<RuleConfigDTO> dtos = rulesList.stream()
+                .map(RuleViewModel::toDTO)
+                .filter(dto -> dto.getMetric() != null && !dto.getMetric().isEmpty())
+                .toList();
 
-        onClose();
+        log.info("Saving {} rules...", dtos.size());
+
+        // Use Flux to save all SEQUENTIALLY (concatMap) to avoid overloading the
+        // backend
+        reactor.core.publisher.Flux.fromIterable(dtos)
+                .concatMap(dto -> {
+                    log.info("Saving DTO: {}", dto.getMetric());
+                    return ruleService.saveRule(dto);
+                })
+                .collectList() // Wait for all to complete
+                .subscribe(savedList -> {
+                    log.info("Successfully saved {} rules. Triggering refresh.", savedList.size());
+                    javafx.application.Platform.runLater(() -> {
+                        if (onSaveCallback != null) {
+                            onSaveCallback.run();
+                        }
+                        onClose();
+                    });
+                }, err -> {
+                    log.error("Error saving rules", err);
+                    // Allow close anyway or show alert? For now log and close.
+                    javafx.application.Platform.runLater(this::onClose);
+                });
     }
 
     @FXML
@@ -180,13 +328,13 @@ public class RuleConfigDialogController {
         private final ObjectProperty<Double> maxLimit = new SimpleObjectProperty<>();
 
         public RuleViewModel(RuleConfigDTO dto) {
-            this.id = dto.id();
-            this.metric.set(dto.metric());
-            this.useLog.set(dto.useLog());
-            this.thresholdSigma.set(dto.thresholdSigma());
-            this.windowSize.set(dto.windowSize());
-            this.minLimit.set(dto.minLimit());
-            this.maxLimit.set(dto.maxLimit());
+            this.id = dto.getId();
+            this.metric.set(dto.getMetric());
+            this.useLog.set(dto.isUseLog());
+            this.thresholdSigma.set(dto.getThresholdSigma());
+            this.windowSize.set(dto.getWindowSize());
+            this.minLimit.set(dto.getMinLimit());
+            this.maxLimit.set(dto.getMaxLimit());
         }
 
         public RuleConfigDTO toDTO() {

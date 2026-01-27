@@ -14,23 +14,23 @@ import java.util.UUID;
 
 @Slf4j
 @Service
+@lombok.RequiredArgsConstructor
 public class AlertClientService {
 
-    private final org.springframework.web.reactive.function.client.WebClient webClient;
+    private final org.springframework.web.reactive.function.client.WebClient apiClient;
 
-    public AlertClientService(org.springframework.web.reactive.function.client.WebClient.Builder webClientBuilder) {
-        this.webClient = webClientBuilder.baseUrl("http://localhost:8080").build();
-    }
+    // Manual constructor removed in favor of @RequiredArgsConstructor and injected
+    // client
 
     public Flux<AlertDTO> getActiveAlerts() {
-        return webClient.get()
+        return apiClient.get()
                 .uri("/api/alerts/active")
                 .retrieve()
                 .bodyToFlux(AlertDTO.class);
     }
 
     public Mono<Void> acknowledgeAlert(String alertId) {
-        return webClient.post()
+        return apiClient.post()
                 .uri("/api/alerts/{id}/ack", alertId)
                 .retrieve()
                 .bodyToMono(Void.class);

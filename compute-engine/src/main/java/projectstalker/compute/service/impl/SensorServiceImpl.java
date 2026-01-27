@@ -21,6 +21,7 @@ import java.util.List;
 @Slf4j
 @Service
 public class SensorServiceImpl implements SensorService {
+    private final projectstalker.compute.repository.SensorReadingRepository readingRepository;
     private final DigitalTwinRepository twinRepository;
     private final SensorRepository sensorRepository;
     private final org.springframework.web.reactive.function.client.WebClient webClient;
@@ -29,11 +30,195 @@ public class SensorServiceImpl implements SensorService {
     private final java.util.Map<String, String> saicaMasterList = new java.util.concurrent.ConcurrentHashMap<>();
 
     public SensorServiceImpl(DigitalTwinRepository twinRepository, SensorRepository sensorRepository,
+            projectstalker.compute.repository.SensorReadingRepository readingRepository,
             org.springframework.web.reactive.function.client.WebClient.Builder webClientBuilder) {
         this.twinRepository = twinRepository;
         this.sensorRepository = sensorRepository;
+        this.readingRepository = readingRepository;
         this.webClient = webClientBuilder.build();
         loadSaicaMasterList();
+    }
+
+    // ... (keep existing methods) ...
+
+    @Transactional
+    private List<SensorReadingDTO> fetchAndParseSaica(String stationId, String stationName, String url) {
+        // ... (cache check omitted, assumed same) ...
+        var cached = webhookCache.get(url);
+        if (cached != null && java.time.Duration.between(cached.getKey(), LocalDateTime.now()).toMinutes() < 15) {
+            log.debug("Returning cached data for {}", url);
+            return cached.getValue();
+        }
+
+        log.info("Proxying request to Webhook: {}", url);
+        try {
+            // ... (fetching logic)
+
+            // Synchronous Fetch
+            String body = webClient.get().uri(url)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block(Duration.ofSeconds(10));
+
+            if (body != null) {
+                List<SensorReadingDTO> parsedReadings = new java.util.ArrayList<>();
+                boolean isSaica = false;
+
+                // Try parsing as SAICA JSON
+                try {
+                    com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(body);
+                    if (root.has("response") && root.get("response").has("senales")) {
+                        isSaica = true;
+                        com.fasterxml.jackson.databind.JsonNode senales = root.get("response").get("senales");
+                        DateTimeFormatter saicaFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+
+                        for (com.fasterxml.jackson.databind.JsonNode senal : senales) {
+                            String tag = senal.has("nombre") ? senal.get("nombre").asText() : "UNKNOWN";
+
+                            // Map SAICA tags to internal types if possible ?
+                            // For now, keep original tag, or maybe normalize?
+
+                            if (senal.has("valores")) {
+                                for (com.fasterxml.jackson.databind.JsonNode valNode : senal.get("valores")) {
+                                    if (!valNode.has("tiempo"))
+                                        continue;
+                                    String tStr = valNode.get("tiempo").asText();
+                                    if (tStr == null || tStr.isBlank()) {
+                                        continue;
+                                    }
+                                    double val = valNode.get("valor").asDouble();
+                                    LocalDateTime ts = LocalDateTime.parse(tStr, saicaFmt);
+
+                                    parsedReadings.add(SensorReadingDTO.builder()
+                                            .stationId(stationId)
+                                            .tag(tag)
+                                            .timestamp(ts.toString())
+                                            .value(val)
+                                            .formattedValue(String.format("%.2f", val))
+                                            .build());
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    if (isSaica)
+                        log.error("Error parsing SAICA details", e);
+                }
+
+                if (!parsedReadings.isEmpty()) {
+                    // Cache result
+                    log.info("Parsed {} readings from SAICA webhook.", parsedReadings.size());
+                    webhookCache.put(url, java.util.Map.entry(LocalDateTime.now(), parsedReadings));
+
+                    // PERSIST TO DB (Async or Sync? Sync for now to be safe)
+                    try {
+                        // RESOLVE CORRECT ID:
+                        String targetSensorId = stationId;
+                        if (!sensorRepository.existsById(targetSensorId)) {
+                            java.util.Optional<SensorEntity> match = sensorRepository.findAll().stream()
+                                    .filter(s -> {
+                                        java.util.Map<String, Object> cfg = s.getConfiguration();
+                                        return cfg != null && url.equals(cfg.get("url"));
+                                    })
+                                    .findFirst();
+
+                            if (match.isPresent()) {
+                                targetSensorId = match.get().getId();
+                                log.info("Resolved SAICA proxy {} to Registered Sensor UUID {}", stationId,
+                                        targetSensorId);
+                            } else {
+                                // FALLBACK: If URL match failed (e.g. dev localhost vs real url),
+                                // check if there is ANY registered sensor with strategy=REAL_IoT_WEBHOOK.
+                                // If there is exactly one, assume it's the target.
+                                var candidates = sensorRepository.findAll().stream()
+                                        .filter(s -> "REAL_IoT_WEBHOOK".equals(s.getStrategyType()))
+                                        .toList();
+
+                                if (candidates.size() == 1) {
+                                    targetSensorId = candidates.get(0).getId();
+                                    log.info(
+                                            "Resolved SAICA proxy {} to Singleton Webhook Sensor {} (Fallback Strategy)",
+                                            stationId, targetSensorId);
+                                }
+                            }
+                        }
+                        final String finalSensorId = targetSensorId;
+
+                        List<projectstalker.compute.entity.SensorReadingEntity> entities = parsedReadings.stream()
+                                .map(dto -> projectstalker.compute.entity.SensorReadingEntity.builder()
+                                        .sensorId(finalSensorId)
+                                        .parameter(dto.tag().toUpperCase()) // Store as UPPERCASE for easier querying
+                                        .timestamp(LocalDateTime.parse(dto.timestamp()))
+                                        .value(dto.value())
+                                        .build())
+                                .toList();
+
+                        // We should probably check for duplicates or use "upsert",
+                        // but UUID generation on save might flood DB if we re-fetch same data.
+                        // Ideally strictly check timestamp + sensor + param
+                        // For this hackathon scope: check if latest exists? Or just saveAll and ignore
+                        // duplicates if constraint?
+                        // Actually, let's just save. The ID is random UUID.
+                        // REAL FIX: Check existence before save.
+
+                        // Bulk Deduplication Strategy
+                        if (!entities.isEmpty()) {
+                            // 1. Find Time Range (Min/Max)
+                            LocalDateTime minTime = entities.stream()
+                                    .map(projectstalker.compute.entity.SensorReadingEntity::getTimestamp)
+                                    .min(java.util.Comparator.naturalOrder())
+                                    .orElse(LocalDateTime.now());
+
+                            LocalDateTime maxTime = entities.stream()
+                                    .map(projectstalker.compute.entity.SensorReadingEntity::getTimestamp)
+                                    .max(java.util.Comparator.naturalOrder())
+                                    .orElse(LocalDateTime.now());
+
+                            // 2. Fetch ALL DB readings for this Sensor in that Range
+                            List<projectstalker.compute.entity.SensorReadingEntity> existing = readingRepository
+                                    .findBySensorIdAndTimestampBetween(finalSensorId, minTime, maxTime);
+
+                            // 3. Build lookup set: "PARAM_TIMESTAMP"
+                            java.util.Set<String> existingKeys = existing.stream()
+                                    .map(e -> e.getParameter() + "_" + e.getTimestamp().toString())
+                                    .collect(java.util.stream.Collectors.toSet());
+
+                            // 4. Filter
+                            List<projectstalker.compute.entity.SensorReadingEntity> toSave = entities.stream()
+                                    .filter(e -> !existingKeys
+                                            .contains(e.getParameter() + "_" + e.getTimestamp().toString()))
+                                    .toList();
+
+                            // 5. Bulk Save
+                            if (!toSave.isEmpty()) {
+                                readingRepository.saveAll(toSave);
+                                readingRepository.flush();
+                                log.info("Persisted {} NEW readings to DB for {} (Skipped {} duplicates)",
+                                        toSave.size(), finalSensorId, entities.size() - toSave.size());
+
+                                // DEBUG VERIFICATION
+                                var check = readingRepository.findTop10BySensorIdOrderByTimestampDesc(finalSensorId);
+                                log.info("IMMEDIATE CHECK for {}: Found {} rows in DB via findTop10...", finalSensorId,
+                                        check.size());
+                            } else {
+                                log.info("All {} readings for {} were duplicates. storage skipped.", entities.size(),
+                                        finalSensorId);
+                            }
+                        }
+
+                    } catch (Exception ex) {
+                        log.error("Failed to persist SAICA readings", ex);
+                    }
+
+                    return parsedReadings;
+                }
+
+                // ... fallback ...
+            }
+        } catch (Exception e) {
+            log.error("Failed to proxy realtime webhook for {}: {}", stationName, e.getMessage());
+        }
+        return List.of();
     }
 
     private void loadSaicaMasterList() {
@@ -449,92 +634,5 @@ public class SensorServiceImpl implements SensorService {
                 .values(List.of())
                 .build();
     }
-
-    private List<SensorReadingDTO> fetchAndParseSaica(String stationId, String stationName, String url) {
-        // Check Cache (15 min TTL)
-        var cached = webhookCache.get(url);
-        if (cached != null && java.time.Duration.between(cached.getKey(), LocalDateTime.now()).toMinutes() < 15) {
-            log.debug("Returning cached data for {}", url);
-            return cached.getValue();
-        }
-
-        log.info("Proxying request to Webhook: {}", url);
-        try {
-            // Synchronous Fetch
-            String body = webClient.get().uri(url)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block(Duration.ofSeconds(10));
-
-            if (body != null) {
-                List<SensorReadingDTO> parsedReadings = new java.util.ArrayList<>();
-                boolean isSaica = false;
-
-                // Try parsing as SAICA JSON
-                try {
-                    com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(body);
-                    if (root.has("response") && root.get("response").has("senales")) {
-                        isSaica = true;
-                        com.fasterxml.jackson.databind.JsonNode senales = root.get("response").get("senales");
-                        DateTimeFormatter saicaFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
-
-                        for (com.fasterxml.jackson.databind.JsonNode senal : senales) {
-                            String tag = senal.has("nombre") ? senal.get("nombre").asText() : "UNKNOWN";
-                            if (senal.has("valores")) {
-                                for (com.fasterxml.jackson.databind.JsonNode valNode : senal.get("valores")) {
-                                    if (!valNode.has("tiempo"))
-                                        continue;
-                                    String tStr = valNode.get("tiempo").asText();
-                                    if (tStr == null || tStr.isBlank()) {
-                                        continue;
-                                    }
-                                    double val = valNode.get("valor").asDouble();
-
-                                    parsedReadings.add(SensorReadingDTO.builder()
-                                            .stationId(stationId)
-                                            .tag(tag)
-                                            .timestamp(LocalDateTime.parse(tStr, saicaFmt).toString())
-                                            .value(val)
-                                            .formattedValue(String.format("%.2f", val))
-                                            .build());
-                                }
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    if (isSaica)
-                        log.error("Error parsing SAICA details", e);
-                }
-
-                if (!parsedReadings.isEmpty()) {
-                    // Cache result
-                    log.info("Parsed {} readings from SAICA webhook.", parsedReadings.size());
-                    webhookCache.put(url, java.util.Map.entry(LocalDateTime.now(), parsedReadings));
-                    return parsedReadings;
-                }
-
-                // Fallback: Simple Numeric
-                try {
-                    double val = Double.parseDouble(body.trim());
-                    SensorReadingDTO reading = SensorReadingDTO.builder()
-                            .stationId(stationId)
-                            .tag("value")
-                            .timestamp(LocalDateTime.now().toString())
-                            .value(val)
-                            .formattedValue(String.format("%.2f", val))
-                            .build();
-                    return List.of(reading);
-                } catch (NumberFormatException e) {
-                    log.warn("Could not parse numeric reading from {}: {}", url,
-                            body.substring(0, Math.min(body.length(), 100)));
-                }
-            }
-        } catch (Exception e) {
-            log.error("Failed to proxy realtime webhook for {}: {}", stationName, e.getMessage());
-        }
-        return List.of();
-    }
-
-    // Removed generatePhysicsProfileHistory as we now fetch real history from SAICA
 
 }

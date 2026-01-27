@@ -139,4 +139,9 @@ public class MockSensorRepository implements SensorRepository {
     public Optional<SensorEntity> findById(String id) {
         return Optional.ofNullable(store.get(id));
     }
+
+    @Override
+    public List<SensorEntity> findAll() {
+        return new java.util.ArrayList<>(store.values());
+    }
 }

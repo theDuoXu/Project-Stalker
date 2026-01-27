@@ -45,6 +45,11 @@ public class SensorRepositoryImpl implements SensorRepository {
         return jpaSensorRepository.findById(id);
     }
 
+    @Override
+    public List<SensorEntity> findAll() {
+        return jpaSensorRepository.findAll();
+    }
+
     // =========================================================================
     // LECTURA REAL
     // =========================================================================

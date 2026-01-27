@@ -19,6 +19,7 @@ import java.util.Random;
 @RequiredArgsConstructor
 public class SensorScraper {
 
+    private final projectstalker.compute.service.SensorService sensorService;
     private final JpaSensorRepository jpaSensorRepository;
     private final SensorReadingRepository readingRepository;
     private final RuleEngine ruleEngine;
@@ -36,6 +37,7 @@ public class SensorScraper {
         this.webClient = webClientBuilder.build();
     }
 
+    // Run every 10 seconds for Demo purposes (Realtime feedback)
     // Run every 10 seconds for Demo purposes (Realtime feedback)
     @Scheduled(fixedDelay = 10000)
     public void scrapeSensors() {
@@ -68,28 +70,23 @@ public class SensorScraper {
 
     private void scrapeRealWebhook(SensorEntity sensor) {
         try {
-            java.util.Map<String, Object> config = sensor.getConfiguration();
-            if (config != null && config.containsKey("url")) {
-                String url = (String) config.get("url");
-                log.info("Scraping Real Sensor [{}]: URL: {}", sensor.getName(), url);
+            // Delegate to SensorService which has robust SAICA parsing and persistence
+            log.debug("Delegating scraping for {} to SensorService...", sensor.getName());
 
-                webClient.get().uri(url)
-                        .retrieve()
-                        .bodyToMono(String.class)
-                        .subscribe(responseBody -> {
-                            log.info("Received payload from {}: {}", url, responseBody);
-                            try {
-                                // Simple numeric parsing
-                                double val = Double.parseDouble(responseBody.trim());
-                                saveReading(sensor, "value", val);
-                                log.info("Saved reading for {}: {}", sensor.getName(), val);
-                            } catch (NumberFormatException e) {
-                                log.warn("Could not parse numeric reading from {}: {}", url, responseBody);
-                            }
-                        }, err -> log.error("Error scraping URL {}: {}", url, err.getMessage()));
-            } else {
-                log.warn("Sensor {} is REAL_IoT_WEBHOOK but has no URL configured.", sensor.getName());
+            // "ALL" fetches all parameters found in the webhook
+            List<projectstalker.domain.dto.sensor.SensorReadingDTO> readings = sensorService.getRealtime(sensor.getId(),
+                    "ALL");
+
+            for (var r : readings) {
+                // Readings are ALREADY saved to DB by SensorService.fetchAndParseSaica
+                // We just need to trigger Rule Engine
+                ruleEngine.evaluate(sensor, r.tag(), r.value());
             }
+
+            if (!readings.isEmpty()) {
+                log.info("Scraped and processed {} readings for {}", readings.size(), sensor.getName());
+            }
+
         } catch (Exception e) {
             log.error("Failed to process Real Webhook for {}", sensor.getName(), e);
         }

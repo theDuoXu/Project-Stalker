@@ -31,11 +31,13 @@ public interface SensorRepository {
     List<SensorHealthDTO> findHealthStatus(String stationId);
 
     /**
-     * Devuelve la salud de un sensor específico (en una lista de 1 elemento para consistencia).
+     * Devuelve la salud de un sensor específico (en una lista de 1 elemento para
+     * consistencia).
      */
     List<SensorHealthDTO> findHealthStatusByType(String stationId, SensorType type);
 
-    List<SensorReadingDTO> findReadingsByDateRange(String stationId, String parameter, LocalDateTime from, LocalDateTime to);
+    List<SensorReadingDTO> findReadingsByDateRange(String stationId, String parameter, LocalDateTime from,
+            LocalDateTime to);
 
     boolean existsById(String id);
 
@@ -50,8 +52,14 @@ public interface SensorRepository {
     List<SensorEntity> findAllByTwinId(String twinId);
 
     /**
-     * Buscar un sensor y devolver la entidad (útil para verificar antes de borrar/editar)
+     * Buscar un sensor y devolver la entidad (útil para verificar antes de
+     * borrar/editar)
      */
     Optional<SensorEntity> findById(String id);
+
+    /**
+     * Buscar todos los sensores registrados (para resolución interna de IDs)
+     */
+    List<SensorEntity> findAll();
 
 }

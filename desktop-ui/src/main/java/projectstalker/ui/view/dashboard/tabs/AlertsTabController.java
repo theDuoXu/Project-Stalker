@@ -187,10 +187,20 @@ public class AlertsTabController {
             loader.setControllerFactory(springContext::getBean);
             javafx.scene.Parent root = loader.load();
 
+            // Inject Refresh Callback
+            projectstalker.ui.view.components.RuleConfigDialogController controller = loader.getController();
+            controller.setOnSaveCallback(() -> {
+                log.info("Rule configuration saved. Refreshing alerts...");
+                alertsList.clear();
+                loadAlerts();
+            });
+
             javafx.stage.Stage stage = new javafx.stage.Stage();
             stage.initModality(javafx.stage.Modality.APPLICATION_MODAL);
             stage.setTitle("Configurar Reglas de Alerta");
             stage.setScene(new javafx.scene.Scene(root));
+            stage.setMinWidth(900);
+            stage.setMinHeight(600);
             stage.showAndWait();
         } catch (java.io.IOException e) {
             log.error("Error opening rule config dialog", e);

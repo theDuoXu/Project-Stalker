@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import projectstalker.compute.entity.RuleConfigEntity;
+import projectstalker.compute.entity.SensorEntity;
+import projectstalker.compute.entity.SensorReadingEntity;
 import projectstalker.compute.repository.RuleConfigRepository;
 import projectstalker.domain.dto.rule.RuleConfigDTO;
 
@@ -59,19 +61,23 @@ public class RuleController {
 
         @PostMapping
         public RuleConfigDTO saveRule(@RequestBody RuleConfigDTO dto) {
-                log.info("Saving rule for metric: {}", dto.metric());
+                log.info("BACKEND RECEIVED DTO: {}", dto);
+                log.info("Saving rule for metric: {}", dto.getMetric());
 
-                RuleConfigEntity entity = repository.findByMetric(dto.metric())
+                RuleConfigEntity entity = repository.findByMetric(dto.getMetric())
                                 .orElse(new RuleConfigEntity());
 
-                entity.setMetric(dto.metric());
-                entity.setUseLog(dto.useLog());
-                entity.setThresholdSigma(dto.thresholdSigma());
-                entity.setWindowSize(dto.windowSize());
-                entity.setMinLimit(dto.minLimit());
-                entity.setMaxLimit(dto.maxLimit());
+                entity.setMetric(dto.getMetric());
+                entity.setUseLog(dto.isUseLog());
+                entity.setThresholdSigma(dto.getThresholdSigma());
+                entity.setWindowSize(dto.getWindowSize());
+                entity.setMinLimit(dto.getMinLimit());
+                entity.setMaxLimit(dto.getMaxLimit());
 
                 RuleConfigEntity saved = repository.save(entity);
+
+                // Trigger Re-evaluation
+                reprocessHistory(saved.getMetric());
 
                 return new RuleConfigDTO(
                                 saved.getId(),
@@ -81,5 +87,49 @@ public class RuleController {
                                 saved.getWindowSize(),
                                 saved.getMinLimit(),
                                 saved.getMaxLimit());
+        }
+
+        private final projectstalker.compute.service.RuleEngine ruleEngine;
+        private final projectstalker.compute.repository.sql.JpaSensorRepository sensorRepository;
+        private final projectstalker.compute.repository.SensorReadingRepository readingRepository;
+
+        private void reprocessHistory(String metric) {
+                log.info("Reprocessing history for metric: {} (Last 24h)", metric);
+                java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusHours(24);
+
+                // Get distinct sensor IDs that actually have readings in the database
+                List<String> sensorIds = readingRepository.findDistinctSensorIds();
+                log.info("Found {} distinct sensor IDs with readings", sensorIds.size());
+
+                for (String sensorId : sensorIds) {
+                        // Fetch readings (Case Insensitive for "PH" vs "pH")
+                        var readings = readingRepository.findBySensorIdAndParameterIgnoreCaseAndTimestampAfter(
+                                        sensorId, metric, cutoff);
+
+                        if (readings.isEmpty()) {
+                                continue; // Skip sensors with no readings for this metric
+                        }
+
+                        log.info("Sensor {}: Found {} readings for {}", sensorId, readings.size(), metric);
+
+                        // Try to find matching SensorEntity for context (optional)
+                        var sensorOpt = sensorRepository.findById(sensorId);
+                        SensorEntity sensor = sensorOpt.orElse(null);
+
+                        int alertsGenerated = 0;
+                        for (var r : readings) {
+                                var alert = ruleEngine.evaluate(sensor, metric, r.getValue(), r.getTimestamp());
+                                if (alert.isPresent()) {
+                                        alertsGenerated++;
+                                        log.info("Generated Historical Alert: {} at {}", alert.get().getMessage(),
+                                                        r.getTimestamp());
+                                }
+                        }
+                        if (alertsGenerated > 0) {
+                                log.info("Sensor {}: Generated {} alerts during reprocessing", sensorId,
+                                                alertsGenerated);
+                        }
+                }
+                log.info("Reprocessing complete for {}", metric);
         }
 }

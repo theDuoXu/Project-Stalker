@@ -345,7 +345,7 @@ public class QualityTabController {
         }
 
         javafx.animation.Timeline timeline = new javafx.animation.Timeline(
-                new javafx.animation.KeyFrame(javafx.util.Duration.seconds(4), ev -> {
+                new javafx.animation.KeyFrame(javafx.util.Duration.seconds(120), ev -> {
                     // Fetch Realtime
                     sensorService.getRealtime(stationId, "ALL")
                             .collectList()

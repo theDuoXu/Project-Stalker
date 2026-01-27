@@ -22,75 +22,82 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class RuleEngineTest {
 
-    @Mock
-    private AlertRepository alertRepository;
-    @Mock
-    private SensorReadingRepository readingRepository;
-    @Mock
-    private RuleConfigRepository ruleConfigRepository;
+        @Mock
+        private AlertRepository alertRepository;
+        @Mock
+        private SensorReadingRepository readingRepository;
+        @Mock
+        private RuleConfigRepository ruleConfigRepository;
 
-    @InjectMocks
-    private RuleEngine ruleEngine;
+        @InjectMocks
+        private RuleEngine ruleEngine;
 
-    private SensorEntity sensor;
+        private SensorEntity sensor;
 
-    @BeforeEach
-    void setUp() {
-        sensor = SensorEntity.builder().id("sensor-1").name("Sensor 1").build();
-    }
+        @BeforeEach
+        void setUp() {
+                sensor = SensorEntity.builder().id("sensor-1").name("Sensor 1").build();
+        }
 
-    @Test
-    void testHardMinLimitExceeded() {
-        String metric = "PH";
-        RuleConfigEntity config = RuleConfigEntity.builder()
-                .metric(metric)
-                .minLimit(6.0)
-                .maxLimit(8.0)
-                .build();
+        @Test
+        void testHardMinLimitExceeded() {
+                String metric = "PH";
+                RuleConfigEntity config = RuleConfigEntity.builder()
+                                .metric(metric)
+                                .minLimit(6.0)
+                                .maxLimit(8.0)
+                                .build();
 
-        when(ruleConfigRepository.findByMetric(metric)).thenReturn(Optional.of(config));
+                when(ruleConfigRepository.findByMetric(metric)).thenReturn(Optional.of(config));
+                // Trigger save, so we must mock it to return the entity (non-null)
+                when(alertRepository.save(any(AlertEntity.class))).thenAnswer(i -> i.getArguments()[0]);
 
-        ruleEngine.evaluate(sensor, metric, 5.0);
+                ruleEngine.evaluate(sensor, metric, 5.0);
 
-        verify(alertRepository).save(argThat(alert -> alert.getSeverity() == AlertEntity.AlertSeverity.CRITICAL &&
-                alert.getMessage().contains("Valor por debajo del límite físico")));
-    }
+                verify(alertRepository)
+                                .save(argThat(alert -> alert.getSeverity() == AlertEntity.AlertSeverity.CRITICAL &&
+                                                alert.getMessage().contains("Valor por debajo del límite físico")));
+        }
 
-    @Test
-    void testHardMaxLimitExceeded() {
-        String metric = "PH";
-        RuleConfigEntity config = RuleConfigEntity.builder()
-                .metric(metric)
-                .minLimit(6.0)
-                .maxLimit(8.0)
-                .build();
+        @Test
+        void testHardMaxLimitExceeded() {
+                String metric = "PH";
+                RuleConfigEntity config = RuleConfigEntity.builder()
+                                .metric(metric)
+                                .minLimit(6.0)
+                                .maxLimit(8.0)
+                                .build();
 
-        when(ruleConfigRepository.findByMetric(metric)).thenReturn(Optional.of(config));
+                when(ruleConfigRepository.findByMetric(metric)).thenReturn(Optional.of(config));
+                // Trigger save, so we must mock it to return the entity (non-null)
+                when(alertRepository.save(any(AlertEntity.class))).thenAnswer(i -> i.getArguments()[0]);
 
-        ruleEngine.evaluate(sensor, metric, 9.0);
+                ruleEngine.evaluate(sensor, metric, 9.0);
 
-        verify(alertRepository).save(argThat(alert -> alert.getSeverity() == AlertEntity.AlertSeverity.CRITICAL &&
-                alert.getMessage().contains("Valor por encima del límite físico")));
-    }
+                verify(alertRepository)
+                                .save(argThat(alert -> alert.getSeverity() == AlertEntity.AlertSeverity.CRITICAL &&
+                                                alert.getMessage().contains("Valor por encima del límite físico")));
+        }
 
-    @Test
-    void testWithinLimits() {
-        String metric = "PH";
-        RuleConfigEntity config = RuleConfigEntity.builder()
-                .metric(metric)
-                .minLimit(6.0)
-                .maxLimit(8.0)
-                .thresholdSigma(3.0)
-                .windowSize(10)
-                .build();
+        @Test
+        void testWithinLimits() {
+                String metric = "PH";
+                RuleConfigEntity config = RuleConfigEntity.builder()
+                                .metric(metric)
+                                .minLimit(6.0)
+                                .maxLimit(8.0)
+                                .thresholdSigma(3.0)
+                                .windowSize(10)
+                                .build();
 
-        when(ruleConfigRepository.findByMetric(metric)).thenReturn(Optional.of(config));
-        // Empty history so no z-score check
-        when(readingRepository.findBySensorIdAndParameterOrderByTimestampDesc(any(), any(), any()))
-                .thenReturn(java.util.Collections.emptyList());
+                when(ruleConfigRepository.findByMetric(metric)).thenReturn(Optional.of(config));
 
-        ruleEngine.evaluate(sensor, metric, 7.0);
+                // Use IgnoreCase version as used in RuleEngine
+                when(readingRepository.findBySensorIdAndParameterIgnoreCaseOrderByTimestampDesc(any(), any(), any()))
+                                .thenReturn(java.util.Collections.emptyList());
 
-        verify(alertRepository, never()).save(any());
-    }
+                ruleEngine.evaluate(sensor, metric, 7.0);
+
+                verify(alertRepository, never()).save(any());
+        }
 }

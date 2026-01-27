@@ -19,7 +19,7 @@ public class SensorReadingEntity {
     @Column(length = 36)
     private String id;
 
-    @Column(nullable = false)
+    @Column(name = "sensor_id", nullable = false)
     private String sensorId;
 
     @Column(nullable = false)

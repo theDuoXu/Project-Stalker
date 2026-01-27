@@ -10,7 +10,7 @@ import projectstalker.compute.repository.AlertRepository;
 import java.util.List;
 
 @RestController
-@RequestMapping("/alerts")
+@RequestMapping("/api/alerts")
 @RequiredArgsConstructor
 @Tag(name = "Sensores y Datos", description = "Alertas generadas por el sistema")
 public class AlertController {
