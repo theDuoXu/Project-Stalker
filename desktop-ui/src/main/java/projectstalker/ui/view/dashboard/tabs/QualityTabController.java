@@ -344,23 +344,32 @@ public class QualityTabController {
             activePolls.get(stationId).stop();
         }
 
+        // Initial Fetch immediately
+        pollSensorData(stationId, target);
+
         javafx.animation.Timeline timeline = new javafx.animation.Timeline(
                 new javafx.animation.KeyFrame(javafx.util.Duration.seconds(120), ev -> {
-                    // Fetch Realtime
-                    sensorService.getRealtime(stationId, "ALL")
-                            .collectList()
-                            .subscribe(readings -> {
-                                // Assuming we get a list, take first
-                                Platform.runLater(() -> {
-                                    if (!readings.isEmpty()) {
-                                        target.setText(readings.get(0).formattedValue());
-                                    }
-                                });
-                            }, err -> log.debug("Poll error: " + err.getMessage()));
+                    pollSensorData(stationId, target);
                 }));
         timeline.setCycleCount(javafx.animation.Animation.INDEFINITE);
         timeline.play();
         activePolls.put(stationId, timeline);
+    }
+
+    private void pollSensorData(String stationId, javafx.scene.control.Label target) {
+        sensorService.getRealtime(stationId, "ALL")
+                .collectList()
+                .subscribe(readings -> {
+                    // Assuming we get a list, take first
+                    Platform.runLater(() -> {
+                        if (!readings.isEmpty()) {
+                            target.setText(readings.get(0).formattedValue());
+                        } else {
+                            // Optional: indicate no data
+                            target.setText("--");
+                        }
+                    });
+                }, err -> log.debug("Poll error for {}: {}", stationId, err.getMessage()));
     }
 
     private void loadHeatmapPlaceholder() {
