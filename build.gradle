@@ -1,3 +1,5 @@
+import org.jetbrains.dokka.gradle.DokkaTaskPartial
+
 plugins {
     // Gestión de versiones para Spring Boot (no se aplica al root, solo gestión)
     id 'org.springframework.boot' version '3.2.4' apply false
@@ -6,6 +8,9 @@ plugins {
     id 'me.champeau.jmh' version '0.7.2' apply false
     // JavaFX (solo gestión)
     id 'org.openjfx.javafxplugin' version '0.1.0' apply false
+
+    id 'org.jetbrains.kotlin.jvm' version '1.9.20' apply false
+    id 'org.jetbrains.dokka' version '1.9.20'
 }
 
 allprojects {
@@ -22,10 +27,40 @@ subprojects {
     if (name != 'native-lib') {
         apply plugin: 'java'
         apply plugin: 'io.spring.dependency-management'
-
+        apply plugin: 'org.jetbrains.kotlin.jvm'
+        apply plugin: 'org.jetbrains.dokka'
         java {
             toolchain {
                 languageVersion = JavaLanguageVersion.of(21)
+            }
+        }
+
+        afterEvaluate { project ->
+            if (project.plugins.hasPlugin('java')) {
+                tasks.named('dokkaGfmPartial') {
+                    dokkaSourceSets.configureEach {
+                        // 1. Apuntamos explícitamente a src/main/java
+                        def javaSourceDir = project.file('src/main/java')
+                        if (javaSourceDir.exists()) {
+                            sourceRoots.from(javaSourceDir)
+                        }
+
+                        // 2. Classpath (vital para que Dokka entienda tus tipos)
+                        classpath.from(project.sourceSets.main.compileClasspath)
+
+                        // 3. Configuraciones para Java
+                        includeNonPublic.set(true)
+                        skipDeprecated.set(false)
+                        reportUndocumented.set(false) // Para reducir ruido
+                        skipEmptyPackages.set(true)   // Para evitar archivos vacíos
+
+                        // 4. Nombre del módulo
+                        moduleName.set(project.name)
+
+                        // 5. Configurar JDK 21
+                        jdkVersion.set(21)
+                    }
+                }
             }
         }
 
@@ -91,4 +126,7 @@ tasks.register('alljavadoc', Javadoc) {
 
     // Agregamos el classpath de los hijos
     classpath = files(javaProjects.collect { it.sourceSets.main.compileClasspath })
+}
+tasks.named("dokkaGfmMultiModule") {
+    outputDirectory.set(file("${layout.buildDirectory.get()}/docs/markdown-api"))
 }
