@@ -19,7 +19,7 @@ public class RuleEngine {
 
     // Default Fallbacks
     private static final double DEFAULT_SIGMA = 4.0;
-    private static final int DEFAULT_WINDOW = 50;
+    private static final int DEFAULT_WINDOW = 3;
 
     /**
      * Evalúa una lectura entrante y genera alertas si es necesario.
@@ -27,25 +27,44 @@ public class RuleEngine {
     public void evaluate(SensorEntity sensor, String parameter, double value) {
         String paramUpper = parameter.toUpperCase();
 
-        // 1. Static Thresholds (Legacy - Keep or move to DB later)
-        checkStaticThresholds(sensor, paramUpper, value);
+        // 1. Hard Limits (Physics)
+        checkHardLimits(sensor, paramUpper, value);
 
         // 2. Rolling Z-Score (Dynamic Config)
         checkRollingZScore(sensor, paramUpper, value);
     }
 
-    private void checkStaticThresholds(SensorEntity sensor, String parameter, double value) {
-        // Keep hardcoded for critical safety limits for now
-        if ("PH".equals(parameter)) {
-            if (value < 6.5 || value > 9.0) {
-                createAlert(sensor, AlertEntity.AlertSeverity.WARNING,
-                        String.format("pH fuera de rango aceptable: %.2f", value));
-            }
-        }
-        if ("TEMPERATURE".equals(parameter)) {
-            if (value > 35.0) {
+    private void checkHardLimits(SensorEntity sensor, String parameter, double value) {
+        var configOpt = ruleConfigRepository.findByMetric(parameter);
+
+        // Check Min Limit
+        if (configOpt.isPresent() && configOpt.get().getMinLimit() != null) {
+            if (value < configOpt.get().getMinLimit()) {
                 createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL,
-                        String.format("Temperatura crítica detectada: %.2f", value));
+                        String.format("Valor por debajo del límite físico (%s): %.2f < %.2f",
+                                parameter, value, configOpt.get().getMinLimit()));
+            }
+        } else if ("PH".equals(parameter) && value < 6.5) { // Fallback Legacy
+            createAlert(sensor, AlertEntity.AlertSeverity.WARNING,
+                    String.format("pH fuera de rango aceptable (Legacy): %.2f < 6.5", value));
+        }
+
+        // Check Max Limit
+        if (configOpt.isPresent() && configOpt.get().getMaxLimit() != null) {
+            if (value > configOpt.get().getMaxLimit()) {
+                createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL,
+                        String.format("Valor por encima del límite físico (%s): %.2f > %.2f",
+                                parameter, value, configOpt.get().getMaxLimit()));
+            }
+        } else {
+            // Fallback Legacy
+            if ("PH".equals(parameter) && value > 9.0) {
+                createAlert(sensor, AlertEntity.AlertSeverity.WARNING,
+                        String.format("pH fuera de rango aceptable (Legacy): %.2f > 9.0", value));
+            }
+            if ("TEMPERATURE".equals(parameter) && value > 35.0) {
+                createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL,
+                        String.format("Temperatura crítica detectada (Legacy): %.2f > 35.0", value));
             }
         }
     }
@@ -57,7 +76,8 @@ public class RuleEngine {
         boolean useLog = configOpt.map(c -> c.isUseLog())
                 .orElse("E.COLI".equals(parameter) || "AMMONIUM".equals(parameter)); // Default logic
         double threshold = configOpt.map(c -> c.getThresholdSigma()).orElse(DEFAULT_SIGMA);
-        int windowSize = configOpt.map(c -> c.getWindowSize()).orElse(DEFAULT_WINDOW);
+        int windowSize = configOpt.map(c -> c.getWindowSize() > 0 ? c.getWindowSize() : DEFAULT_WINDOW)
+                .orElse(DEFAULT_WINDOW);
 
         // Fetch History based on Window Size
         java.util.List<projectstalker.compute.entity.SensorReadingEntity> history = readingRepository

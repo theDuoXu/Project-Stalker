@@ -27,4 +27,10 @@ public class RuleConfigEntity {
 
     @Column(nullable = false)
     private int windowSize; // Rolling window size (e.g., 50)
+
+    @Column(nullable = true)
+    private Double minLimit; // Hard minimal limit
+
+    @Column(nullable = true)
+    private Double maxLimit; // Hard maximal limit
 }

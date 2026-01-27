@@ -30,6 +30,13 @@ public class RuleConfigDialogController {
     private TableColumn<RuleViewModel, Double> colThreshold;
     @FXML
     private TableColumn<RuleViewModel, Integer> colWindow;
+    /*
+     * @FXML
+     * private TableColumn<RuleViewModel, Double> colMin;
+     * 
+     * @FXML
+     * private TableColumn<RuleViewModel, Double> colMax;
+     */
 
     private final ObservableList<RuleViewModel> rulesList = FXCollections.observableArrayList();
 
@@ -78,7 +85,7 @@ public class RuleConfigDialogController {
         // Window Spinner
         colWindow.setCellValueFactory(d -> d.getValue().windowSizeProperty().asObject());
         colWindow.setCellFactory(col -> new TableCell<>() {
-            private final Spinner<Integer> spinner = new Spinner<>(10, 200, 50, 5);
+            private final Spinner<Integer> spinner = new Spinner<>(3, 200, 3, 1);
             {
                 spinner.setEditable(true);
                 spinner.valueProperty().addListener((obs, old, val) -> {
@@ -99,24 +106,42 @@ public class RuleConfigDialogController {
                 }
             }
         });
+
     }
 
     private void loadRules() {
         ruleService.getAllRules()
-                .subscribe(dto -> {
+                .collectList()
+                .subscribe(list -> {
                     javafx.application.Platform.runLater(() -> {
-                        rulesList.add(new RuleViewModel(dto));
-                    });
-                }, err -> log.error("Error loading rules", err));
+                        java.util.List<String> allMetrics = java.util.List.of(
+                                "PH", "AMONIO", "CLOROFILA", "CARBONO ORGANICO",
+                                "OXIGENO DISUELTO", "CONDUCTIVIDAD", "TURBIDEZ", "TEMPERATURA",
+                                "FICOCIANINAS", "NIVEL", "FOSFATOS", "NITRATOS");
 
-        // If empty, maybe add default rows for known metrics?
-        // For now, let's assume backend returns stored rules.
-        // If backend is empty, we might want to populate defaults here or in backend.
-        // Backend default logic should handle "if not found, use default", but returns
-        // nothing in findAll.
-        // Let's seed some if list is empty after fetch? Or just let user add? User
-        // requested "row for each metric".
-        // Use a set of known metrics to ensure they appear.
+                        java.util.Map<String, RuleConfigDTO> existingMap = list.stream()
+                                .filter(d -> d.metric() != null)
+                                .collect(java.util.stream.Collectors.toMap(RuleConfigDTO::metric, d -> d));
+
+                        for (String metric : allMetrics) {
+                            if (existingMap.containsKey(metric)) {
+                                rulesList.add(new RuleViewModel(existingMap.get(metric)));
+                            } else {
+                                // Create default view model for missing metric
+                                boolean isLog = "AMONIO".equals(metric) || "CONDUCTIVIDAD".equals(metric)
+                                        || "TURBIDEZ".equals(metric); // Simplified guess
+                                RuleViewModel vm = new RuleViewModel(
+                                        new RuleConfigDTO(null, metric, isLog, 4.0, 50, null, null));
+                                rulesList.add(vm);
+                            }
+                        }
+                    });
+                }, err -> {
+                    log.error("Error loading rules", err);
+                    javafx.application.Platform.runLater(() -> {
+                        rulesTable.setPlaceholder(new Label("Error de conexión con el servidor."));
+                    });
+                });
     }
 
     @FXML
@@ -144,6 +169,8 @@ public class RuleConfigDialogController {
         private final BooleanProperty useLog = new SimpleBooleanProperty();
         private final DoubleProperty thresholdSigma = new SimpleDoubleProperty();
         private final IntegerProperty windowSize = new SimpleIntegerProperty();
+        private final ObjectProperty<Double> minLimit = new SimpleObjectProperty<>();
+        private final ObjectProperty<Double> maxLimit = new SimpleObjectProperty<>();
 
         public RuleViewModel(RuleConfigDTO dto) {
             this.id = dto.id();
@@ -151,10 +178,13 @@ public class RuleConfigDialogController {
             this.useLog.set(dto.useLog());
             this.thresholdSigma.set(dto.thresholdSigma());
             this.windowSize.set(dto.windowSize());
+            this.minLimit.set(dto.minLimit());
+            this.maxLimit.set(dto.maxLimit());
         }
 
         public RuleConfigDTO toDTO() {
-            return new RuleConfigDTO(id, metric.get(), useLog.get(), thresholdSigma.get(), windowSize.get());
+            return new RuleConfigDTO(id, metric.get(), useLog.get(), thresholdSigma.get(), windowSize.get(),
+                    minLimit.get(), maxLimit.get());
         }
 
         // Getters for Properties
@@ -174,12 +204,28 @@ public class RuleConfigDialogController {
             return windowSize;
         }
 
+        public ObjectProperty<Double> minLimitProperty() {
+            return minLimit;
+        }
+
+        public ObjectProperty<Double> maxLimitProperty() {
+            return maxLimit;
+        }
+
         public void setThresholdSigma(double v) {
             thresholdSigma.set(v);
         }
 
         public void setWindowSize(int v) {
             windowSize.set(v);
+        }
+
+        public void setMinLimit(Double v) {
+            minLimit.set(v);
+        }
+
+        public void setMaxLimit(Double v) {
+            maxLimit.set(v);
         }
     }
 }

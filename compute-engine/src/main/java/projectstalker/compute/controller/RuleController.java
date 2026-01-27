@@ -17,39 +17,69 @@ import java.util.stream.Collectors;
 @CrossOrigin(origins = "*") // Allow JavaFX client
 public class RuleController {
 
-    private final RuleConfigRepository repository;
+        private final RuleConfigRepository repository;
 
-    @GetMapping
-    public List<RuleConfigDTO> getAllRules() {
-        return repository.findAll().stream()
-                .map(e -> new RuleConfigDTO(
-                        e.getId(),
-                        e.getMetric(),
-                        e.isUseLog(),
-                        e.getThresholdSigma(),
-                        e.getWindowSize()))
-                .collect(Collectors.toList());
-    }
+        private static final java.util.List<String> DEFAULT_METRICS = java.util.List.of(
+                        "PH", "TEMPERATURE", "E.COLI", "AMMONIUM", "FLOW", "CONDUCTIVITY", "DISSOLVED_OXYGEN",
+                        "TURBIDITY");
 
-    @PostMapping
-    public RuleConfigDTO saveRule(@RequestBody RuleConfigDTO dto) {
-        log.info("Saving rule for metric: {}", dto.metric());
+        @GetMapping
+        public List<RuleConfigDTO> getAllRules() {
+                if (repository.count() == 0) {
+                        log.info("No rules found. Seeding defaults...");
+                        seedDefaults();
+                }
 
-        RuleConfigEntity entity = repository.findByMetric(dto.metric())
-                .orElse(new RuleConfigEntity());
+                return repository.findAll().stream()
+                                .map(e -> new RuleConfigDTO(
+                                                e.getId(),
+                                                e.getMetric(),
+                                                e.isUseLog(),
+                                                e.getThresholdSigma(),
+                                                e.getWindowSize(),
+                                                e.getMinLimit(),
+                                                e.getMaxLimit()))
+                                .collect(Collectors.toList());
+        }
 
-        entity.setMetric(dto.metric());
-        entity.setUseLog(dto.useLog());
-        entity.setThresholdSigma(dto.thresholdSigma());
-        entity.setWindowSize(dto.windowSize());
+        private void seedDefaults() {
+                List<RuleConfigEntity> defaults = new java.util.ArrayList<>();
+                for (String metric : DEFAULT_METRICS) {
+                        boolean isLog = "E.COLI".equals(metric) || "AMMONIUM".equals(metric) || "FLOW".equals(metric)
+                                        || "CONDUCTIVITY".equals(metric);
+                        defaults.add(RuleConfigEntity.builder()
+                                        .metric(metric)
+                                        .useLog(isLog)
+                                        .thresholdSigma(4.0)
+                                        .windowSize(3)
+                                        .build());
+                }
+                repository.saveAll(defaults);
+        }
 
-        RuleConfigEntity saved = repository.save(entity);
+        @PostMapping
+        public RuleConfigDTO saveRule(@RequestBody RuleConfigDTO dto) {
+                log.info("Saving rule for metric: {}", dto.metric());
 
-        return new RuleConfigDTO(
-                saved.getId(),
-                saved.getMetric(),
-                saved.isUseLog(),
-                saved.getThresholdSigma(),
-                saved.getWindowSize());
-    }
+                RuleConfigEntity entity = repository.findByMetric(dto.metric())
+                                .orElse(new RuleConfigEntity());
+
+                entity.setMetric(dto.metric());
+                entity.setUseLog(dto.useLog());
+                entity.setThresholdSigma(dto.thresholdSigma());
+                entity.setWindowSize(dto.windowSize());
+                entity.setMinLimit(dto.minLimit());
+                entity.setMaxLimit(dto.maxLimit());
+
+                RuleConfigEntity saved = repository.save(entity);
+
+                return new RuleConfigDTO(
+                                saved.getId(),
+                                saved.getMetric(),
+                                saved.isUseLog(),
+                                saved.getThresholdSigma(),
+                                saved.getWindowSize(),
+                                saved.getMinLimit(),
+                                saved.getMaxLimit());
+        }
 }
