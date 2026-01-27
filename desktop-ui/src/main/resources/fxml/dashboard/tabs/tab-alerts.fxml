@@ -11,28 +11,39 @@
     <padding><Insets top="15" right="15" bottom="15" left="15"/></padding>
 
     <top>
-        <HBox spacing="10" alignment="CENTER_LEFT" style="-fx-padding: 0 0 15 0;">
-            <Label text="Incidencias Activas" styleClass="h3"/>
-            <Region HBox.hgrow="ALWAYS"/>
-            <Button text="Configurar Reglas" styleClass="btn-outline" onAction="#onConfigureRules">
-                <graphic><FontIcon iconLiteral="mdi2c-cog"/></graphic>
-            </Button>
-            <Button text="Exportar Log" styleClass="btn-outline" onAction="#onExportLog">
-                <graphic><FontIcon iconLiteral="mdi2d-download"/></graphic>
-            </Button>
-            <Separator orientation="VERTICAL" />
-            <Button fx:id="bulkAckBtn" text="Confirmar" styleClass="btn-success" onAction="#onBulkAck" disable="true">
-                <graphic><FontIcon iconLiteral="mdi2c-check"/></graphic>
-            </Button>
-            <Button fx:id="bulkResolveBtn" text="Resolver" styleClass="btn-info" onAction="#onBulkResolve" disable="true">
-                 <graphic><FontIcon iconLiteral="mdi2c-check-all"/></graphic>
-            </Button>
-            <Button fx:id="bulkResolveBtn" text="Resolver" styleClass="btn-info" onAction="#onBulkResolve" disable="true">
-                 <graphic><FontIcon iconLiteral="mdi2c-check-all"/></graphic>
-            </Button>
-            <Region HBox.hgrow="ALWAYS"/>
-            <ComboBox fx:id="statusFilterCombo" promptText="Filtrar por Estado"/>
-        </HBox>
+        <VBox spacing="10">
+            <padding><Insets bottom="10"/></padding>
+            <!-- Header Row -->
+            <HBox spacing="10" alignment="CENTER_LEFT">
+                <Label text="Incidencias" styleClass="h3"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button text="Configurar Reglas" styleClass="btn-outline" onAction="#onConfigureRules">
+                    <graphic><FontIcon iconLiteral="mdi2c-cog"/></graphic>
+                </Button>
+                <Button text="Exportar Log" styleClass="btn-outline" onAction="#onExportLog">
+                    <graphic><FontIcon iconLiteral="mdi2d-download"/></graphic>
+                </Button>
+            </HBox>
+
+            <!-- Actions & Filters Row -->
+            <HBox spacing="10" alignment="CENTER_LEFT">
+                <Button fx:id="bulkAckBtn" text="Confirmar" styleClass="btn-success" onAction="#onBulkAck" disable="true">
+                    <graphic><FontIcon iconLiteral="mdi2c-check"/></graphic>
+                </Button>
+                <Button fx:id="bulkResolveBtn" text="Resolver" styleClass="btn-info" onAction="#onBulkResolve" disable="true">
+                     <graphic><FontIcon iconLiteral="mdi2c-check-all"/></graphic>
+                </Button>
+                
+                <Region HBox.hgrow="ALWAYS"/>
+                
+                <Label text="Desde:"/>
+                <DatePicker fx:id="startDatePicker" prefWidth="150"/>
+                <Label text="Hasta:"/>
+                <DatePicker fx:id="endDatePicker" prefWidth="150"/>
+                <Separator orientation="VERTICAL" />
+                <ComboBox fx:id="statusFilterCombo" promptText="Filtrar por Estado"/>
+            </HBox>
+        </VBox>
     </top>
 
     <center>
@@ -51,4 +62,18 @@
             </placeholder>
         </TableView>
     </center>
+
+    <bottom>
+        <HBox spacing="10" alignment="CENTER_RIGHT" style="-fx-padding: 10 0 0 0;">
+             <Label fx:id="totalLabel" text="Total: 0" style="-fx-text-fill: -color-fg-muted;"/>
+             <Region HBox.hgrow="ALWAYS"/>
+             <Button fx:id="prevPageBtn" onAction="#onPrevPage" disable="true">
+                <graphic><FontIcon iconLiteral="mdi2c-chevron-left"/></graphic>
+             </Button>
+             <Label fx:id="pageLabel" text="Página 1"/>
+             <Button fx:id="nextPageBtn" onAction="#onNextPage" disable="true">
+                <graphic><FontIcon iconLiteral="mdi2c-chevron-right"/></graphic>
+             </Button>
+        </HBox>
+    </bottom>
 </BorderPane>

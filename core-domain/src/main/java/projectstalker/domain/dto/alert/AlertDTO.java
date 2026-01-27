@@ -2,6 +2,10 @@ package projectstalker.domain.dto.alert;
 
 import java.time.LocalDateTime;
 
+import com.fasterxml.jackson.annotation.JsonView;
+import projectstalker.domain.sensors.SensorViews;
+
+@JsonView(SensorViews.Public.class)
 public record AlertDTO(
         String id,
         @com.fasterxml.jackson.annotation.JsonAlias("sensorId") String stationId,
@@ -11,5 +15,6 @@ public record AlertDTO(
         String message,
         LocalDateTime timestamp,
         double value,
-        String metric) {
+        String metric,
+        String reportId) {
 }

@@ -30,6 +30,12 @@ public class ReportController {
         return ResponseEntity.ok(reportService.createReport(request));
     }
 
+    @GetMapping("/{id}")
+    @Operation(summary = "Obtener detalles de un reporte")
+    public ResponseEntity<projectstalker.compute.entity.ReportEntity> getReport(@PathVariable String id) {
+        return ResponseEntity.ok(reportService.getReport(id));
+    }
+
     @GetMapping("/jobs/{id}")
     @Operation(summary = "Consultar estado del trabajo", description = "Devuelve el estado (PENDING, COMPLETED, FAILED) y la URL de descarga si está listo.")
     public ResponseEntity<Map<String, Object>> getJobStatus(@PathVariable String id) {

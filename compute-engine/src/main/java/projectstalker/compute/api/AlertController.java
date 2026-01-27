@@ -18,9 +18,47 @@ public class AlertController {
     private final AlertRepository alertRepository;
 
     @GetMapping
-    @Operation(summary = "Obtener todas las alertas")
-    public List<AlertEntity> getAllAlerts() {
-        return alertRepository.findAll();
+    @Operation(summary = "Obtener alertas paginadas por fecha")
+    public projectstalker.domain.dto.PaginatedResponse<projectstalker.domain.dto.alert.AlertDTO> getAlerts(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime start,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime end,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        if (start == null)
+            start = java.time.LocalDateTime.now().minusMonths(1);
+        if (end == null)
+            end = java.time.LocalDateTime.now();
+
+        System.out.println("AlertController: Fetching alerts between " + start + " and " + end + " page=" + page);
+
+        var entities = alertRepository.findByTimestampBetween(start, end,
+                org.springframework.data.domain.PageRequest.of(page, size,
+                        org.springframework.data.domain.Sort.by("timestamp").descending()));
+
+        System.out.println("AlertController: Found " + entities.getTotalElements() + " alerts.");
+
+        var dtoPage = entities.map(entity -> new projectstalker.domain.dto.alert.AlertDTO(
+                entity.getId(),
+                entity.getSensorId(),
+                entity.getSensorId(), // Default station name
+                projectstalker.domain.dto.alert.AlertSeverity.valueOf(entity.getSeverity().name()),
+                projectstalker.domain.dto.alert.AlertStatus.valueOf(entity.getStatus().name()),
+                entity.getMessage(),
+                entity.getTimestamp(),
+                0.0, // Default value
+                entity.getMetric(),
+                entity.getReport() != null ? entity.getReport().getId() : null));
+
+        return new projectstalker.domain.dto.PaginatedResponse<>(
+                dtoPage.getContent(),
+                dtoPage.getNumber(),
+                dtoPage.getSize(),
+                dtoPage.getTotalElements(),
+                dtoPage.getTotalPages(),
+                dtoPage.isLast(),
+                dtoPage.isFirst(),
+                dtoPage.isEmpty());
     }
 
     @GetMapping("/active")

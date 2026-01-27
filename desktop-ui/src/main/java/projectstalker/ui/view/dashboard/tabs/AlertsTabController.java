@@ -49,6 +49,24 @@ public class AlertsTabController {
     private Button bulkResolveBtn;
     @FXML
     private ComboBox<String> statusFilterCombo;
+    @FXML
+    private DatePicker startDatePicker;
+    @FXML
+    private DatePicker endDatePicker;
+
+    // Pagination
+    @FXML
+    private Button prevPageBtn;
+    @FXML
+    private Button nextPageBtn;
+    @FXML
+    private Label pageLabel;
+    @FXML
+    private Label totalLabel;
+
+    private int currentPage = 0;
+    private int pageSize = 10;
+    private int totalPages = 0;
 
     private final ObservableList<AlertDTO> masterList = FXCollections.observableArrayList();
     private final javafx.collections.transformation.FilteredList<AlertDTO> filteredList = new javafx.collections.transformation.FilteredList<>(
@@ -65,37 +83,68 @@ public class AlertsTabController {
         statusFilterCombo.getSelectionModel().select("TODOS");
         statusFilterCombo.valueProperty().addListener((obs, oldVal, newVal) -> updateFilter(newVal));
 
+        // Date Defaults (This Week)
+        startDatePicker.setValue(java.time.LocalDate.now().minusMonths(1));
+        endDatePicker.setValue(java.time.LocalDate.now());
+
+        startDatePicker.valueProperty().addListener((o, old, newVal) -> {
+            currentPage = 0;
+            loadAlerts();
+        });
+        endDatePicker.valueProperty().addListener((o, old, newVal) -> {
+            currentPage = 0;
+            loadAlerts();
+        });
+
         loadAlerts();
 
         // Multi-select persistence
         alertsTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
 
-        // Auto-refresh every 30 seconds
-        reactor.core.publisher.Flux.interval(java.time.Duration.ofSeconds(30))
-                .flatMap(tick -> alertService.getAllAlerts().collectList()) // Fetch ALL to keep RESOLVED items visible
-                .subscribe(
-                        newList -> javafx.application.Platform.runLater(() -> {
-                            updateMasterListSafely(newList);
-                            log.debug("Alertas actualizadas (Auto-Refresh)");
-                        }),
-                        err -> log.error("Error en auto-refresh de alertas", err));
+        // Auto-refresh every 60 seconds
+        reactor.core.publisher.Flux.interval(java.time.Duration.ofSeconds(60))
+                .subscribe(tick -> {
+                    // Only refresh if on first page to avoid jumping around while browsing history
+                    if (currentPage == 0) {
+                        javafx.application.Platform.runLater(this::loadAlerts);
+                    }
+                });
+    }
+
+    @FXML
+    public void onPrevPage() {
+        if (currentPage > 0) {
+            currentPage--;
+            loadAlerts();
+        }
+    }
+
+    @FXML
+    public void onNextPage() {
+        if (currentPage < totalPages - 1) {
+            currentPage++;
+            loadAlerts();
+        }
     }
 
     private void updateMasterListSafely(java.util.List<AlertDTO> newList) {
-        // Save selection
-        var selectedIds = alertsTable.getSelectionModel().getSelectedItems().stream()
-                .map(AlertDTO::id)
-                .collect(java.util.stream.Collectors.toSet());
-
-        masterList.setAll(newList);
-
-        // Restore selection (tricky with FilteredList, but we try)
-        // We need to find the objects in the FilteredList that match the IDs
-        for (AlertDTO item : alertsTable.getItems()) {
-            if (selectedIds.contains(item.id())) {
-                alertsTable.getSelectionModel().select(item);
-            }
+        if (newList == null) {
+            log.warn("updateMasterListSafely received null list");
+            newList = java.util.Collections.emptyList();
         }
+        log.info("Received {} alerts for current page", newList.size());
+        masterList.setAll(newList);
+        // Re-apply filter
+        updateFilter(statusFilterCombo.getValue());
+    }
+
+    private void updateControls(projectstalker.ui.model.RestPage<AlertDTO> page) {
+        this.totalPages = page.getTotalPages();
+        this.totalLabel.setText("Total: " + page.getTotalElements());
+        this.pageLabel.setText("Página " + (currentPage + 1) + " / " + (totalPages == 0 ? 1 : totalPages));
+
+        this.prevPageBtn.setDisable(currentPage == 0);
+        this.nextPageBtn.setDisable(currentPage >= totalPages - 1);
     }
 
     private void updateFilter(String statusLabel) {
@@ -103,29 +152,38 @@ public class AlertsTabController {
             if (statusLabel == null || "TODOS".equals(statusLabel))
                 return true;
 
-            return switch (statusLabel) {
+            boolean visible = switch (statusLabel) {
                 case "NUEVO/ACTIVO" -> alert.status() == AlertStatus.NEW || alert.status() == AlertStatus.ACTIVE;
                 case "RECONOCIDO" -> alert.status() == AlertStatus.ACKNOWLEDGED;
                 case "RESUELTO" -> alert.status() == AlertStatus.RESOLVED;
                 default -> true;
             };
+            return visible;
         });
-        updateBulkButtons(); // Refresh buttons based on visible selection
+        log.debug("List size after filter '{}': {}", statusLabel, filteredList.size());
+        updateBulkButtons();
     }
 
     private void setupTable() {
-        alertsTable.setItems(filteredList); // Use FilteredList
+        alertsTable.setItems(filteredList);
 
-        alertsTable.getSelectionModel().selectedItemProperty().addListener((obs, old, newVal) -> {
-            updateBulkButtons();
+        // Double Click Listener
+        alertsTable.setRowFactory(tv -> {
+            TableRow<AlertDTO> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && (!row.isEmpty())) {
+                    AlertDTO rowData = row.getItem();
+                    handleDoubleClick(rowData);
+                }
+            });
+            return row;
         });
 
-        alertsTable.getSelectionModel().getSelectedItems()
-                .addListener((javafx.collections.ListChangeListener.Change<? extends AlertDTO> c) -> {
-                    updateBulkButtons();
-                });
+        alertsTable.getSelectionModel().selectedItemProperty().addListener((obs, old, newVal) -> updateBulkButtons());
+        alertsTable.getSelectionModel().getSelectedItems().addListener(
+                (javafx.collections.ListChangeListener.Change<? extends AlertDTO> c) -> updateBulkButtons());
 
-        // 1. Configurar Columnas simples
+        // Columns setup
         colSeverity.setCellValueFactory(
                 data -> new javafx.beans.property.SimpleObjectProperty<>(data.getValue().severity()));
         colTime.setCellValueFactory(
@@ -137,9 +195,48 @@ public class AlertsTabController {
         colStatus.setCellValueFactory(
                 data -> new javafx.beans.property.SimpleObjectProperty<>(data.getValue().status()));
 
-        // 2. Renderizado Personalizado (Cell Factories)
+        // Renderers
+        setupRenderers();
+    }
 
-        // Gravedad con Iconos y Colores
+    private void handleDoubleClick(AlertDTO alert) {
+        if (alert.reportId() != null) {
+            log.info("Opening report for alert {}", alert.id());
+            // Fetch Report
+            alertService.getReport(alert.reportId())
+                    .subscribe(report -> {
+                        javafx.application.Platform.runLater(() -> showReportDialog(report));
+                    }, err -> showErr("Error al abrir informe", err));
+        } else if (alert.status() == AlertStatus.RESOLVED) {
+            Alert info = new Alert(Alert.AlertType.INFORMATION);
+            info.setTitle("Alerta Resuelta");
+            info.setHeaderText("Esta alerta está resuelta pero no tiene informe adjunto.");
+            info.show();
+        }
+    }
+
+    private void showReportDialog(projectstalker.domain.dto.report.ReportDTO report) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Detalles del Informe");
+        dialog.setHeaderText(report.title());
+
+        ButtonType closeBtn = new ButtonType("Cerrar", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().add(closeBtn);
+
+        TextArea body = new TextArea(report.body());
+        body.setEditable(false);
+        body.setWrapText(true);
+
+        javafx.scene.layout.VBox content = new javafx.scene.layout.VBox(10);
+        content.getChildren().add(new Label("Creado el: " + report.createdAt()));
+        content.getChildren().add(body);
+
+        dialog.getDialogPane().setContent(content);
+        dialog.show();
+    }
+
+    private void setupRenderers() {
+        // Gravedad
         colSeverity.setCellFactory(col -> new TableCell<>() {
             @Override
             protected void updateItem(AlertSeverity item, boolean empty) {
@@ -150,7 +247,6 @@ public class AlertsTabController {
                 } else {
                     Label label = new Label(item.name());
                     FontIcon icon = new FontIcon();
-
                     switch (item) {
                         case CRITICAL -> {
                             icon.setIconLiteral("mdi2a-alert-decagram");
@@ -167,53 +263,43 @@ public class AlertsTabController {
                             icon.setIconColor(javafx.scene.paint.Color.LIGHTBLUE);
                             label.setStyle("-fx-text-fill: white;");
                         }
-                        default -> {
-                            // nothing
-                        }
                     }
-                    if (item == AlertSeverity.CRITICAL || item == AlertSeverity.WARNING || item == AlertSeverity.INFO) {
+                    if (item == AlertSeverity.CRITICAL || item == AlertSeverity.WARNING || item == AlertSeverity.INFO)
                         label.setGraphic(icon);
-                    }
                     setGraphic(label);
                 }
             }
         });
 
-        // Fecha Formateada
+        // Fecha
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd/MM HH:mm:ss");
         colTime.setCellFactory(col -> new TableCell<>() {
             @Override
             protected void updateItem(LocalDateTime item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty || item == null) {
+                if (empty || item == null)
                     setText(null);
-                } else {
+                else
                     setText(item.format(dtf));
-                }
             }
         });
 
-        // ACTION BUTTONS
+        // Actions
         colActions.setCellFactory(col -> new TableCell<>() {
             private final Button btn = new Button();
 
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                AlertDTO alert = getTableRow().getItem(); // Safe way to get item
-
-                // If the row is empty or alert is null, clear graphic
+                AlertDTO alert = getTableRow().getItem();
                 if (empty || alert == null) {
                     setGraphic(null);
                     return;
                 }
-
-                // Decide button based on status
                 if (alert.status() == AlertStatus.NEW) {
                     btn.setText("ACK");
                     btn.getStyleClass().setAll("button", "btn-xs", "btn-success");
-                    btn.setStyle("-fx-background-color: #4a90e2; -fx-text-fill: white;"); // Inline override if css
-                                                                                          // fails
+                    btn.setStyle("-fx-background-color: #4a90e2; -fx-text-fill: white;");
                     btn.setOnAction(e -> handleAck(alert));
                     setGraphic(btn);
                 } else if (alert.status() == AlertStatus.ACKNOWLEDGED) {
@@ -232,155 +318,80 @@ public class AlertsTabController {
     private void updateBulkButtons() {
         if (bulkAckBtn == null || bulkResolveBtn == null)
             return;
-
         var selected = alertsTable.getSelectionModel().getSelectedItems();
         boolean hasNew = selected.stream().anyMatch(a -> a.status() == AlertStatus.NEW);
-        boolean hasAck = selected.stream().anyMatch(a -> a.status() == AlertStatus.ACKNOWLEDGED);
+        boolean hasAck = selected.stream().anyMatch(a -> a.status() == AlertStatus.ACKNOWLEDGED); // Fixed logic: only
+                                                                                                  // enable if we have
+                                                                                                  // ACK items for
+                                                                                                  // Resolve
 
         bulkAckBtn.setDisable(!hasNew);
         bulkResolveBtn.setDisable(!hasAck);
-
         bulkAckBtn.setText("Confirmar (" + selected.stream().filter(a -> a.status() == AlertStatus.NEW).count() + ")");
         bulkResolveBtn.setText(
                 "Resolver (" + selected.stream().filter(a -> a.status() == AlertStatus.ACKNOWLEDGED).count() + ")");
     }
 
     private void handleAck(AlertDTO alert) {
-        log.info("Acknowledging alert {}", alert.id());
         alertService.acknowledgeAlert(alert.id().toString())
-                .delayElement(java.time.Duration.ofMillis(200)) // Ensure DB commit
-                .subscribe(v -> {
-                    log.info("ACK SUCCESS for {}. Reloading...", alert.id());
-                    loadAlerts();
-                }, err -> showErr("Error ACK", err)); // loadAlerts handles threading now
+                .delayElement(java.time.Duration.ofMillis(200))
+                .subscribe(v -> loadAlerts(), err -> showErr("Error ACK", err)); // loadAlerts will refresh current page
     }
 
     private void handleResolve(AlertDTO alert) {
-        log.info("Resolving alert {}", alert.id());
-
-        // Reuse the logic from Bulk Resolve but for a single item
-        // Custom Dialog for Report Details
-        Dialog<javafx.util.Pair<String, String>> dialog = new Dialog<>();
-        dialog.setTitle("Crear Informe y Resolver");
-        dialog.setHeaderText("Resolver alerta: " + alert.metric());
-
-        ButtonType loginButtonType = new ButtonType("Resolver", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(loginButtonType, ButtonType.CANCEL);
-
-        javafx.scene.layout.GridPane grid = new javafx.scene.layout.GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new javafx.geometry.Insets(20, 150, 10, 10));
-
-        TextField title = new TextField();
-        title.setPromptText("Título del informe");
-        TextArea body = new TextArea();
-        body.setPromptText("Detalles de la incidencia...");
-
-        grid.add(new Label("Título:"), 0, 0);
-        grid.add(title, 1, 0);
-        grid.add(new Label("Detalles:"), 0, 1);
-        grid.add(body, 1, 1);
-
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == loginButtonType) {
-                return new javafx.util.Pair<>(title.getText(), body.getText());
-            }
-            return null;
-        });
-
-        java.util.Optional<javafx.util.Pair<String, String>> result = dialog.showAndWait();
-
-        result.ifPresent(reportDetails -> {
-            var req = new projectstalker.domain.dto.report.CreateReportRequest(
-                    reportDetails.getKey(),
-                    reportDetails.getValue(),
-                    List.of(alert.id().toString()));
-
-            alertService.createReport(req)
-                    .delayElement(java.time.Duration.ofMillis(200))
-                    .subscribe(v -> {
-                        log.info("RESOLVE SUCCESS for {}. Reloading...", alert.id());
-                        loadAlerts();
-                    }, err -> showErr("Error Reporte", err));
-        });
+        // Reuse Bulk Logic
+        showResolveDialog(List.of(alert));
     }
 
     @FXML
     public void onBulkAck() {
         var selected = alertsTable.getSelectionModel().getSelectedItems().stream()
-                .filter(a -> a.status() == AlertStatus.NEW)
-                .toList();
-
+                .filter(a -> a.status() == AlertStatus.NEW).toList();
         if (selected.isEmpty())
             return;
-
         reactor.core.publisher.Flux.fromIterable(selected)
                 .flatMap(a -> alertService.acknowledgeAlert(a.id().toString()))
-                .collectList()
-                .subscribe(v -> loadAlerts(), err -> showErr("Error Bulk ACK", err));
+                .collectList().subscribe(v -> loadAlerts(), err -> showErr("Error Bulk ACK", err));
     }
 
     @FXML
     public void onBulkResolve() {
         var selected = alertsTable.getSelectionModel().getSelectedItems().stream()
-                .filter(a -> a.status() == AlertStatus.ACKNOWLEDGED)
-                .toList();
-
-        if (selected.isEmpty()) {
-            log.warn("Bulk Resolve: No ACKNOWLEDGED alerts selected. Total selection size: {}",
-                    alertsTable.getSelectionModel().getSelectedItems().size());
+                .filter(a -> a.status() == AlertStatus.ACKNOWLEDGED).toList();
+        if (selected.isEmpty())
             return;
-        }
+        showResolveDialog(selected);
+    }
 
-        log.info("Bulk Resolve initiated for {} items", selected.size());
-
-        // Custom Dialog for Report Details
+    private void showResolveDialog(List<AlertDTO> selected) {
         Dialog<javafx.util.Pair<String, String>> dialog = new Dialog<>();
         dialog.setTitle("Crear Informe y Resolver");
-        dialog.setHeaderText("Resolver " + selected.size() + " alertas seleccionadas");
-
+        dialog.setHeaderText("Resolver " + selected.size() + " alerta(s)");
         ButtonType loginButtonType = new ButtonType("Resolver", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(loginButtonType, ButtonType.CANCEL);
-
         javafx.scene.layout.GridPane grid = new javafx.scene.layout.GridPane();
         grid.setHgap(10);
         grid.setVgap(10);
         grid.setPadding(new javafx.geometry.Insets(20, 150, 10, 10));
-
         TextField title = new TextField();
         title.setPromptText("Título del informe");
         TextArea body = new TextArea();
         body.setPromptText("Detalles de la incidencia...");
-
         grid.add(new Label("Título:"), 0, 0);
         grid.add(title, 1, 0);
         grid.add(new Label("Detalles:"), 0, 1);
         grid.add(body, 1, 1);
-
         dialog.getDialogPane().setContent(grid);
-
-        // Convert the result to a title-body-pair when the login button is clicked.
         dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == loginButtonType) {
+            if (dialogButton == loginButtonType)
                 return new javafx.util.Pair<>(title.getText(), body.getText());
-            }
             return null;
         });
-
-        java.util.Optional<javafx.util.Pair<String, String>> result = dialog.showAndWait();
-
-        result.ifPresent(reportDetails -> {
+        dialog.showAndWait().ifPresent(reportDetails -> {
             List<String> ids = selected.stream().map(AlertDTO::id).collect(java.util.stream.Collectors.toList());
             var req = new projectstalker.domain.dto.report.CreateReportRequest(
-                    reportDetails.getKey(),
-                    reportDetails.getValue(),
-                    ids);
-
-            alertService.createReport(req)
-                    .delayElement(java.time.Duration.ofMillis(200))
+                    reportDetails.getKey(), reportDetails.getValue(), ids);
+            alertService.createReport(req).delayElement(java.time.Duration.ofMillis(200))
                     .subscribe(v -> loadAlerts(), err -> showErr("Error Reporte", err));
         });
     }
@@ -397,11 +408,15 @@ public class AlertsTabController {
     }
 
     private void loadAlerts() {
-        // Use getAllAlerts so we can filter locally for RESOLVED items
-        alertService.getAllAlerts()
-                .collectList()
+        LocalDateTime start = startDatePicker.getValue().atStartOfDay();
+        LocalDateTime end = endDatePicker.getValue().atTime(23, 59, 59);
+
+        alertService.getAlerts(currentPage, pageSize, start, end)
                 .subscribe(
-                        newList -> javafx.application.Platform.runLater(() -> updateMasterListSafely(newList)),
+                        page -> javafx.application.Platform.runLater(() -> {
+                            updateMasterListSafely(page.getContent());
+                            updateControls(page);
+                        }),
                         err -> log.error("Error cargando alertas", err));
     }
 
@@ -411,14 +426,8 @@ public class AlertsTabController {
             FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/components/rule-config-dialog.fxml"));
             loader.setControllerFactory(springContext::getBean);
             javafx.scene.Parent root = loader.load();
-
-            // Inject Refresh Callback
             projectstalker.ui.view.components.RuleConfigDialogController controller = loader.getController();
-            controller.setOnSaveCallback(() -> {
-                log.info("Rule configuration saved. Refreshing alerts...");
-                loadAlerts(); // Reload manually to be sure
-            });
-
+            controller.setOnSaveCallback(this::loadAlerts);
             javafx.stage.Stage stage = new javafx.stage.Stage();
             stage.initModality(javafx.stage.Modality.APPLICATION_MODAL);
             stage.setTitle("Configurar Reglas de Alerta");
@@ -433,12 +442,10 @@ public class AlertsTabController {
 
     @FXML
     public void onExportLog() {
-        log.info("[STUB] Exportando log...");
         Alert info = new Alert(Alert.AlertType.INFORMATION);
         info.setTitle("Exportar Log");
         info.setHeaderText("Funcionalidad no implementada");
         info.setContentText("La exportación de logs se implementará en la próxima fase.");
         info.show();
     }
-
 }

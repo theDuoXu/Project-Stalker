@@ -103,10 +103,8 @@ public class TwinDashboardController {
                 mainTabPane.getTabs().remove(alertsTab);
             }
 
-            // TAB 4: INFORMES -> Solo gestión y análisis
-            if (!isAdmin && !isAnalyst && !isOfficer) {
-                mainTabPane.getTabs().remove(reportsTab);
-            }
+            // TAB 4: INFORMES -> Hidden for now (User Request)
+            mainTabPane.getTabs().remove(reportsTab);
 
             // TAB 2 (CALIDAD/SENSORES) visible para todos (Guest ve solo lectura)
         });

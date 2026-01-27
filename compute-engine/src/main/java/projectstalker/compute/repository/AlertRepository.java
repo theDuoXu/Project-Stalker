@@ -18,4 +18,7 @@ public interface AlertRepository extends JpaRepository<AlertEntity, String> {
     List<AlertEntity> findByTimestampAfter(LocalDateTime timestamp);
 
     boolean existsBySensorIdAndMetricAndTimestampAfter(String sensorId, String metric, LocalDateTime timestamp);
+
+    org.springframework.data.domain.Page<AlertEntity> findByTimestampBetween(LocalDateTime start, LocalDateTime end,
+            org.springframework.data.domain.Pageable pageable);
 }

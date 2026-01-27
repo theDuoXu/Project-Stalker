@@ -62,6 +62,10 @@ public class ReportService {
     }
 
     @Async
+    public projectstalker.compute.entity.ReportEntity getReport(String id) {
+        return reportRepository.findById(id).orElseThrow(() -> new RuntimeException("Report not found"));
+    }
+
     public void generatePdfAsync(String jobId, Map<String, Object> criteria) {
         try {
             updateStatus(jobId, "PROCESSING");
