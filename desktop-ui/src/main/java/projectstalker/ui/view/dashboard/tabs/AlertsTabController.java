@@ -442,10 +442,53 @@ public class AlertsTabController {
 
     @FXML
     public void onExportLog() {
-        Alert info = new Alert(Alert.AlertType.INFORMATION);
-        info.setTitle("Exportar Log");
-        info.setHeaderText("Funcionalidad no implementada");
-        info.setContentText("La exportación de logs se implementará en la próxima fase.");
-        info.show();
+        if (filteredList.isEmpty()) {
+            warn("No hay datos para exportar.");
+            return;
+        }
+
+        javafx.stage.FileChooser fileChooser = new javafx.stage.FileChooser();
+        fileChooser.setTitle("Guardar Log de Alertas");
+        fileChooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("CSV Files", "*.csv"));
+        fileChooser.setInitialFileName("alertas_"
+                + java.time.LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm")) + ".csv");
+
+        java.io.File file = fileChooser.showSaveDialog(alertsTable.getScene().getWindow());
+        if (file != null) {
+            try (java.io.PrintWriter writer = new java.io.PrintWriter(file, java.nio.charset.StandardCharsets.UTF_8)) {
+                // Header
+                writer.println("Fecha,Gravedad,Sensor,Mensaje,Estado,Valor,Métrica");
+
+                // Content (Using filtered list to export exactly what user sees/filters)
+                for (AlertDTO alert : filteredList) {
+                    String line = String.format("%s,%s,%s,\"%s\",%s,%s,%s",
+                            alert.timestamp(),
+                            alert.severity(),
+                            alert.stationName(),
+                            alert.message().replace("\"", "\"\""), // Escape quotes
+                            alert.status(),
+                            alert.value(),
+                            alert.metric());
+                    writer.println(line);
+                }
+
+                Alert info = new Alert(Alert.AlertType.INFORMATION);
+                info.setTitle("Exportación Exitosa");
+                info.setHeaderText(null);
+                info.setContentText("Log exportado correctamente a:\n" + file.getAbsolutePath());
+                info.show();
+
+            } catch (Exception e) {
+                showErr("Error al exportar log", e);
+            }
+        }
+    }
+
+    private void warn(String msg) {
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.setTitle("Aviso");
+        alert.setHeaderText(null);
+        alert.setContentText(msg);
+        alert.show();
     }
 }
