@@ -19,7 +19,7 @@ public class RuleEngine {
 
     // Default Fallbacks
     private static final double DEFAULT_SIGMA = 4.0;
-    private static final int DEFAULT_WINDOW = 3;
+    private static final int DEFAULT_WINDOW = 5;
 
     /**
      * Evalúa una lectura entrante y genera alertas si es necesario.
@@ -34,6 +34,28 @@ public class RuleEngine {
         checkRollingZScore(sensor, paramUpper, value);
     }
 
+    private void createAlert(SensorEntity sensor, AlertEntity.AlertSeverity severity, String message, String metric) {
+        // Idempotency Check: 1 alert per metric per sensor per day
+        java.time.LocalDateTime startOfDay = java.time.LocalDate.now().atStartOfDay();
+        boolean exists = alertRepository.existsBySensorIdAndMetricAndTimestampAfter(sensor.getId(), metric, startOfDay);
+
+        if (exists && severity != AlertEntity.AlertSeverity.INFO) { // Allow INFO repeatedly? Maybe not.
+            log.debug("Duplicate alert suppressed for {} {}: {}", sensor.getName(), metric, message);
+            return;
+        }
+
+        AlertEntity alert = AlertEntity.builder()
+                .sensorId(sensor.getId())
+                .metric(metric)
+                .severity(severity)
+                .message(message)
+                .status(AlertEntity.AlertStatus.NEW)
+                .timestamp(java.time.LocalDateTime.now())
+                .build();
+        alertRepository.save(alert);
+        log.info("Alert generated for sensor {}: {}", sensor.getName(), message);
+    }
+
     private void checkHardLimits(SensorEntity sensor, String parameter, double value) {
         var configOpt = ruleConfigRepository.findByMetric(parameter);
 
@@ -42,11 +64,12 @@ public class RuleEngine {
             if (value < configOpt.get().getMinLimit()) {
                 createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL,
                         String.format("Valor por debajo del límite físico (%s): %.2f < %.2f",
-                                parameter, value, configOpt.get().getMinLimit()));
+                                parameter, value, configOpt.get().getMinLimit()),
+                        parameter);
             }
         } else if ("PH".equals(parameter) && value < 6.5) { // Fallback Legacy
             createAlert(sensor, AlertEntity.AlertSeverity.WARNING,
-                    String.format("pH fuera de rango aceptable (Legacy): %.2f < 6.5", value));
+                    String.format("pH fuera de rango aceptable (Legacy): %.2f < 6.5", value), parameter);
         }
 
         // Check Max Limit
@@ -54,17 +77,18 @@ public class RuleEngine {
             if (value > configOpt.get().getMaxLimit()) {
                 createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL,
                         String.format("Valor por encima del límite físico (%s): %.2f > %.2f",
-                                parameter, value, configOpt.get().getMaxLimit()));
+                                parameter, value, configOpt.get().getMaxLimit()),
+                        parameter);
             }
         } else {
             // Fallback Legacy
             if ("PH".equals(parameter) && value > 9.0) {
                 createAlert(sensor, AlertEntity.AlertSeverity.WARNING,
-                        String.format("pH fuera de rango aceptable (Legacy): %.2f > 9.0", value));
+                        String.format("pH fuera de rango aceptable (Legacy): %.2f > 9.0", value), parameter);
             }
             if ("TEMPERATURE".equals(parameter) && value > 35.0) {
                 createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL,
-                        String.format("Temperatura crítica detectada (Legacy): %.2f > 35.0", value));
+                        String.format("Temperatura crítica detectada (Legacy): %.2f > 35.0", value), parameter);
             }
         }
     }
@@ -116,19 +140,8 @@ public class RuleEngine {
         if (Math.abs(zScore) > threshold) {
             String msg = String.format("Anomalía Estadística (%s): Valor %.2f (Z-Score: %.1f%s > %.1f)",
                     parameter, currentValue, zScore, useLog ? ", Log-Norm" : "", threshold);
-            createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL, msg);
+            createAlert(sensor, AlertEntity.AlertSeverity.CRITICAL, msg, parameter);
         }
     }
 
-    private void createAlert(SensorEntity sensor, AlertEntity.AlertSeverity severity, String message) {
-        AlertEntity alert = AlertEntity.builder()
-                .sensorId(sensor.getId())
-                .severity(severity)
-                .message(message)
-                .status(AlertEntity.AlertStatus.NEW)
-                .timestamp(java.time.LocalDateTime.now())
-                .build();
-        alertRepository.save(alert);
-        log.info("Alert generated for sensor {}: {}", sensor.getName(), message);
-    }
 }

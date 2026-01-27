@@ -26,7 +26,7 @@
             <TableColumn fx:id="colLog" text="Log-Normal" prefWidth="100"/>
             <TableColumn fx:id="colThreshold" text="Umbral (σ)" prefWidth="120"/>
 
-            <TableColumn fx:id="colWindow" text="Ventana (N)" prefWidth="120"/>
+            <TableColumn fx:id="colWindow" text="Ventana (h)" prefWidth="120"/>
         </columns>
         <columnResizePolicy><TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/></columnResizePolicy>
         <placeholder>

@@ -25,6 +25,7 @@ import java.time.format.DateTimeFormatter;
 public class AlertsTabController {
 
     private final AlertClientService alertService;
+    private final projectstalker.ui.service.SensorClientService sensorService;
     private final ApplicationContext springContext;
 
     @FXML
@@ -62,6 +63,13 @@ public class AlertsTabController {
 
     private void setupTable() {
         alertsTable.setItems(alertsList);
+
+        // Selection Listener for Chart
+        alertsTable.getSelectionModel().selectedItemProperty().addListener((obs, old, newVal) -> {
+            if (newVal != null) {
+                openChartDialog(newVal);
+            }
+        });
 
         // 1. Configurar Columnas simples
         colSeverity.setCellValueFactory(
@@ -192,5 +200,54 @@ public class AlertsTabController {
     @FXML
     public void onExportLog() {
         log.info("[STUB] Exportando log...");
+    }
+
+    private void openChartDialog(AlertDTO alert) {
+        if (alert.metric() == null || alert.stationId() == null)
+            return;
+
+        javafx.scene.chart.NumberAxis xAxis = new javafx.scene.chart.NumberAxis();
+        xAxis.setLabel("Hora (Horas desde inicio)");
+        javafx.scene.chart.NumberAxis yAxis = new javafx.scene.chart.NumberAxis();
+        yAxis.setLabel(alert.metric());
+
+        javafx.scene.chart.LineChart<Number, Number> lineChart = new javafx.scene.chart.LineChart<>(xAxis, yAxis);
+        lineChart.setTitle("Evolución de " + alert.metric() + " - " + alert.stationName());
+
+        javafx.scene.chart.XYChart.Series<Number, Number> series = new javafx.scene.chart.XYChart.Series<>();
+        series.setName("Valores");
+
+        // Fetch data: +/- 12 hours from alert timestamp
+        LocalDateTime start = alert.timestamp().minusHours(12);
+        LocalDateTime end = alert.timestamp().plusHours(12);
+
+        // Fetch history (returns Mono<SensorResponseDTO>)
+        sensorService.getHistory(alert.stationId(), alert.metric())
+                .subscribe(response -> {
+                    javafx.application.Platform.runLater(() -> {
+                        if (response.values() != null) {
+                            for (var r : response.values()) {
+                                // Simple X: Calculate relative hours from alert time
+                                // Parse string date from ReadingDTO
+                                LocalDateTime rTime = LocalDateTime.parse(r.timestamp());
+
+                                long minutesDiff = java.time.temporal.ChronoUnit.MINUTES.between(alert.timestamp(),
+                                        rTime);
+                                // Only show points within +/- 12 hours window
+                                if (Math.abs(minutesDiff) < 720) {
+                                    series.getData()
+                                            .add(new javafx.scene.chart.XYChart.Data<>(minutesDiff / 60.0, r.value()));
+                                }
+                            }
+                            lineChart.getData().add(series);
+                        }
+                    });
+                }, err -> log.error("Error fetching history for chart", err));
+
+        javafx.scene.Scene scene = new javafx.scene.Scene(lineChart, 800, 600);
+        javafx.stage.Stage stage = new javafx.stage.Stage();
+        stage.setTitle("Detalle de Alerta: " + alert.metric());
+        stage.setScene(scene);
+        stage.show();
     }
 }

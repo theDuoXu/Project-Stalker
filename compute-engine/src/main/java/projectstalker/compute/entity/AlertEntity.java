@@ -44,6 +44,9 @@ public class AlertEntity {
     @Enumerated(EnumType.STRING)
     private AlertStatus status; // NEW, ACKNOWLEDGED, CLEARED
 
+    @Column(length = 50)
+    private String metric; // Added for idempotency checks (e.g. "PH", "TEMPERATURE")
+
     @PrePersist
     protected void onCreate() {
         if (this.timestamp == null) {

@@ -16,26 +16,23 @@ import java.util.UUID;
 @Service
 public class AlertClientService {
 
-    // Simular base de datos local
-    private final List<AlertDTO> MOCK_ALERTS = List.of(
-            new AlertDTO(UUID.randomUUID().toString(), "C302", "SAICA ARANJUEZ", AlertSeverity.CRITICAL,
-                    AlertStatus.ACTIVE, "Nivel de Amonio crítico (> 2.5 mg/L)", LocalDateTime.now().minusMinutes(5),
-                    2.8, "NH4"),
-            new AlertDTO(UUID.randomUUID().toString(), "C316", "SAICA TRILLO", AlertSeverity.WARNING,
-                    AlertStatus.ACTIVE, "Temperatura elevada", LocalDateTime.now().minusHours(1), 28.5, "TEMP"),
-            new AlertDTO(UUID.randomUUID().toString(), "C322", "SAICA CARCABOSO", AlertSeverity.INFO,
-                    AlertStatus.RESOLVED, "Pérdida de conexión momentánea", LocalDateTime.now().minusDays(1), 0.0,
-                    "CONN"));
+    private final org.springframework.web.reactive.function.client.WebClient webClient;
+
+    public AlertClientService(org.springframework.web.reactive.function.client.WebClient.Builder webClientBuilder) {
+        this.webClient = webClientBuilder.baseUrl("http://localhost:8080").build();
+    }
 
     public Flux<AlertDTO> getActiveAlerts() {
-        // En el futuro: WebClient.get().uri("/api/alerts")...
-        log.info("Obteniendo alertas (MOCK)...");
-        return Flux.fromIterable(MOCK_ALERTS);
+        return webClient.get()
+                .uri("/api/alerts/active")
+                .retrieve()
+                .bodyToFlux(AlertDTO.class);
     }
 
     public Mono<Void> acknowledgeAlert(String alertId) {
-        log.info("Alerta confirmada: {}", alertId);
-        // Simulamos latencia de red
-        return Mono.empty(); // En backend real esto sería un PUT
+        return webClient.post()
+                .uri("/api/alerts/{id}/ack", alertId)
+                .retrieve()
+                .bodyToMono(Void.class);
     }
 }

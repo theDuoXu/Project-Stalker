@@ -114,6 +114,7 @@ public class RuleConfigDialogController {
                 .collectList()
                 .subscribe(list -> {
                     javafx.application.Platform.runLater(() -> {
+                        rulesList.clear(); // Prevent duplicates on reload
                         java.util.List<String> allMetrics = java.util.List.of(
                                 "PH", "AMONIO", "CLOROFILA", "CARBONO ORGANICO",
                                 "OXIGENO DISUELTO", "CONDUCTIVIDAD", "TURBIDEZ", "TEMPERATURA",
@@ -121,7 +122,13 @@ public class RuleConfigDialogController {
 
                         java.util.Map<String, RuleConfigDTO> existingMap = list.stream()
                                 .filter(d -> d.metric() != null)
-                                .collect(java.util.stream.Collectors.toMap(RuleConfigDTO::metric, d -> d));
+                                .collect(java.util.stream.Collectors.toMap(RuleConfigDTO::metric, d -> d, (a, b) -> a)); // Fix
+                                                                                                                         // Duplicate
+                                                                                                                         // Key
+                                                                                                                         // if
+                                                                                                                         // DB
+                                                                                                                         // has
+                                                                                                                         // dupes
 
                         for (String metric : allMetrics) {
                             if (existingMap.containsKey(metric)) {
@@ -131,7 +138,7 @@ public class RuleConfigDialogController {
                                 boolean isLog = "AMONIO".equals(metric) || "CONDUCTIVIDAD".equals(metric)
                                         || "TURBIDEZ".equals(metric); // Simplified guess
                                 RuleViewModel vm = new RuleViewModel(
-                                        new RuleConfigDTO(null, metric, isLog, 4.0, 50, null, null));
+                                        new RuleConfigDTO(null, metric, isLog, 4.0, 5, null, null)); // Default 5 hours
                                 rulesList.add(vm);
                             }
                         }
