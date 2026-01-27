@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.Map;
 import java.util.UUID;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -22,6 +23,33 @@ public class ReportService {
 
     // Simple in-memory job store
     private final Map<String, Map<String, Object>> jobs = new ConcurrentHashMap<>();
+
+    private final projectstalker.compute.repository.ReportRepository reportRepository;
+    private final projectstalker.compute.repository.AlertRepository alertRepository;
+
+    @org.springframework.transaction.annotation.Transactional
+    public projectstalker.compute.entity.ReportEntity createReport(
+            projectstalker.domain.dto.report.CreateReportRequest request) {
+        // 1. Create Report
+        var report = projectstalker.compute.entity.ReportEntity.builder()
+                .title(request.title())
+                .body(request.body())
+                .build();
+        report = reportRepository.save(report);
+
+        // 2. Link Alerts
+        List<String> ids = request.alertIds();
+        if (ids != null && !ids.isEmpty()) {
+            List<projectstalker.compute.entity.AlertEntity> alerts = alertRepository.findAllById(ids);
+            for (var alert : alerts) {
+                alert.setStatus(projectstalker.compute.entity.AlertEntity.AlertStatus.RESOLVED);
+                alert.setReport(report);
+            }
+            alertRepository.saveAll(alerts);
+        }
+
+        return report;
+    }
 
     public String queueReportGeneration(Map<String, Object> criteria) {
         String jobId = UUID.randomUUID().toString();

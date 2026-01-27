@@ -42,10 +42,15 @@ public class AlertEntity {
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
-    private AlertStatus status; // NEW, ACKNOWLEDGED, CLEARED
+    private AlertStatus status; // NEW, ACTIVE, ACKNOWLEDGED, RESOLVED
 
     @Column(length = 50)
     private String metric; // Added for idempotency checks (e.g. "PH", "TEMPERATURE")
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "report_id")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private ReportEntity report;
 
     @PrePersist
     protected void onCreate() {
@@ -62,6 +67,6 @@ public class AlertEntity {
     }
 
     public enum AlertStatus {
-        NEW, ACKNOWLEDGED, CLEARED
+        NEW, ACTIVE, ACKNOWLEDGED, RESOLVED
     }
 }

@@ -288,6 +288,14 @@ public class RuleConfigDialogController {
 
         log.info("Saving {} rules...", dtos.size());
 
+        // Show Loading Dialog
+        Alert loadingAlert = new Alert(Alert.AlertType.INFORMATION);
+        loadingAlert.setTitle("Guardando Reglas");
+        loadingAlert.setHeaderText(null);
+        loadingAlert.setContentText("Guardando configuración y reprocesando historial...\nPor favor espere.");
+        loadingAlert.getDialogPane().lookupButton(ButtonType.OK).setVisible(false);
+        loadingAlert.show();
+
         // Use Flux to save all SEQUENTIALLY (concatMap) to avoid overloading the
         // backend
         reactor.core.publisher.Flux.fromIterable(dtos)
@@ -299,6 +307,7 @@ public class RuleConfigDialogController {
                 .subscribe(savedList -> {
                     log.info("Successfully saved {} rules. Triggering refresh.", savedList.size());
                     javafx.application.Platform.runLater(() -> {
+                        loadingAlert.close();
                         if (onSaveCallback != null) {
                             onSaveCallback.run();
                         }
@@ -306,8 +315,17 @@ public class RuleConfigDialogController {
                     });
                 }, err -> {
                     log.error("Error saving rules", err);
-                    // Allow close anyway or show alert? For now log and close.
-                    javafx.application.Platform.runLater(this::onClose);
+                    javafx.application.Platform.runLater(() -> {
+                        loadingAlert.close();
+
+                        Alert errorAlert = new Alert(Alert.AlertType.ERROR);
+                        errorAlert.setTitle("Error");
+                        errorAlert.setHeaderText("Error al guardar reglas");
+                        errorAlert.setContentText(err.getMessage());
+                        errorAlert.showAndWait();
+
+                        onClose();
+                    });
                 });
     }
 

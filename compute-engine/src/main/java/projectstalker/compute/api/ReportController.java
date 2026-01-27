@@ -11,18 +11,23 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/reports")
+@RequestMapping("/api/reports")
 @RequiredArgsConstructor
 @Tag(name = "Reporting", description = "Generación de informes PDF/CSV")
 public class ReportController {
 
     private final ReportService reportService;
 
-    @PostMapping("/generate")
-    @Operation(summary = "Solicitar generación de informe", description = "Inicia un trabajo asíncrono y devuelve el Job ID.")
     public ResponseEntity<Map<String, String>> generateReport(@RequestBody Map<String, Object> criteria) {
         String jobId = reportService.queueReportGeneration(criteria);
         return ResponseEntity.ok(Map.of("jobId", jobId, "status", "QUEUED"));
+    }
+
+    @PostMapping("/create")
+    @Operation(summary = "Crear reporte y resolver alertas asociadas")
+    public ResponseEntity<projectstalker.compute.entity.ReportEntity> createReport(
+            @RequestBody projectstalker.domain.dto.report.CreateReportRequest request) {
+        return ResponseEntity.ok(reportService.createReport(request));
     }
 
     @GetMapping("/jobs/{id}")

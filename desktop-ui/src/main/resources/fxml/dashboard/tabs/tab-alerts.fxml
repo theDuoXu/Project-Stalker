@@ -17,9 +17,21 @@
             <Button text="Configurar Reglas" styleClass="btn-outline" onAction="#onConfigureRules">
                 <graphic><FontIcon iconLiteral="mdi2c-cog"/></graphic>
             </Button>
-            <Button text="Exportar Log" styleClass="btn-outline">
+            <Button text="Exportar Log" styleClass="btn-outline" onAction="#onExportLog">
                 <graphic><FontIcon iconLiteral="mdi2d-download"/></graphic>
             </Button>
+            <Separator orientation="VERTICAL" />
+            <Button fx:id="bulkAckBtn" text="Confirmar" styleClass="btn-success" onAction="#onBulkAck" disable="true">
+                <graphic><FontIcon iconLiteral="mdi2c-check"/></graphic>
+            </Button>
+            <Button fx:id="bulkResolveBtn" text="Resolver" styleClass="btn-info" onAction="#onBulkResolve" disable="true">
+                 <graphic><FontIcon iconLiteral="mdi2c-check-all"/></graphic>
+            </Button>
+            <Button fx:id="bulkResolveBtn" text="Resolver" styleClass="btn-info" onAction="#onBulkResolve" disable="true">
+                 <graphic><FontIcon iconLiteral="mdi2c-check-all"/></graphic>
+            </Button>
+            <Region HBox.hgrow="ALWAYS"/>
+            <ComboBox fx:id="statusFilterCombo" promptText="Filtrar por Estado"/>
         </HBox>
     </top>
 

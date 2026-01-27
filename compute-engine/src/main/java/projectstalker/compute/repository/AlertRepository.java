@@ -13,6 +13,8 @@ public interface AlertRepository extends JpaRepository<AlertEntity, String> {
 
     List<AlertEntity> findByStatus(AlertEntity.AlertStatus status);
 
+    List<AlertEntity> findByStatusIn(java.util.Collection<AlertEntity.AlertStatus> statuses);
+
     List<AlertEntity> findByTimestampAfter(LocalDateTime timestamp);
 
     boolean existsBySensorIdAndMetricAndTimestampAfter(String sensorId, String metric, LocalDateTime timestamp);

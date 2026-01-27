@@ -24,13 +24,18 @@ public class AlertController {
     }
 
     @GetMapping("/active")
-    @Operation(summary = "Obtener alertas activas (NEW)")
+    @Operation(summary = "Obtener alertas activas (NEW y ACKNOWLEDGED)")
     public List<AlertEntity> getActiveAlerts() {
-        return alertRepository.findByStatus(AlertEntity.AlertStatus.NEW);
+        return alertRepository.findByStatusIn(List.of(
+                AlertEntity.AlertStatus.NEW,
+                AlertEntity.AlertStatus.ACKNOWLEDGED,
+                AlertEntity.AlertStatus.ACTIVE // Just in case
+        ));
     }
 
     @PostMapping("/{id}/ack")
     @Operation(summary = "Reconocer (Acknowledge) una alerta")
+    @org.springframework.transaction.annotation.Transactional
     public AlertEntity acknowledgeAlert(@PathVariable String id) {
         AlertEntity alert = alertRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Alert not found"));
@@ -38,12 +43,13 @@ public class AlertController {
         return alertRepository.save(alert);
     }
 
-    @PostMapping("/{id}/clear")
-    @Operation(summary = "Limpiar (Clear) una alerta")
-    public AlertEntity clearAlert(@PathVariable String id) {
+    @PostMapping("/{id}/resolve")
+    @Operation(summary = "Resolver una alerta")
+    @org.springframework.transaction.annotation.Transactional
+    public AlertEntity resolveAlert(@PathVariable String id) {
         AlertEntity alert = alertRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Alert not found"));
-        alert.setStatus(AlertEntity.AlertStatus.CLEARED);
+        alert.setStatus(AlertEntity.AlertStatus.RESOLVED);
         return alertRepository.save(alert);
     }
 }

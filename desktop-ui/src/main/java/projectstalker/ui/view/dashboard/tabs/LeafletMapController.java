@@ -56,7 +56,7 @@ public class LeafletMapController {
 
                 // Inject Java Bridge (Interaction)
                 netscape.javascript.JSObject window = (netscape.javascript.JSObject) engine.executeScript("window");
-                window.setMember("javaConnector", new JavaBridge(eventPublisher));
+                window.setMember("javaConnector", this);
 
                 mapReady = true;
                 loadData();
@@ -219,5 +219,25 @@ public class LeafletMapController {
                 new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8))) {
             return reader.lines().collect(Collectors.joining("\n"));
         }
+    }
+
+    // --- JAVA BRIDGE METHODS (Called from JS) ---
+
+    public void onStationSelected(String stationId) {
+        log.info("Usuario seleccionó estación en mapa: {}", stationId);
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(
+                    new projectstalker.ui.event.StationSelectedEvent(this, stationId));
+        } else {
+            log.warn("EventPublisher is null, cannot publish selection.");
+        }
+    }
+
+    public void logFromJs(String message) {
+        log.info("[JS-MAP] {}", message);
+    }
+
+    public void errorFromJs(String message) {
+        log.error("[JS-MAP-ERROR] {}", message);
     }
 }

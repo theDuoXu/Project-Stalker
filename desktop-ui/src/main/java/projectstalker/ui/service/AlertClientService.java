@@ -29,10 +29,32 @@ public class AlertClientService {
                 .bodyToFlux(AlertDTO.class);
     }
 
-    public Mono<Void> acknowledgeAlert(String alertId) {
+    public Flux<AlertDTO> getAllAlerts() {
+        return apiClient.get()
+                .uri("/api/alerts")
+                .retrieve()
+                .bodyToFlux(AlertDTO.class);
+    }
+
+    public Mono<AlertDTO> acknowledgeAlert(String alertId) {
         return apiClient.post()
                 .uri("/api/alerts/{id}/ack", alertId)
                 .retrieve()
-                .bodyToMono(Void.class);
+                .bodyToMono(AlertDTO.class);
+    }
+
+    public Mono<AlertDTO> resolveAlert(String alertId) {
+        return apiClient.post()
+                .uri("/api/alerts/{id}/resolve", alertId)
+                .retrieve()
+                .bodyToMono(AlertDTO.class);
+    }
+
+    public Mono<Object> createReport(projectstalker.domain.dto.report.CreateReportRequest request) {
+        return apiClient.post()
+                .uri("/api/reports/create")
+                .bodyValue(request)
+                .retrieve()
+                .bodyToMono(Object.class);
     }
 }
