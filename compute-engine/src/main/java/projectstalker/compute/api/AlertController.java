@@ -22,6 +22,7 @@ public class AlertController {
     public projectstalker.domain.dto.PaginatedResponse<projectstalker.domain.dto.alert.AlertDTO> getAlerts(
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime start,
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime end,
+            @RequestParam(required = false) List<projectstalker.compute.entity.AlertEntity.AlertStatus> status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
 
@@ -30,11 +31,20 @@ public class AlertController {
         if (end == null)
             end = java.time.LocalDateTime.now();
 
-        System.out.println("AlertController: Fetching alerts between " + start + " and " + end + " page=" + page);
+        System.out.println("AlertController: Fetching alerts between " + start + " and " + end + " page=" + page
+                + " status=" + status);
 
-        var entities = alertRepository.findByTimestampBetween(start, end,
-                org.springframework.data.domain.PageRequest.of(page, size,
-                        org.springframework.data.domain.Sort.by("timestamp").descending()));
+        org.springframework.data.domain.Page<projectstalker.compute.entity.AlertEntity> entities;
+
+        if (status != null && !status.isEmpty()) {
+            entities = alertRepository.findByTimestampBetweenAndStatusIn(start, end, status,
+                    org.springframework.data.domain.PageRequest.of(page, size,
+                            org.springframework.data.domain.Sort.by("timestamp").descending()));
+        } else {
+            entities = alertRepository.findByTimestampBetween(start, end,
+                    org.springframework.data.domain.PageRequest.of(page, size,
+                            org.springframework.data.domain.Sort.by("timestamp").descending()));
+        }
 
         System.out.println("AlertController: Found " + entities.getTotalElements() + " alerts.");
 

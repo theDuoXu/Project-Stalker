@@ -21,4 +21,9 @@ public interface AlertRepository extends JpaRepository<AlertEntity, String> {
 
     org.springframework.data.domain.Page<AlertEntity> findByTimestampBetween(LocalDateTime start, LocalDateTime end,
             org.springframework.data.domain.Pageable pageable);
+
+    org.springframework.data.domain.Page<AlertEntity> findByTimestampBetweenAndStatusIn(LocalDateTime start,
+            LocalDateTime end,
+            java.util.Collection<AlertEntity.AlertStatus> statuses,
+            org.springframework.data.domain.Pageable pageable);
 }

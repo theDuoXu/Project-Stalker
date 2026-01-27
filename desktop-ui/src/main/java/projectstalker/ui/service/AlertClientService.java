@@ -22,32 +22,37 @@ public class AlertClientService {
         }
 
         public reactor.core.publisher.Mono<projectstalker.ui.model.RestPage<AlertDTO>> getAlerts(int page, int size,
-                        java.time.LocalDateTime start, java.time.LocalDateTime end) {
+                        java.time.LocalDateTime start, java.time.LocalDateTime end, java.util.List<String> status) {
                 return apiClient.get()
-                                .uri(uriBuilder -> uriBuilder.path("/api/alerts")
-                                                .queryParam("page", page)
-                                                .queryParam("size", size)
-                                                .queryParam("start", start)
-                                                .queryParam("end", end)
-                                                .build())
+                                .uri(uriBuilder -> {
+                                        var b = uriBuilder.path("/api/alerts")
+                                                        .queryParam("page", page)
+                                                        .queryParam("size", size)
+                                                        .queryParam("start", start)
+                                                        .queryParam("end", end);
+                                        if (status != null && !status.isEmpty()) {
+                                                b.queryParam("status", status);
+                                        }
+                                        return b.build();
+                                })
                                 .retrieve()
                                 .bodyToMono(
                                                 new org.springframework.core.ParameterizedTypeReference<projectstalker.ui.model.RestPage<AlertDTO>>() {
                                                 });
         }
 
-        public Mono<AlertDTO> acknowledgeAlert(String alertId) {
+        public Mono<Void> acknowledgeAlert(String alertId) {
                 return apiClient.post()
                                 .uri("/api/alerts/{id}/ack", alertId)
                                 .retrieve()
-                                .bodyToMono(AlertDTO.class);
+                                .bodyToMono(Void.class);
         }
 
-        public Mono<AlertDTO> resolveAlert(String alertId) {
+        public Mono<Void> resolveAlert(String alertId) {
                 return apiClient.post()
                                 .uri("/api/alerts/{id}/resolve", alertId)
                                 .retrieve()
-                                .bodyToMono(AlertDTO.class);
+                                .bodyToMono(Void.class);
         }
 
         public Mono<Object> createReport(projectstalker.domain.dto.report.CreateReportRequest request) {

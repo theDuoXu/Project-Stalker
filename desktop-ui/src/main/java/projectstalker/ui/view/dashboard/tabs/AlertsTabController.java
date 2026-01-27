@@ -134,8 +134,8 @@ public class AlertsTabController {
         }
         log.info("Received {} alerts for current page", newList.size());
         masterList.setAll(newList);
-        // Re-apply filter
-        updateFilter(statusFilterCombo.getValue());
+        // No local filter needed anymore, masterList is already filtered by backend
+        updateBulkButtons(); // Trigger UI update
     }
 
     private void updateControls(projectstalker.ui.model.RestPage<AlertDTO> page) {
@@ -148,24 +148,20 @@ public class AlertsTabController {
     }
 
     private void updateFilter(String statusLabel) {
-        filteredList.setPredicate(alert -> {
-            if (statusLabel == null || "TODOS".equals(statusLabel))
-                return true;
-
-            boolean visible = switch (statusLabel) {
-                case "NUEVO/ACTIVO" -> alert.status() == AlertStatus.NEW || alert.status() == AlertStatus.ACTIVE;
-                case "RECONOCIDO" -> alert.status() == AlertStatus.ACKNOWLEDGED;
-                case "RESUELTO" -> alert.status() == AlertStatus.RESOLVED;
-                default -> true;
-            };
-            return visible;
-        });
-        log.debug("List size after filter '{}': {}", statusLabel, filteredList.size());
-        updateBulkButtons();
+        // Reset to page 0 when filter changes
+        this.currentPage = 0;
+        loadAlerts();
     }
 
     private void setupTable() {
-        alertsTable.setItems(filteredList);
+        // Wrap FilteredList in SortedList to enable sorting
+        javafx.collections.transformation.SortedList<AlertDTO> sortedList = new javafx.collections.transformation.SortedList<>(
+                filteredList);
+
+        // Bind the SortedList comparator to the TableView comparator
+        sortedList.comparatorProperty().bind(alertsTable.comparatorProperty());
+
+        alertsTable.setItems(sortedList);
 
         // Double Click Listener
         alertsTable.setRowFactory(tv -> {
@@ -349,9 +345,18 @@ public class AlertsTabController {
                 .filter(a -> a.status() == AlertStatus.NEW).toList();
         if (selected.isEmpty())
             return;
+
+        log.info("Iniciando Bulk ACK para {} alertas...", selected.size());
+
         reactor.core.publisher.Flux.fromIterable(selected)
-                .flatMap(a -> alertService.acknowledgeAlert(a.id().toString()))
-                .collectList().subscribe(v -> loadAlerts(), err -> showErr("Error Bulk ACK", err));
+                .flatMap(a -> alertService.acknowledgeAlert(a.id().toString())
+                        .doOnSuccess(v -> log.debug("ACK sent for {}", a.id()))
+                        .doOnError(e -> log.error("Error sending ACK for {}: {}", a.id(), e.getMessage())))
+                .collectList()
+                .subscribe(v -> {
+                    log.info("Bulk ACK finalizado.");
+                    loadAlerts();
+                }, err -> showErr("Error Bulk ACK", err));
     }
 
     @FXML
@@ -411,7 +416,19 @@ public class AlertsTabController {
         LocalDateTime start = startDatePicker.getValue().atStartOfDay();
         LocalDateTime end = endDatePicker.getValue().atTime(23, 59, 59);
 
-        alertService.getAlerts(currentPage, pageSize, start, end)
+        // Map Filter to Backend Statuses
+        String statusLabel = statusFilterCombo.getValue();
+        List<String> statuses = null;
+        if (statusLabel != null && !"TODOS".equals(statusLabel)) {
+            statuses = switch (statusLabel) {
+                case "NUEVO/ACTIVO" -> List.of("NEW", "ACTIVE");
+                case "RECONOCIDO" -> List.of("ACKNOWLEDGED");
+                case "RESUELTO" -> List.of("RESOLVED");
+                default -> null;
+            };
+        }
+
+        alertService.getAlerts(currentPage, pageSize, start, end, statuses)
                 .subscribe(
                         page -> javafx.application.Platform.runLater(() -> {
                             updateMasterListSafely(page.getContent());
