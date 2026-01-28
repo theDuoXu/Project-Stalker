@@ -49,21 +49,22 @@ El objetivo central de este semestre no ha sido resolver el problema inverso de 
 En consecuencia, los esfuerzos de este periodo se han alineado para entregar una plataforma operativa *end-to-end*, centrada en tres pilares estratégicos: la simulación de alto rendimiento, la ingeniería de datos y la arquitectura de sistemas segura.
 ### 1.2.1. Desarrollo del Gemelo Digital de Alto Rendimiento (HPC)
 
-El primer y más crítico objetivo de esta fase ha sido la construcción de un motor de simulación física ("Gemelo Digital") capaz de superar las limitaciones de velocidad de los *solvers* tradicionales. Para que la futura red neuronal (DeepONet) pueda aprender la dinámica inversa del río, requiere ser entrenada con un dataset sintético masivo (target: $>100.000$ escenarios diversos), una tarea inviable para simuladores basados en CPU que operan en tiempo real ($1:1$).
+El primer y más crítico objetivo de esta fase ha sido la construcción de un motor de simulación física ("Gemelo Digital") capaz de superar las limitaciones de velocidad de los *solvers* tradicionales. Para que la futura red neuronal (DeepONet) pueda aprender la dinámica inversa del río, requiere ser entrenada con un dataset sintético masivo (target: $>100.000$ escenarios diversos), una tarea inviable para simuladores basados en CPU que operan en tiempo real ($1:1$). 
 
 Por consiguiente, el objetivo técnico se definió como el desarrollo de un *solver* hidrodinámico nativo que cumpla con los siguientes requisitos de rendimiento y precisión:
 
 * **Aceleración por Hardware (GPGPU):** Implementación de los esquemas numéricos de Manning (hidrodinámica) y volúmenes finitos (transporte) utilizando NVIDIA CUDA, explotando el paralelismo masivo para asignar cada celda del dominio fluvial a un hilo de ejecución independiente.
 * **Rendimiento "Faster-than-Real-Time":** Lograr factores de aceleración (*speedup*) de al menos dos órdenes de magnitud respecto a la ejecución secuencial, permitiendo simular días de evolución física en cuestión de segundos.
 * **Interoperabilidad de Baja Latencia:** Diseñar un mecanismo de comunicación eficiente (vía JNI - Java Native Interface) que permita orquestar la simulación desde un entorno gestionado (Java) sin penalizar el rendimiento del cómputo nativo en C++.
+* **Orquestación y generación local:** En la medida de lo posible, utilizar la RTX5090 local.
 ### 1.2.2. Ingeniería de Datos: Pipeline de Limpieza y Grafo de Conocimiento
 
 El segundo pilar del proyecto aborda la problemática de la calidad y la estructura de los datos. Un Gemelo Digital de alta fidelidad es inútil si se alimenta con lecturas de sensores defectuosos ("Garbage In, Garbage Out") o si carece de un modelo espacial que relacione los vertidos con el cauce. Por ello, se ha desarrollado una arquitectura de datos dual:
 
 * **Pipeline de Calidad de Datos (ETL):**
-  [cite_start]Se ha implementado un flujo de extracción, transformación y carga diseñado para ingerir datos heterogéneos (series temporales JSON de SAICA/SAIH y registros administrativos)[cite: 148]. Este pipeline aplica filtros avanzados de validación física:
-    * [cite_start]**Detección de "Flatlines":** Identificación automática de sensores bloqueados que reportan varianza cero, un fallo común en la instrumentación de campo que corrompe los modelos de predicción[cite: 148].
-    * [cite_start]**Límites Físicos (Hard Limits):** Eliminación de valores imposibles (ej. pH > 14 o temperaturas negativas no congelantes) que violan las leyes termodinámicas[cite: 148].
+  Se ha implementado un flujo de extracción, transformación y carga diseñado para ingerir datos heterogéneos (series temporales JSON de SAICA/SAIH y registros administrativos). Este pipeline aplica filtros avanzados de validación física:
+    * **Detección de "Flatlines":** Identificación automática de sensores bloqueados que reportan varianza cero, un fallo común en la instrumentación de campo que corrompe los modelos de predicción.
+    * **Límites Físicos (Hard Limits):** Eliminación de valores imposibles (ej. pH > 14 o temperaturas negativas no congelantes) que violan las leyes termodinámicas.
     * **Coherencia Temporal:** Análisis de saltos abruptos (*jump limits*) para filtrar errores de transmisión.
 
 * **Grafo de Conocimiento Hidrológico (Knowledge Graph):**
@@ -72,12 +73,14 @@ El segundo pilar del proyecto aborda la problemática de la calidad y la estruct
     * **Inferencia Topológica:** Esta estructura permite realizar consultas de trazabilidad "aguas arriba" (*upstream tracing*). Ante una alerta en un sensor, el sistema no solo da un valor, sino que recorre el grafo en sentido inverso al flujo para identificar instantáneamente qué puntos de vertido autorizados tienen conexión hidráulica con la anomalía, reduciendo el espacio de búsqueda de 1.800 a un subconjunto manejable de "sospechosos topológicos".
 ### 1.2.3. Implementación de Arquitectura de Software Híbrida y Segura
 
-El tercer objetivo ha sido el diseño e implementación de una arquitectura de software robusta que integre componentes tecnológicamente dispares en una plataforma unificada y segura. El desafío de ingeniería radicó en orquestar tres ecosistemas de lenguajes distintos —Java (Backend/UI), C++ (HPC) y Python (Data)— sin comprometer la seguridad ni la experiencia de usuario.
+El tercer objetivo ha sido el diseño e implementación de una arquitectura de software robusta que integre componentes tecnológicamente dispares en una plataforma unificada y segura. El desafío de ingeniería radicó en orquestar tres ecosistemas de lenguajes distintos, Java (Backend/UI), C++ (HPC) y Python (Data), sin comprometer la seguridad ni la experiencia de usuario.
 
 Para ello, se establecieron los siguientes hitos de arquitectura:
 
 * **Seguridad de Grado Industrial (IAM):**
   Implementación de un sistema de gestión de identidades y accesos (IAM) centralizado utilizando **Keycloak**. A diferencia de soluciones *ad-hoc* inseguras, se ha adoptado el estándar **OAuth 2.1 / OpenID Connect** utilizando el flujo de autorización con clave de prueba (PKCE - *Proof Key for Code Exchange*). Este mecanismo es crítico para proteger aplicaciones de cliente público (como la interfaz de escritorio JavaFX), asegurando que los tokens de acceso no puedan ser interceptados ni reutilizados, y permitiendo una gestión granular de roles (RBAC) para diferenciar entre perfiles de Operador y Administrador.
+
+> **Nota:** Se siguen las recomendaciones de OAuth 2.1 en versión borrador. Es decir, es OAuth 2.0 con PKCE que cumple con el borrador OAuth 2.1
 
 * **Orquestación Políglota y Desacoplada:**
   Diseño de una arquitectura hexagonal donde el núcleo de negocio en Java actúa como orquestador central, delegando las tareas de computación intensiva al motor nativo (vía JNI) y las tareas de análisis de datos a servicios dedicados. Esta separación de responsabilidades garantiza que el sistema sea mantenible y escalable, permitiendo la evolución independiente del motor físico (C++/CUDA) sin afectar a la lógica de la aplicación cliente.
@@ -618,10 +621,41 @@ Para simulaciones masivas que exceden el límite de tamaño de array de Java (2 
 Volviendo al silicio de la GPU, el acceso a la VRAM se ha optimizado instruyendo explícitamente al compilador NVCC sobre la inmutabilidad de los datos.
 
 Todos los punteros a la geometría del río (`d_bottomWidths`, `d_slope`) se califican con `const __restrict__`. Esto activa la **Caché de Solo Lectura** (anteriormente Texture Cache), una ruta de datos independiente en el multiprocesador (SM) optimizada para accesos espacialmente localizados. Esto libera el ancho de banda de la caché L1 estándar para las variables de estado dinámico ($Q, H$) que mutan en cada ciclo de reloj, reduciendo la latencia media de acceso a memoria (*Average Memory Access Time* - AMAT).
-## 4.3. Validación de Eficiencia Computacional
-### 4.3.1. Análisis de Profiling con NVIDIA Nsight Compute
-### 4.3.2. Logro del 90% de Compute Speed-of-Light (SOL)
-### 4.3.3. Benchmark Comparativo: CPU (Ryzen 9 5900x) vs GPU (RTX 5090)
+## 4.3. Validación de Eficiencia Computacional (Micro-Profiling)
+
+Para validar la calidad de la implementación paralela más allá del tiempo de ejecución bruto, se ha realizado una auditoría de bajo nivel utilizando **NVIDIA Nsight Compute**. Este análisis permite inspeccionar el comportamiento de los *streaming multiprocessors* (SM) y la jerarquía de memoria en un nivel de instrucción por ciclo.
+
+El análisis revela una dualidad arquitectónica interesante: mientras el transporte es limitado por memoria (*Memory Bound*), la hidrodinámica es limitada por cómputo (*Compute Bound*), demostrando un uso equilibrado de los recursos de la GPU.
+
+### 4.3.1. Kernel de Transporte (`transportMusclKernel`): El Límite de Memoria
+
+Se analizó el *solver* de Advección-Difusión bajo carga unitaria. Los datos confirman que la limitación es el movimiento de datos de celdas vecinas (stencil):
+
+* **Ocupación Lograda:** **91.11%**. Excelente gestión de registros (`__launch_bounds__`).
+* **Bottleneck:** El **73.4%** de los *stalls* se deben a latencia de memoria (L1TEX).
+* **Speed-of-Light (SOL):** El subsistema de memoria trabaja al **65%** de su capacidad máxima, mientras que los núcleos de cómputo solo al **25%**.
+* **Diagnóstico:** El algoritmo es **Memory Bound**. Esto valida la decisión de usar esquemas numéricos complejos (MUSCL de alta resolución), ya que los ciclos de cómputo extra son "gratuitos" al estar ocultos tras la espera de memoria.
+
+### 4.3.2. Kernel de Manning (`manningSolveKernel`): El Límite de Cómputo
+
+Al perfilar el *solver* hidrodinámico con una carga masiva (**Grid de 976.563 celdas**), el perfil de ejecución cambia drásticamente, pasando a ser intensivo en operaciones matemáticas.
+
+**1. Saturación de las Unidades de Ejecución (SM):**
+A diferencia del transporte, aquí la GPU está limitada por su capacidad aritmética:
+* **SM Inst Executed:** **89.14%**. Los núcleos están ocupados procesando instrucciones casi el 90% del tiempo.
+* **Uso de Pipeline FMA:** El **55.19%** de los ciclos activos utilizan la tubería *Fused Multiply-Add*. Esto es la huella digital directa del método **Newton-Raphson**, que realiza iteraciones intensivas de multiplicaciones y sumas ($A \cdot R^{2/3}$) para resolver la ecuación no lineal en cada celda.
+
+**2. Eficiencia de Memoria y Ocupación Extrema:**
+* **Coalescencia Perfecta:** Se ha medido una eficiencia de bus de **31.0 / 32 bytes** por sector. La estructura de datos *Structure of Arrays (SoA)* garantiza que los hilos lean memoria contigua, maximizando el ancho de banda efectivo.
+* **Ocupación Lograda:** **95.19%** (45.69 de 48 warps activos por SM). Este valor roza el límite teórico del hardware.
+* **Análisis de Caché L1:** Aunque el *Hit Rate* de L1 es bajo (**6.87%**), esto es un comportamiento esperado y aceptable. Dado que la simulación es un proceso iterativo global donde el estado $t+1$ depende estrictamente de la VRAM actualizada en $t$, no hay reutilización temporal local que la caché pueda explotar. Sin embargo, la **ocupación extrema del 95%** permite al planificador de la GPU ocultar perfectamente esta latencia de DRAM, manteniendo los SMs alimentados con trabajo aritmético constante.
+
+### 4.3.3. Conclusión del Profiling
+La arquitectura híbrida demuestra robustez en ambos extremos del espectro computacional:
+1.  **Transporte:** Maximiza el ancho de banda de memoria para mover datos de contaminación.
+2.  **Manning:** Maximiza los TFLOPS de la tarjeta para resolver física no lineal.
+
+En ambos casos, la ocupación superior al 90% certifica que no existen divergencias de flujo significativas (*branchless implementation*) ni bloqueos por falta de recursos, validando la calidad "Industrial-Grade" del código CUDA.
 
 # 5. Ingeniería de Datos y Algoritmia Forense
 
