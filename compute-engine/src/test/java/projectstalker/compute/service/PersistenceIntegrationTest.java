@@ -2,7 +2,11 @@ package projectstalker.compute.service;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.transaction.annotation.Transactional;
+import projectstalker.compute.TestSecurityConfig;
 import projectstalker.compute.entity.SensorReadingEntity;
 import projectstalker.compute.repository.SensorReadingRepository;
 
@@ -11,7 +15,10 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DataJpaTest
+@SpringBootTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
+@Import(TestSecurityConfig.class)
+@Transactional
 public class PersistenceIntegrationTest {
 
     @Autowired

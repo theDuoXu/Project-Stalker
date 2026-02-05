@@ -1,115 +1,124 @@
-version: '3.9'
+version: '3.8'
 
 services:
-
+  # --- SERVICIO 1: POSTGRESQL (PGVECTOR) ---
   postgres-db:
-    image: postgres:16-alpine
-    container_name: stalker-postgres
+    image: pgvector/pgvector:pg15
+    container_name: projectstalker-postgres
     restart: always
     environment:
-      POSTGRES_DB: stalker_db
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: stalker_is_an_academic_project
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: projectstalker_db
+    ports:
+      - "5434:5432"
     volumes:
-      # Persistencia real en disco local para configs y usuarios
-      - ./infra/postgres_data:/var/lib/postgresql/data
-    networks:
-      - stalker-net
+      - postgres_data:/var/lib/postgresql/data
+      - ./dev-tools/docker-data:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  redis-cache:
-    image: redis:7-alpine
-    container_name: stalker-redis
-    restart: always
-    # OPTIMIZACIÓN HPC:
-    # 1. --maxmemory 8gb: Reservamos 8GB de RAM para resultados
-    #    Queremos que quepan 2 o 3 simulaciones de 2GB enteras.
-    # 2. --maxmemory-policy allkeys-lru: Si se llena, borra lo más viejo.
-    # 3. --save "": DESACTIVAR persistencia a disco. Velocidad pura.
-    command: >
-      --maxmemory 8gb
-      --maxmemory-policy allkeys-lru
-      --save "" 
-      --appendonly no
     networks:
-      - stalker-net
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      retries: 3
+      - intelligence_net
 
-  # ==========================================
-  # 2. CAPA DE INTELIGENCIA (Python)
-  # ==========================================
-
-  inference-engine:
-    build:
-      context: ./python
-      dockerfile: docker-compose.yml.inference.inference
-    container_name: stalker-inference
-    restart: unless-stopped
-    volumes:
-      # Montamos los datos (Censo UNED) para lectura en tiempo real
-      - ./data:/app/data
-    environment:
-      - DATA_PATH=/app/data/censo_vertidos.json
-    networks:
-      - stalker-net
-    # No exponemos puertos al host, solo es accesible por compute-engine
-
-  # ==========================================
-  # 3. CAPA DE CÓMPUTO (Java + CUDA)
-  # ==========================================
-
-  compute-engine:
-    build:
-      context: .
-      dockerfile: docker-compose.yml.inference.compute
-    container_name: stalker-compute
-    restart: unless-stopped
+  # --- SERVICIO 2: NEO4J ---
+  neo4j:
+    image: neo4j
+    container_name: stalker_intelligence
     ports:
-      - "8080:8080" # El puerto que atacarás desde la UI o el Túnel
+      - "7474:7474" # HTTP Browser
+      - "7687:7687" # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/12345678secret
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_security_procedures_allowlist=apoc.*
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=4G
+    volumes:
+      - ./notebooks/neo4j_data:/data
+      - ./notebooks/neo4j_logs:/logs
+      - ./notebooks/neo4j_import:/var/lib/neo4j/import
+    restart: unless-stopped
+    networks:
+      - intelligence_net
+
+  # --- SERVICIO 3: NEODASH ---
+  neodash:
+    image: neo4jlabs/neodash
+    container_name: stalker_dashboard
+    ports:
+      - "5005:5005"
+    restart: unless-stopped
+    networks:
+      - intelligence_net
+
+  # --- SERVICIO 4: CASSANDRA ---
+  cassandra:
+    image: cassandra:4.1.10
+    container_name: stalker_cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=StalkerCluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - JVM_OPTS=-Xms2G -Xmx2G
+      - MALLOC_ARENA_MAX=2
+    volumes:
+      - ./notebooks/cassandra_data:/var/lib/cassandra
+    ulimits:
+      memlock: -1
+      nproc: 32768
+    restart: unless-stopped
+    networks:
+      - intelligence_net
+    healthcheck:
+      test: [ "CMD-SHELL", "[ $$(nodetool statusgossip) = running ]" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     deploy:
       resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu, compute, utility]
-    environment:
-      # Conexión Base de Datos
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-db:5432/stalker_db
-      SPRING_DATASOURCE_USERNAME: admin
-      SPRING_DATASOURCE_PASSWORD: this_is_just_an_academic_project
+        limits:
+          memory: 6G
 
-      # Conexión Redis
-      SPRING_DATA_REDIS_HOST: redis-cache
-      SPRING_DATA_REDIS_PORT: 6379
-
-      # Conexión Microservicio Inferencia
-      APP_INFERENCE_SERVICE_URL: http://inference-engine:8000
-
-      # SEGURIDAD (Conexión a tu VPS Keycloak)
-      # Spring validará los tokens contra tu servidor público
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: https://auth.protonenergyindustries.com/realms/project-stalker
-
-      # Configuración HPC
-      PROJECTSTALKER_NATIVE_ENABLED: "true"
-
-    depends_on:
-      postgres-db:
-        condition: service_healthy
-      redis-cache:
-        condition: service_healthy
-      inference-engine:
-        condition: service_started
+  # --- SERVICIO 5: PROMETHEUS ---
+  prometheus:
+    image: prom/prometheus
+    container_name: stalker_prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./notebooks/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    restart: unless-stopped
     networks:
-      - stalker-net
+      - intelligence_net
 
+  # --- SERVICIO 6: GRAFANA ---
+  grafana:
+    image: grafana/grafana
+    container_name: stalker_grafana
+    user: "0"
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./notebooks/grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    networks:
+      - intelligence_net
+
+# --- VOLÚMENES PERSISTENTES ---
+volumes:
+  postgres_data:
+
+# --- RED COMPARTIDA ---
 networks:
-  stalker-net:
+  intelligence_net:
     driver: bridge

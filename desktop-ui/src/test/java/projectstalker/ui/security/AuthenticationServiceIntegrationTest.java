@@ -4,10 +4,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.PropertySource;
-import org.springframework.test.context.TestPropertySource;
-import projectstalker.ui.StalkerUiLauncher;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
 
 import java.awt.Desktop;
 import java.util.concurrent.ExecutionException;
@@ -16,10 +16,30 @@ import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// Cargamos el contexto REAL de la aplicación (esto lee application.properties)
-@SpringBootTest(classes = StalkerUiLauncher.class)
+/**
+ * Integration test for AuthenticationService.
+ * Uses a minimal Spring context that excludes JavaFX components to avoid
+ * ExceptionInInitializerError when running without JavaFX toolkit.
+ */
+@SpringBootTest(classes = AuthenticationServiceIntegrationTest.TestConfig.class)
 @Tag("Integration")
 public class AuthenticationServiceIntegrationTest {
+
+    /**
+     * Minimal test configuration that only loads the security package.
+     * Excludes the 'view' package entirely since it contains JavaFX components
+     * that instantiate UI controls at field-initialization time, which fails
+     * when JavaFX toolkit is not initialized.
+     */
+    @Configuration
+    @EnableAutoConfiguration
+    @ComponentScan(basePackages = {
+            "projectstalker.ui.security",
+            "projectstalker.ui.service",
+            "projectstalker.ui.config"
+    })
+    static class TestConfig {
+    }
 
     @Autowired
     private AuthenticationService authService;
@@ -37,7 +57,8 @@ public class AuthenticationServiceIntegrationTest {
      * El test esperará hasta 60 segundos a que completes el proceso.
      */
     @Test
-    // Solo ejecutamos esto si hay entorno gráfico (evita fallos en CI/GitHub Actions)
+    // Solo ejecutamos esto si hay entorno gráfico (evita fallos en CI/GitHub
+    // Actions)
     @EnabledIf("isDesktopSupported")
     void testManualLoginFlow() throws ExecutionException, InterruptedException, TimeoutException {
         System.out.println(">>> INICIANDO TEST INTERACTIVO DE LOGIN <<<");
@@ -48,8 +69,7 @@ public class AuthenticationServiceIntegrationTest {
         // 1. Lanzamos el login (esto devuelve un CompletableFuture)
         var loginFuture = authService.login();
 
-        // 2. Bloqueamos el test esperando tu acción (máximo 60 segundos)
-        // Si no haces login en 5 minuto, el test falla.
+        // 2. Bloqueamos el test esperando tu acción (máximo 5 minutos)
         TokenResponse token = loginFuture.get(300, TimeUnit.SECONDS);
 
         // 3. Validaciones

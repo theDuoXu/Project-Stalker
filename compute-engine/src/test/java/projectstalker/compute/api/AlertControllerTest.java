@@ -52,10 +52,10 @@ public class AlertControllerTest {
         alert.setTimestamp(LocalDateTime.now());
         alertRepository.save(alert);
 
-        mockMvc.perform(get("/alerts")
+        mockMvc.perform(get("/api/alerts")
                 .with(jwt()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].message", hasItem("Test Alert")));
+                .andExpect(jsonPath("$.content[*].message", hasItem("Test Alert")));
     }
 
     @Test
@@ -69,7 +69,7 @@ public class AlertControllerTest {
         alert.setTimestamp(LocalDateTime.now());
         alert = alertRepository.save(alert);
 
-        mockMvc.perform(post("/alerts/" + alert.getId() + "/ack")
+        mockMvc.perform(post("/api/alerts/" + alert.getId() + "/ack")
                 .with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACKNOWLEDGED"));
