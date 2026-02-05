@@ -118,7 +118,7 @@ services:
 volumes:
   postgres_data:
 
-# --- RED COMPARTIDA ---
+# --- RED COMPARTIDA ----
 networks:
   intelligence_net:
     driver: bridge
